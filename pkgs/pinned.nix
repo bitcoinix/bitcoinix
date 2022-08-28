@@ -11,6 +11,8 @@ pkgs: pkgsUnstable: pkgs-25_05:
     elementsd
     extra-container
     lightning-pool
+    teos
+    teos-watchtower-plugin
     lndconnect;
 
   inherit (pkgsUnstable)
