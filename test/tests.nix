@@ -62,6 +62,7 @@ let
           clboss.path = "${plugins.clboss.package}/bin/clboss";
           clnrest.path = "${plugins.clnrest.package}/bin/clnrest";
           trustedcoin.path = "${plugins.trustedcoin.package}/bin/trustedcoin";
+          teos-watchtower-plugin.path = "${nbPkgs.teos-watchtower-plugin}/bin/watchtower-client";
         };
       in map (plugin: pluginPkgs.${plugin}.path) enabled;
 
