@@ -16,7 +16,7 @@ in {
     ./clnrest.nix
     ./feeadjuster.nix
     ./trustedcoin.nix
-    ./teos-watchtower-plugin.nix
+    ./teos-watchtower.nix
     ./zmq.nix
   ];
 
