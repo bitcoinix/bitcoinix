@@ -114,10 +114,11 @@ in {
       enable = true;
       rpc.users.btcpayserver = {
         passwordHMACFromFile = true;
-        rpcwhitelist = cfg.bitcoind.rpc.users.public.rpcwhitelist ++ [
-          "setban"
-          "generatetoaddress"
-        ];
+        # nbxplorer and btcpayserver need only the public calls. setban and
+        # generatetoaddress would let a compromised web app ban the node's peers
+        # or burn CPU. Regtest users who want BTCPay's mining button add
+        # `generatetoaddress` to `services.bitcoind.rpc.users.btcpayserver.rpcwhitelist`.
+        rpcwhitelist = cfg.bitcoind.rpc.users.public.rpcwhitelist;
       };
       listenWhitelisted = true;
     };

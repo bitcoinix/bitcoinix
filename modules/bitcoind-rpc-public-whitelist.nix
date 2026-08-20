@@ -1,4 +1,7 @@
 # RPC calls that are safe for public use
+#
+# fundrawtransaction is not listed: it selects and locks UTXOs in a loaded
+# bitcoind wallet and reveals wallet contents. No bundled service needs it.
 [
   "echo"
   "getinfo"
@@ -49,7 +52,6 @@
   "decoderawtransaction"
   "decodescript"
   "finalizepsbt"
-  "fundrawtransaction"
   "getrawtransaction"
   "joinpsbts"
   "sendrawtransaction"
