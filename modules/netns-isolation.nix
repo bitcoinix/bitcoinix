@@ -231,7 +231,8 @@ in {
       };
       clightning = {
         id = 13;
-        connections = [ "bitcoind" ];
+        connections = [ "bitcoind" ]
+                      ++ optional config.services.teos.enable "teos";
       };
       lnd = {
         id = 14;
@@ -304,6 +305,10 @@ in {
           (if (config.services.mempool.electrumServer == "electrs") then "electrs" else "fulcrum")
         ];
       };
+      teos = {
+        id = 33;
+        connections = [ "bitcoind" ];
+      };
     };
 
     services.bitcoind = {
@@ -336,6 +341,12 @@ in {
     services.electrs.address = netns.electrs.address;
 
     services.fulcrum.address = netns.fulcrum.address;
+
+    services.teos = {
+      address = netns.teos.address;
+      rpc.address = netns.teos.address;
+      internalApi.address = netns.teos.address;
+    };
 
     services.lightning-loop.rpcAddress = netns.lightning-loop.address;
 
