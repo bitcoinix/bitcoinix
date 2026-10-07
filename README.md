@@ -1,6 +1,22 @@
-> [!WARNING]
-> **Archived and unmaintained as of August 13, 2026.**
-> v0.0.139 is the final release; there will be no further updates or security fixes.
+> ⚠️ **Notice:** This project is a community-maintained fork of the original [fort-nix/nix-bitcoin](https://github.com/fort-nix/nix-bitcoin) repository, which was archived and deprecated in August 2026. The original state of the upstream repository at the time of forking is tagged in our git history as `forked`.
+
+## About the Project
+
+**nix-bitcoin-ng** is a community-driven continuation of [nix-bitcoin](https://github.com/fort-nix/nix-bitcoin) — a collection of Nix packages and NixOS modules designed to easily and securely deploy full-featured Bitcoin nodes and related services.
+
+The goal of this fork is to build upon the work of the original authors, keep the project alive and compatible with current NixOS releases, and ensure its long-term maintainability.
+
+### Key Focus & Scope Changes
+
+* **Core Focus:** We prioritize maximum stability, security, and reliable maintenance of essential infrastructure components.
+* **Minimalization & Streamlining:** The original upstream project accumulated a wide range of additional services and extensions. To ensure quality and sustainable maintenance, we are removing or decoupling software that is unmaintained, archived upstream, or requires disproportionate effort to maintain.
+
+---
+
+### Links & Historical Reference
+* **Original Project:** [fort-nix/nix-bitcoin](https://github.com/fort-nix/nix-bitcoin)
+* **Original Documentation & History:** For historical documentation and releases up to v0.0.139, please refer to the archived [fort-nix/nix-bitcoin](https://github.com/fort-nix/nix-bitcoin) repository. The original state at the point of forking is tagged in this repository as `forked`.
+
 
 <p align="center">
   <img
