@@ -2,7 +2,7 @@
 
 ## About the Project
 
-**nix-bitcoin-ng** is a community-driven continuation of [nix-bitcoin](https://github.com/fort-nix/nix-bitcoin) — a collection of Nix packages and NixOS modules designed to easily and securely deploy full-featured Bitcoin nodes and related services.
+**bitcoinix** is a community-driven continuation of [nix-bitcoin](https://github.com/fort-nix/nix-bitcoin) — a collection of Nix packages and NixOS modules designed to easily and securely deploy full-featured Bitcoin nodes and related services.
 
 The goal of this fork is to build upon the work of the original authors, keep the project alive and compatible with current NixOS releases, and ensure its long-term maintainability.
 
