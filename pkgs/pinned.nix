@@ -8,7 +8,6 @@ pkgs: pkgsUnstable: pkgs-25_05:
     charge-lnd
     clightning
     electrs
-    elementsd
     extra-container
     lightning-pool
     lndconnect;
@@ -16,6 +15,7 @@ pkgs: pkgsUnstable: pkgs-25_05:
   inherit (pkgsUnstable)
     bitcoind-knots
     clboss
+    elementsd
     fulcrum
     lightning-loop
     lnd;
