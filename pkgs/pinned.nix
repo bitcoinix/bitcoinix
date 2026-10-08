@@ -10,7 +10,8 @@ pkgs: pkgsUnstable:
     electrs
     extra-container
     lightning-pool
-    lndconnect;
+    lndconnect
+    nbxplorer;
 
   inherit (pkgsUnstable)
     bitcoind-knots
