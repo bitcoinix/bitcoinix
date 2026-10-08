@@ -15,7 +15,6 @@ let self = {
   clnrest = pkgs.callPackage ./clnrest { inherit (self.pinned) clightning; };
   lndinit = pkgs.callPackage ./lndinit { };
   liquid-swap = pkgs.python3Packages.callPackage ./liquid-swap { };
-  nbxplorer = pkgs.callPackage ./nbxplorer { };
   rtl = pkgs.callPackage ./rtl { inherit (self) fetchNodeModules; };
   inherit (pkgs.callPackage ./mempool { inherit (self) fetchNodeModules; })
     mempool-backend
