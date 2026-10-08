@@ -114,7 +114,7 @@ nix shell --impure --expr "$src" -c container --run c nodeinfo
 # 2.
 fetch_build_log() {
     local log=$1
-    nix cat-store --store https://nix-bitcoin.cachix.org "$log/output.xml" |
+    nix cat-store --store https://bitcoinix.cachix.org "$log/output.xml" |
         nix shell --inputs-from . nixpkgs#html-tidy -c tidy -xml -i - > /tmp/build-output.xml
     echo
     echo "Fetched log to /tmp/build-output.xml"

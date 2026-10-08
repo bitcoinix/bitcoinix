@@ -7,7 +7,7 @@
 set -euo pipefail
 
 CACHIX_SIGNING_KEY="${CACHIX_SIGNING_KEY:-}"
-cachixCache=nix-bitcoin
+cachixCache=bitcoinix
 
 trap 'echo "Error at ${BASH_SOURCE[0]}:$LINENO"' ERR
 

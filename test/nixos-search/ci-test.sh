@@ -6,7 +6,7 @@ cd "${BASH_SOURCE[0]%/*}"
 nbFlake=$(realpath ../..)
 
 # Use cachix to cache the `flake-info` build
-cachixCache=nix-bitcoin
+cachixCache=bitcoinix
 
 nix run .#cachix -- use "$cachixCache"
 
