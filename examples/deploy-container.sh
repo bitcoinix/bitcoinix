@@ -71,7 +71,7 @@ else
 fi
 
 # Build container.
-# Learn more: https://github.com/erikarvstedt/extra-container
+# Learn more: https://github.com/stevelr/extra-container
 #
 read -rd '' src <<EOF || true
 { pkgs, lib, ... }: {

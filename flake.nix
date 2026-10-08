@@ -9,7 +9,7 @@
     nixpkgs-unstable.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
     flake-utils.url = "github:numtide/flake-utils";
     extra-container = {
-      url = "github:erikarvstedt/extra-container/0.14";
+      url = "github:stevelr/extra-container/extra-container-v0.16";
       inputs.nixpkgs.follows = "nixpkgs";
       inputs.flake-utils.follows = "flake-utils";
     };

@@ -27,7 +27,7 @@ The following example scripts set up a nix-bitcoin node according to [`./configu
 shut down immediately. They leave no traces (outside of `/nix/store`) on the host system.\
 By default, [`./configuration.nix`](configuration.nix) enables `bitcoind` and `clightning`.
 
-- [`./deploy-container.sh`](deploy-container.sh) creates a [NixOS container](https://github.com/erikarvstedt/extra-container).\
+- [`./deploy-container.sh`](deploy-container.sh) creates a [NixOS container](https://github.com/stevelr/extra-container).\
   This is the fastest way to set up a node.\
   Requires: [Nix](https://nixos.org/), a systemd-based Linux distro and root privileges
 
