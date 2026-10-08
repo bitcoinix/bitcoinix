@@ -8,11 +8,6 @@ in
     config = {};
     overlays = [];
   }
-, pkgs-25_05 ? import nixpkgsPinned.nixpkgs-25_05 {
-    inherit (pkgs.stdenv.hostPlatform) system;
-    config = {};
-    overlays = [];
-  }
 }:
 let self = {
   clightning-rest = pkgs.callPackage ./clightning-rest { inherit (self) fetchNodeModules; };
@@ -45,7 +40,7 @@ let self = {
   generate-secrets = import ./generate-secrets-deprecated.nix;
   nixops19_09 = pkgs.callPackage ./nixops { };
 
-  pinned = import ./pinned.nix pkgs pkgsUnstable pkgs-25_05;
+  pinned = import ./pinned.nix pkgs pkgsUnstable;
 
   modulesPkgs = self // self.pinned;
 }; in self

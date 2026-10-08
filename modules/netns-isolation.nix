@@ -94,8 +94,6 @@ let
   iptables = "${config.networking.firewall.package}/bin/iptables";
 
   bridgeIp = "169.254.${toString cfg.addressblock}.10";
-
-  mkCliExec = service: "exec netns-exec ${netns.${service}.netnsName}";
 in {
   inherit options;
 
