@@ -23,7 +23,6 @@
         "aarch64-linux"
         # TODO: Try to enable these platforms. They were disabled for 32-bit
         # platforms due to broken `pymemcache` required by joinmarket.
-        # `joinmarket`) is broken:
         # "i686-linux"
         # "armv7l-linux"
       ];
