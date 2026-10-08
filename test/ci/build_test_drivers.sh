@@ -3,7 +3,7 @@ set -euo pipefail
 
 cd "${BASH_SOURCE[0]%/*}"
 
-cachixCache=nix-bitcoin
+cachixCache=bitcoinix
 
 # Declare variables for shellcheck
 driverDrvs=()
