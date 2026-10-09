@@ -5,7 +5,6 @@ rec {
     clightningPkg = pkg: callPackage pkg { inherit (nbPkgs.pinned) clightning; };
   in
     {
-      txzmq = callPackage ./txzmq {};
       pyln-client = clightningPkg ./pyln-client;
       pyln-proto = clightningPkg ./pyln-proto;
       pyln-bolt7 = clightningPkg ./pyln-bolt7;

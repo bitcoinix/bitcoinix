@@ -31,6 +31,7 @@ let
       description = "Publishes notifications via ZeroMQ to configured endpoints";
       scriptName = "cl-zmq";
       extraPkgs = [ twisted txzmq ];
+      patchRequirements = "--replace-fail 'txzmq==0.8.2' 'txzmq==${txzmq.version}'";
     };
   };
 
