@@ -11,6 +11,7 @@ pkgs: pkgsUnstable:
     extra-container
     lightning-pool
     lndconnect
+    lndinit
     nbxplorer;
 
   inherit (pkgsUnstable)
