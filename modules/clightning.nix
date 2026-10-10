@@ -3,7 +3,7 @@
 with lib;
 let
   options.services.clightning = {
-    enable = mkEnableOption "clightning, a Lightning Network implementation in C";
+    enable = mkEnableOption "Core Lightning (CLN), a specification compliant Lightning Network implementation in C";
     address = mkOption {
       type = types.str;
       default = "127.0.0.1";
@@ -126,11 +126,6 @@ let
     rpc-file-mode=0660
     log-timestamps=false
     ${optionalString (cfg.wallet != null) "wallet=${cfg.wallet}"}
-    ${ # TODO-EXTERNAL: When updating from a version of clightning before 22.11
-       # to version 22.11.1, then the database upgrade needs to be allowed
-       # explicitly. Remove this when it's unlikely that this module is used
-       # with a clightning version 22.11.1 package.
-      optionalString (cfg.package.version == "22.11.1") "database-upgrade=true"}
     ${cfg.extraConfig}
   '';
 
@@ -167,19 +162,19 @@ in {
         # Remove an existing socket so that `postStart` can detect when when a new
         # socket has been created and clightning is ready to accept RPC connections.
         # This will no longer be needed when clightning supports systemd startup notifications.
-        rm -f ${cfg.networkDir}/lightning-rpc
+        rm -f '${cfg.networkDir}/lightning-rpc'
 
         umask u=rw,g=r,o=
         {
-          cat ${configFile}
-          echo "bitcoin-rpcpassword=$(cat ${config.nix-bitcoin.secretsDir}/bitcoin-rpcpassword-public)"
+          cat '${configFile}'
+          echo "bitcoin-rpcpassword=$(cat '${config.nix-bitcoin.secretsDir}/bitcoin-rpcpassword-public')"
           ${optionalString (cfg.getPublicAddressCmd != "") ''
             echo "announce-addr=$(${cfg.getPublicAddressCmd}):${toString publicPort}"
           ''}
         } > '${cfg.dataDir}/config'
       '';
       serviceConfig = nbLib.defaultHardening // {
-        ExecStart = "${cfg.package}/bin/lightningd --lightning-dir=${cfg.dataDir}";
+        ExecStart = "${cfg.package}/bin/lightningd --lightning-dir=\"${cfg.dataDir}\"";
         User = cfg.user;
         Restart = "on-failure";
         RestartSec = "10s";
@@ -187,13 +182,14 @@ in {
         # DB upgrades or recovery after a crash can take a while
         TimeoutStartSec = "10m";
       } // nbLib.allowedIPAddresses cfg.tor.enforce;
+
       # Wait until the rpc socket appears
       postStart = ''
-        while [[ ! -e ${cfg.networkDir}/lightning-rpc ]]; do
+        while [[ ! -e '${cfg.networkDir}/lightning-rpc' ]]; do
             sleep 0.1
         done
         # Needed to enable lightning-cli for users with group 'clightning'
-        chmod g+x ${cfg.networkDir}
+        chmod g+x '${cfg.networkDir}'
       '';
     };
 
