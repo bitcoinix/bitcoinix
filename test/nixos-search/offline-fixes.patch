@@ -1,0 +1,41 @@
+diff --git a/flake-info/assets/commands/flake_info.nix b/flake-info/assets/commands/flake_info.nix
+index 361b9cf..d7a2519 100644
+--- a/assets/commands/flake_info.nix
++++ b/assets/commands/flake_info.nix
+@@ -1,7 +1,7 @@
+ {
+   targetFlake ? null,
+-  nixpkgsFlake ? builtins.getFlake "https://github.com/NixOS/nixpkgs/archive/refs/heads/nixpkgs-unstable.tar.gz",
+-  flake-schemas ? builtins.getFlake "github:DeterminateSystems/flake-schemas",
++  nixpkgsFlake ? builtins.getFlake (toString <nixpkgs>),
++  flake-schemas ? { exportedSchemas = {}; schemas = {}; },
+ }:
+ let
+   inherit (nixpkgsFlake) lib;
+diff --git a/flake-info/src/commands/nix_flake_attrs.rs b/flake-info/src/commands/nix_flake_attrs.rs
+index 897d1ac..197cd5f 100644
+--- a/src/commands/nix_flake_attrs.rs
++++ b/src/commands/nix_flake_attrs.rs
+@@ -22,9 +22,6 @@ pub fn get_derivation_info<T: AsRef<str> + Display>(
+     command
+         .env
+         .insert("NIXPKGS_ALLOW_UNSUPPORTED_SYSTEM".into(), "1".into());
+-    if let Some(schemas_ref) = option_env!("FLAKE_SCHEMAS_REF") {
+-        super::add_flake_arg(&mut command, "flake-schemas", schemas_ref);
+-    }
+     command.add_args(["--argstr", "targetFlake", flake_ref.as_ref()].iter());
+     command.add_arg(kind.as_ref());
+     if temp_store {
+diff --git a/flake-info/src/commands/nixpkgs_info.rs b/flake-info/src/commands/nixpkgs_info.rs
+index 1537335..85e62f3 100644
+--- a/src/commands/nixpkgs_info.rs
++++ b/src/commands/nixpkgs_info.rs
+@@ -563,8 +563,6 @@ pub fn get_nixpkgs_programs(nixpkgs: &Nixpkgs) -> Result<HashMap<String, HashSet
+         &["eval", "--raw", "--impure", "--no-write-lock-file"],
+     );
+     command.add_args(&[
+-        "-I",
+-        format!("nixpkgs=channel:nixos-{}", nixpkgs.channel).as_str(),
+         "--expr",
+         "toString <nixpkgs/programs.sqlite>",
+     ]);
