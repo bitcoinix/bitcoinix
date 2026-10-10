@@ -21,7 +21,7 @@ jobs:
     outputs:
       run_scenario_tests: ${{ steps.main.outputs.run_scenario_tests }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: cachix/install-nix-action@v31
       - id: main
         name: Build test drivers
@@ -40,17 +40,15 @@ jobs:
     needs: build_test_drivers
     if: needs.build_test_drivers.outputs.run_scenario_tests == 'true'
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: cachix/install-nix-action@v31
       - run: nix shell --inputs-from . nixpkgs#{bash,coreutils,cachix} -c ./test/ci/build.sh ${{ matrix.scenario }}
 
   check_flake:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: cachix/install-nix-action@v31
       - run: nix flake check --all-systems
-      # FIXME: Re-enable when the nixos-search input is usable again.
-      # This is also disabled in ./test/run-tests.sh.
-      # - run: ./test/nixos-search/ci-test.sh
+      - run: ./test/nixos-search/ci-test.sh
       - run: ./test/shellcheck.sh

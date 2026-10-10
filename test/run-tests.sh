@@ -331,13 +331,14 @@ all() {
     shellcheck
     examples
     flake
-    # FIXME: Re-enable when the nixos-search input is usable again.
-    # flake-info at the currently locked rev supplies nixpkgs to its inner eval
-    # via `builtins.getFlake` instead of NIX_PATH. This breaks the postPatch in
-    # ./nixos-search/flake.nix and both runners in ./nixos-search, which pass
-    # nix-bitcoin's pinned nixpkgs through NIX_PATH.
+
+    # flake-info at the currently locked rev supplies nixpkgs and flake-schemas
+    # to its inner eval via `builtins.getFlake` (fetching from GitHub URLs),
+    # which fails in the offline sandbox. We patch `flake-info` to route nixpkgs
+    # through NIX_PATH and mock flake-schemas.
+    #
     # Run explicitly with `./run-tests.sh nixosSearch`.
-    # nixosSearch
+    nixosSearch
 }
 
 # An alias for buildTest

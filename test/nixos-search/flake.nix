@@ -12,19 +12,13 @@
     inherit (nixos-search.inputs.nixpkgs) lib;
   in {
     packages = lib.genAttrs systems (system: {
-      # In flake-info, Rust calls into Nix code which uses `nixpkgs` from NIX_PATH.
-      # Don't set `nixpkgs` to a tarball URL, use the default value from the environment instead.
-      # This allows running flake-info in an offline environment (./flake-info-sandboxed.sh).
+      # Patch `flake-info` to run in an offline environment (./flake-info-sandboxed.sh).
+      # It routes `nixpkgs` through NIX_PATH via <nixpkgs> and mocks `flake-schemas`
+      # to prevent network-dependent fetches from GitHub.
       flake-info = nixos-search.packages.${system}.flake-info.overrideAttrs (old: {
-        postPatch = (old.postPatch or "") + ''
-          file=src/commands/nix_flake_attrs.rs
-          old_size=$(stat -c%s "$file")
-          sed -zi 's|command.add_arg_pair([ \n]*"-I",[ \n]*"nixpkgs=https://github.com/NixOS/nixpkgs/archive/refs/heads/nixpkgs-unstable.tar.gz",[ \n]*);||' "$file"
-          if (($(stat -c%s "$file") == $old_size)); then
-            echo "String substitution failed"
-            exit 1
-          fi
-        '';
+        patches = (old.patches or []) ++ [
+          ./offline-fixes.patch
+        ];
       });
     });
 
