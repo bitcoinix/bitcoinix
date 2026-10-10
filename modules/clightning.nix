@@ -162,19 +162,19 @@ in {
         # Remove an existing socket so that `postStart` can detect when when a new
         # socket has been created and clightning is ready to accept RPC connections.
         # This will no longer be needed when clightning supports systemd startup notifications.
-        rm -f ${cfg.networkDir}/lightning-rpc
+        rm -f '${cfg.networkDir}/lightning-rpc'
 
         umask u=rw,g=r,o=
         {
-          cat ${configFile}
-          echo "bitcoin-rpcpassword=$(cat ${config.nix-bitcoin.secretsDir}/bitcoin-rpcpassword-public)"
+          cat '${configFile}'
+          echo "bitcoin-rpcpassword=$(cat '${config.nix-bitcoin.secretsDir}/bitcoin-rpcpassword-public')"
           ${optionalString (cfg.getPublicAddressCmd != "") ''
             echo "announce-addr=$(${cfg.getPublicAddressCmd}):${toString publicPort}"
           ''}
         } > '${cfg.dataDir}/config'
       '';
       serviceConfig = nbLib.defaultHardening // {
-        ExecStart = "${cfg.package}/bin/lightningd --lightning-dir=${cfg.dataDir}";
+        ExecStart = "${cfg.package}/bin/lightningd --lightning-dir=\"${cfg.dataDir}\"";
         User = cfg.user;
         Restart = "on-failure";
         RestartSec = "10s";
@@ -182,13 +182,14 @@ in {
         # DB upgrades or recovery after a crash can take a while
         TimeoutStartSec = "10m";
       } // nbLib.allowedIPAddresses cfg.tor.enforce;
+
       # Wait until the rpc socket appears
       postStart = ''
-        while [[ ! -e ${cfg.networkDir}/lightning-rpc ]]; do
+        while [[ ! -e '${cfg.networkDir}/lightning-rpc' ]]; do
             sleep 0.1
         done
         # Needed to enable lightning-cli for users with group 'clightning'
-        chmod g+x ${cfg.networkDir}
+        chmod g+x '${cfg.networkDir}'
       '';
     };
 
