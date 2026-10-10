@@ -1,6 +1,6 @@
 # Requirements:
 # - A systemd-based Linux distro
-# - extra-container (https://github.com/erikarvstedt/extra-container/#install)
+# - extra-container (https://github.com/stevelr/extra-container/#install)
 # - Nix
 # - Root privileges
 

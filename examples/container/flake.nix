@@ -1,8 +1,8 @@
 # See how this flake is used in ./usage.sh
 
 # See also:
-# https://github.com/erikarvstedt/extra-container
-# https://github.com/erikarvstedt/extra-container/blob/master/examples/flake
+# https://github.com/stevelr/extra-container
+# https://github.com/stevelr/extra-container/blob/master/examples/flake
 # Container-related NixOS options
 # https://search.nixos.org/options?channel=unstable&query=containers.%3Cname%3E
 

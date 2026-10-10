@@ -30,7 +30,7 @@ with lib;
       };
       container = {
         # Forwarded to extra-container. For descriptions, see
-        # https://github.com/erikarvstedt/extra-container/blob/master/eval-config.nix
+        # https://github.com/stevelr/extra-container/blob/master/eval-config.nix
         # `addressPrefix` is not settable here, see ./make-test.nix.
         enableWAN = mkOption { default = false; };
         firewallAllowHost = mkOption { default = true; };
