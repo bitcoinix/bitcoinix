@@ -69,9 +69,14 @@ in {
       wantedBy = [ "multi-user.target" ];
       requires = [ "bitcoind.service" ];
       after = [ "bitcoind.service" "nix-bitcoin-secrets.target" ];
+      # electrs.toml contains the RPC password.
+      # `install` replaces an existing file (also one with laxer permissions
+      # from earlier versions) and creates it with mode 600 (O_EXCL), so there
+      # is no window where it is readable by others.
       preStart = ''
-        echo "auth = \"${bitcoind.rpc.users.public.name}:$(cat ${secretsDir}/bitcoin-rpcpassword-public)\"" \
-          > electrs.toml
+        install -m 600 \
+          <(echo "auth = \"${bitcoind.rpc.users.public.name}:$(cat ${secretsDir}/bitcoin-rpcpassword-public)\"") \
+          electrs.toml
         '';
       serviceConfig = nbLib.defaultHardening // {
         # electrs only uses the working directory for reading electrs.toml

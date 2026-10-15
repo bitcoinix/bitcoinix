@@ -134,6 +134,12 @@ def _():
         machine.wait_until_succeeds(
             log_has_string("electrs", "waiting for 0 blocks to download")
         )
+    # electrs.toml contains the RPC password
+    toml = "/var/lib/electrs/electrs.toml"
+    assert_full_match(f"stat -c '%a %U' {toml}", "600 electrs\n")
+    # A file with laxer permissions (created by earlier versions) is replaced
+    succeed(f"chmod 644 {toml} && systemctl restart electrs")
+    assert_full_match(f"stat -c '%a %U' {toml}", "600 electrs\n")
 
 @test("fulcrum")
 def _():
