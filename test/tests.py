@@ -1205,3 +1205,75 @@ if "netns-isolation" in enabled_tests:
 else:
     def ip(_):
         return "127.0.0.1"
+
+# Runs last: every setup-secrets run makes the secrets dir 0700 until it
+# succeeds, which would break services that are still starting.
+@test("setup-secrets")
+def _():
+    assert_running("setup-secrets")
+
+    def unit_prop(prop):
+        return succeed(f"systemctl show setup-secrets --value -p {prop}").strip()
+    assert unit_prop("ProtectSystem") == "strict"
+    assert unit_prop("PrivateNetwork") == "yes"
+    assert unit_prop("NoNewPrivileges") == "yes"
+    assert unit_prop("CapabilityBoundingSet") == "cap_chown cap_dac_override cap_fowner"
+
+    # Undeclared entries whose names break unquoted, option-parsing or
+    # glob-expanding shell code, a dotfile, and a symlink to a file outside
+    # the secrets dir.
+    unsafe = ["-x", "*", ".dotfile"]
+    listing = "find /secrets -mindepth 1 -maxdepth 1 -printf '%P %u:%g %m\\n' | sort"
+    before = succeed(listing)
+    for name in unsafe:
+        succeed(f"install -o nobody -g nogroup -m 666 /dev/null /secrets/{name!r}")
+    succeed(
+        "install -o nobody -g nogroup -m 644 /dev/null /run/setup-secrets-link-target",
+        "ln -s /run/setup-secrets-link-target /secrets/link",
+        "chown -h nobody:nogroup /secrets/link",
+    )
+
+    succeed("systemctl restart setup-secrets")
+
+    for name in unsafe:
+        assert_full_match(f"stat -c '%U:%G %a' /secrets/{name!r}", "root:root 440\n")
+    assert_full_match("stat -c '%U:%G' /secrets/link", "root:root\n")
+    # The link target is left alone
+    assert_full_match("stat -c '%U:%G %a' /run/setup-secrets-link-target", "nobody:nogroup 644\n")
+
+    succeed("rm -f -- /secrets/-x '/secrets/*' /secrets/.dotfile /secrets/link /run/setup-secrets-link-target")
+    # Nothing else was changed
+    assert succeed(listing) == before
+    assert_full_match("stat -c '%U:%G %a' /secrets", "root:root 751\n")
+
+    # A declared secret that is a symlink to a host file outside the secrets
+    # dir must not get its target re-permissioned: the unit has to fail with
+    # EROFS instead. /run and /dev/shm stay writable under ProtectSystem=strict
+    # with the other hardening settings unless they are made read-only.
+    declared = test_data["setup-secrets-declared"]
+    if declared:
+        secret = f"/secrets/{declared}"
+        for target_dir in ["/run", "/dev/shm"]:
+            target = f"{target_dir}/setup-secrets-declared-target"
+            # `cp -p` keeps content and mtime, so no secret is regenerated from it
+            succeed(
+                f"cp -p {secret} {target}",
+                f"chown nobody:nogroup {target}",
+                f"chmod 644 {target}",
+                f"mv {secret} /root/setup-secrets-declared-orig",
+                f"ln -s {target} {secret}",
+                # Repeated restarts would otherwise hit the start limit, which
+                # also makes the restart fail
+                "systemctl reset-failed setup-secrets",
+            )
+            machine.fail("systemctl restart setup-secrets")
+            assert_matches("systemctl show setup-secrets --value -p Result", "^exit-code$")
+            assert_full_match(f"stat -c '%U:%G %a' {target}", "nobody:nogroup 644\n")
+            succeed(
+                f"rm {secret} {target}",
+                f"mv /root/setup-secrets-declared-orig {secret}",
+                "systemctl reset-failed setup-secrets",
+                "systemctl restart setup-secrets",
+                "systemctl start nix-bitcoin-secrets.target",
+            )
+            assert succeed(listing) == before
