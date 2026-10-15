@@ -219,6 +219,11 @@ let
 
       tests.backups = cfg.backups.enable;
 
+      tests.setup-secrets = config.nix-bitcoin.setupSecrets;
+      test.data.setup-secrets-declared = let
+        names = builtins.attrNames config.nix-bitcoin.secrets;
+      in if names == [] then null else builtins.head names;
+
       # To test that unused secrets are made inaccessible by 'setup-secrets'
       systemd.services.setup-secrets.preStart = mkIfTest "security" ''
         install -D -o nobody -g nogroup -m777 <(:) /secrets/dummy
