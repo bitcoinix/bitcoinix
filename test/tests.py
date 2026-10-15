@@ -125,6 +125,54 @@ def _():
         log_has_string("bitcoind", "RPC User public not allowed to call method stop")
     )
 
+@test("rpc-whitelist")
+def _():
+    data = test_data["rpc-whitelist"]
+    # Arguments are chosen so that each call fails harmlessly with an RPC error
+    # if it gets past the whitelist
+    calls = {
+        "getblockcount": "getblockcount",
+        "scantxoutset": "scantxoutset status",
+        "getblocktemplate": """getblocktemplate '{"rules":["segwit"]}'""",
+        "fundrawtransaction": "fundrawtransaction 00",
+        "gettxoutsetinfo": "gettxoutsetinfo none",
+        "getblockfrompeer": f"getblockfrompeer {'0' * 64} 0",
+        "setban": "setban 192.0.2.1 remove",
+        "generatetoaddress": "generatetoaddress 1 invalid",
+    }
+
+    def is_forbidden(user, method):
+        _, out = machine.execute(
+            f"bitcoin-cli -rpcuser={user} -rpcpassword=$(cat /secrets/bitcoin-rpcpassword-{user})"
+            f" {calls[method]} 2>&1"
+        )
+        if "Could not connect to the server" in out or "Authorization failed" in out:
+            raise Exception(f"RPC call {method} as user {user} failed: {out}")
+        return "server returned HTTP error 403" in out
+
+    def assert_rpc_access(user, allowed, denied):
+        for method in allowed:
+            if is_forbidden(user, method):
+                raise Exception(f"RPC user {user} should be allowed to call {method}")
+        for method in denied:
+            if not is_forbidden(user, method):
+                raise Exception(f"RPC user {user} should not be allowed to call {method}")
+
+    machine.wait_until_succeeds("bitcoin-cli getnetworkinfo")
+
+    public_allowed = ["getblockcount"]
+    public_denied = ["scantxoutset", "getblocktemplate", "fundrawtransaction"]
+    (public_allowed if data["clightning-bcli"] else public_denied).append("getblockfrompeer")
+    (public_allowed if data["mempool"] else public_denied).append("gettxoutsetinfo")
+    assert_rpc_access("public", public_allowed, public_denied)
+
+    if data["btcpayserver"]:
+        btcpay_allowed = ["getblockcount", "getblockfrompeer"]
+        btcpay_denied = [
+            "scantxoutset", "getblocktemplate", "fundrawtransaction", "setban", "generatetoaddress"
+        ]
+        assert_rpc_access("btcpayserver", btcpay_allowed, btcpay_denied)
+
 @test("electrs")
 def _():
     assert_running("electrs")

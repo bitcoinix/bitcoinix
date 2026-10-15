@@ -1,4 +1,9 @@
 # RPC calls that are safe for public use
+#
+# Not listed, because they are expensive, act on peers or touch a wallet:
+# getblockfrompeer, gettxoutsetinfo, scantxoutset, getblocktemplate,
+# fundrawtransaction. Modules whose service calls one of these grant it
+# themselves (clightning.nix, mempool.nix, btcpayserver.nix).
 [
   "echo"
   "getinfo"
@@ -12,7 +17,6 @@
   "getblockchaininfo"
   "getblockcount"
   "getblockfilter"
-  "getblockfrompeer"
   "getblockhash"
   "getblockheader"
   "getblockstats"
@@ -27,11 +31,8 @@
   "getrawmempool"
   "gettxout"
   "gettxoutproof"
-  "gettxoutsetinfo"
-  "scantxoutset"
   "verifytxoutproof"
   # Mining
-  "getblocktemplate"
   "getmininginfo"
   "getnetworkhashps"
   # Network
@@ -49,7 +50,6 @@
   "decoderawtransaction"
   "decodescript"
   "finalizepsbt"
-  "fundrawtransaction"
   "getrawtransaction"
   "joinpsbts"
   "sendrawtransaction"

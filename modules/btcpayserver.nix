@@ -106,9 +106,14 @@ in {
       enable = true;
       rpc.users.btcpayserver = {
         passwordHMACFromFile = true;
+        # nbxplorer probes these via NBitcoin's ScanRPCCapabilities. Without
+        # getblockfrompeer it can't fetch pruned blocks.
+        # scantxoutset is left out: a scan takes minutes of CPU, and this user is
+        # reachable from the web app. Without it, nbxplorer disables UTXO set
+        # scans and its scan endpoint returns `scanutxoset-not-suported`.
+        # See examples/configuration.nix for how to grant it.
         rpcwhitelist = cfg.bitcoind.rpc.users.public.rpcwhitelist ++ [
-          "setban"
-          "generatetoaddress"
+          "getblockfrompeer"
         ];
       };
       listenWhitelisted = true;
