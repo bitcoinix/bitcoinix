@@ -111,6 +111,16 @@ let
 
       nix-bitcoin.onionServices.lnd.public = true;
 
+      tests.onion-addresses = config.nix-bitcoin.onionAddresses.access != {};
+      test.data.onion-addresses = let
+        inherit (config.nix-bitcoin) onionAddresses;
+      in {
+        inherit (onionAddresses) access dataDir;
+        serviceUsers = genAttrs onionAddresses.services (service:
+          config.systemd.services.${service}.serviceConfig.User
+        );
+      };
+
       tests.lndconnect-onion-lnd = with cfg.lnd.lndconnect; enable && onion;
       tests.lnconnect-onion-clnrest = with cfg.clightning.plugins.clnrest.lnconnect; enable && onion;
       tests.lndconnect-onion-clightning = with cfg.clightning-rest.lndconnect; enable && onion;
