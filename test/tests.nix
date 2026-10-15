@@ -73,6 +73,12 @@ let
       tests.clightning-rest = cfg.clightning-rest.enable;
 
       tests.rtl = cfg.rtl.enable;
+      tests.rtl-credentials = cfg.rtl.enable;
+      test.data.rtl-credentials = {
+        inherit (cfg.rtl) dataDir user group;
+        lnd = if cfg.rtl.nodes.lnd.enable then { inherit (cfg.lnd) networkDir user; } else null;
+        clightning = if cfg.rtl.nodes.clightning.enable then { inherit (cfg.clightning) networkDir user; } else null;
+      };
       services.rtl = {
         nodes = {
           lnd = {

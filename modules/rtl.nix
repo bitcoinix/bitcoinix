@@ -109,6 +109,30 @@ let
   secretsDir = config.nix-bitcoin.secretsDir;
   runePath = "${cfg.dataDir}/clightning-admin-rune";
 
+  runuser = "${pkgs.util-linux}/bin/runuser";
+
+  # Shared by the root scripts that copy lnd/clightning credentials to RTL.
+  # The source dirs are writable by the lnd/clightning user and `cfg.dataDir` is
+  # writable by the rtl user, so any of them could place symlinks there.
+  # So never access paths in these dirs as root:
+  # - Read the source as the user that owns it (`runuser`), into "$tmpFile",
+  #   a file in a fresh dir that only root can write to.
+  # - Install the file to its destination as the rtl user.
+  #   This only grants the rtl user rights it already has.
+  #   `install --compare` doesn't rewrite unchanged files.
+  installAsRtl = ''
+    umask 077
+    tmpDir=$(mktemp -d)
+    trap 'rm -rf "$tmpDir"' EXIT
+    # Let the rtl user access "$tmpFile" (owned by rtl, mode 600), but not list the dir
+    chmod 711 "$tmpDir"
+    tmpFile=$tmpDir/file
+    installAsRtl() {
+      chown ${cfg.user}:${cfg.group} "$tmpFile"
+      ${runuser} -u ${cfg.user} -- install --compare -m 640 -D "$tmpFile" "$1"
+    }
+  '';
+
   inherit (nbLib) optionalAttr;
 
   node = { isLnd, index }: {
@@ -184,7 +208,10 @@ in {
 
     systemd.tmpfiles.rules = [
       "d '${cfg.dataDir}' 0770 ${cfg.user} ${cfg.group} - -"
-    ];
+    ] ++ optional cfg.nodes.lnd.enable
+      # `rtl-copy-macaroon` installs the macaroon as the rtl user, which needs write
+      # access to this dir. Older versions created it as root, so fix its owner.
+      "d '${cfg.dataDir}/macaroons' 0770 ${cfg.user} ${cfg.group} - -";
 
     services.rtl.tor.enforce = mkIf (cfg.extraCurrency != null) false;
 
@@ -205,13 +232,16 @@ in {
         ++ optional cfg.nodes.lnd.enable
           # The lnd admin macaroon is not readable by group `lnd`, so copy it
           (nbLib.rootScript "rtl-copy-macaroon" ''
-            install --compare -m 640 -o ${cfg.user} -g ${cfg.group} -D ${lnd.networkDir}/admin.macaroon \
-              '${cfg.dataDir}/macaroons/admin.macaroon'
+            ${installAsRtl}
+            ${runuser} -u ${lnd.user} -- head -c 65536 '${lnd.networkDir}/admin.macaroon' > "$tmpFile"
+            installAsRtl '${cfg.dataDir}/macaroons/admin.macaroon'
           '')
         ++ optional cfg.nodes.clightning.enable
           (nbLib.rootScript "rtl-create-clnrest-rune-file" ''
-            rune=$(cat '${clightning.networkDir}/admin-rune')
-            install --compare -m 640 -o ${cfg.user} -g ${cfg.group} <(printf 'LIGHTNING_RUNE="%s"\n' "$rune") '${runePath}'
+            ${installAsRtl}
+            rune=$(${runuser} -u ${clightning.user} -- head -c 65536 '${clightning.networkDir}/admin-rune')
+            printf 'LIGHTNING_RUNE="%s"\n' "$rune" > "$tmpFile"
+            installAsRtl '${runePath}'
           '');
         ExecStart = "${nbPkgs.rtl}/bin/rtl";
         # Show "rtl" instead of "node" in the journal
