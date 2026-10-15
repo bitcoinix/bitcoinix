@@ -9,6 +9,12 @@ let self = {
   defaultHardening = {
       PrivateTmp = true;
       ProtectSystem = "strict";
+      # `ProtectSystem` doesn't cover these with the settings below: /run stays
+      # writable, and `PrivateDevices` bind-mounts the host's /dev/shm,
+      # /dev/mqueue and /dev/hugepages read-write.
+      # `ReadWritePaths`, `RuntimeDirectory` and `StateDirectory` still work below
+      # these paths, and device nodes like /dev/null stay writable.
+      ReadOnlyPaths = [ "/run" "/dev" ];
       ProtectHome = true;
       NoNewPrivileges = true;
       PrivateDevices = true;
