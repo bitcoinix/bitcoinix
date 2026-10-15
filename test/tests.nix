@@ -29,9 +29,13 @@ let
         (mkIfTest "btcpayserver" [ openssl xxd ])
         # Needed to test certificate creation
         (mkIfTest "lnd" [ openssl ])
+        # Needed to trace the commands run by secret generation
+        (mkIfTest "secrets-no-argv" [ strace ])
       ]);
 
       tests.bitcoind = cfg.bitcoind.enable;
+      tests.secrets-no-argv = cfg.bitcoind.enable;
+      test.data.secrets-no-argv.generator = "${config.nix-bitcoin.generateSecretsScript}";
       services.bitcoind = {
         enable = true;
         extraConfig = mkMerge [
