@@ -300,6 +300,10 @@ let
 
     regtestBase = { config, pkgs, ... }: {
       tests.regtest = true;
+      # Also run the bitcoind restart check here: in the secureNode scenarios
+      # electrs is already stopped at that point, and the Lightning daemons are
+      # synced only on regtest.
+      tests.restart-bitcoind = true;
       test.data.num_blocks = 100;
 
       services.bitcoind.regtest = true;
