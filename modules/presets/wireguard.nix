@@ -107,6 +107,15 @@ in {
         assertion = !(config.nix-bitcoin.netns-isolation.enable or false);
         message = "`nix-bitcoin.wireguard` is not compatible with `netns-isolation`.";
       }
+      {
+        # The REST APIs below are bound to 0.0.0.0 and are protected only by the
+        # `extraCommands` rules, which exist only when the NixOS firewall is enabled.
+        # (The nftables backend needs no check here: NixOS already rejects a
+        # non-empty `extraCommands` under nftables.)
+        assertion = !(lndconnect || lnconnect-clnrest || lndconnect-clightning)
+                    || config.networking.firewall.enable;
+        message = "`nix-bitcoin.wireguard` binds the REST API of the enabled `*connect` helpers to 0.0.0.0 and protects it only by the firewall. Enable `networking.firewall`.";
+      }
     ];
 
     networking.wireguard.interfaces.wg-nb = {
@@ -169,15 +178,20 @@ in {
     in {
       allowedUDPPorts = [ wg-nb.listenPort ];
 
+      # Accept REST traffic from the WireGuard subnet only when it arrived via `wg-nb`
+      # and is addressed to the server's tunnel address. `-s` alone would also match
+      # a spoofed subnet source address on any other interface, e.g. the LAN, and
+      # without `-d` a peer could reach the ports via another local address of the
+      # server, which `restrictPeer` is meant to rule out.
       extraCommands =
         optionalString lndconnect ''
-          iptables -w -A nixos-fw -p tcp -s ${wgSubnet}.0/24 --dport ${toString lnd.restPort} -j nixos-fw-accept
+          iptables -w -A nixos-fw -i wg-nb -p tcp -s ${wgSubnet}.0/24 -d ${serverAddress} --dport ${toString lnd.restPort} -j nixos-fw-accept
         ''
         + optionalString lnconnect-clnrest ''
-          iptables -w -A nixos-fw -p tcp -s ${wgSubnet}.0/24 --dport ${toString clnrest.port} -j nixos-fw-accept
+          iptables -w -A nixos-fw -i wg-nb -p tcp -s ${wgSubnet}.0/24 -d ${serverAddress} --dport ${toString clnrest.port} -j nixos-fw-accept
         ''
         + optionalString lndconnect-clightning ''
-          iptables -w -A nixos-fw -p tcp -s ${wgSubnet}.0/24 --dport ${toString clightning-rest.port} -j nixos-fw-accept
+          iptables -w -A nixos-fw -i wg-nb -p tcp -s ${wgSubnet}.0/24 -d ${serverAddress} --dport ${toString clightning-rest.port} -j nixos-fw-accept
         ''
         + optionalString cfg.restrictPeer ''
           iptables -w -A nixos-fw ${restrictPeerRule}

@@ -122,5 +122,48 @@ makeTestVM {
               f"curl -fsS --max-time 3 --insecure --header 'macaroon: {api.macaroon_hex}' "
               f"--header 'encodingtype: hex' -X GET https://{api.host}:{api.port}/v1/getinfo"
           )
+
+      with subtest("REST accept rules only match traffic from wg-nb"):
+          lnd_rest_port = parse_lndconnect_url(
+              server.succeed("runuser -u operator -- lndconnect-wg --url")
+          ).port
+          dport = f"--dport {lnd_rest_port}"
+          rules = server.succeed("iptables -w -S nixos-fw").splitlines()
+          assert any("-i wg-nb" in r and dport in r for r in rules), \
+              f"no wg-nb pinned accept rule for port {lnd_rest_port}:\n" + "\n".join(rules)
+
+          def packets(*match):
+              out = server.succeed("iptables -w -L nixos-fw -v -x -n").splitlines()
+              lines = [l for l in out if all(m in l for m in match)]
+              assert len(lines) == 1, f"expected one rule matching {match}, got {lines}"
+              return int(lines[0].split()[0])
+
+          # Spoof a WireGuard subnet source over the plain test network (eth1).
+          # Use `.3` instead of the peer address `.2`, so the client's tunnel
+          # address and routing stay untouched. The accept rules match the whole /24.
+          spoofed = "10.10.0.3"
+          dpt = f"dpt:{lnd_rest_port}"
+          # Bypass the reverse path filter, which would drop the spoofed packet
+          # before it reaches `nixos-fw`, so that the `-i wg-nb` pin is what is tested.
+          server.succeed("iptables -w -t mangle -D PREROUTING -j nixos-fw-rpfilter")
+          # Count spoofed packets that reach `nixos-fw` (rule without a target)
+          server.succeed(f"iptables -w -I nixos-fw 1 -p tcp -s {spoofed} --dport {lnd_rest_port}")
+          client.succeed(f"ip addr add {spoofed}/32 dev eth1")
+          try:
+              server.succeed("iptables -w -Z nixos-fw")
+              client.fail(
+                  f"curl -4 -fsS --max-time 3 --insecure --interface {spoofed} "
+                  f"https://server:{lnd_rest_port}/v1/getinfo"
+              )
+              assert packets(spoofed, dpt) > 0, "spoofed packets did not reach nixos-fw"
+              assert packets("nixos-fw-accept", "wg-nb", dpt) == 0, \
+                  "spoofed packets were accepted by the wg-nb rule"
+          finally:
+              client.succeed(f"ip addr del {spoofed}/32 dev eth1")
+              server.succeed(f"iptables -w -D nixos-fw -p tcp -s {spoofed} --dport {lnd_rest_port}")
+              server.succeed("iptables -w -t mangle -A PREROUTING -j nixos-fw-rpfilter")
+
+          # The tunnel still works
+          client.succeed("ping -c 1 -W 0.5 10.10.0.1")
   '';
 }
