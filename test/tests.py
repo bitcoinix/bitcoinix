@@ -261,6 +261,17 @@ def _():
     if test_data["btcpayserver-lbtc"]:
         machine.wait_until_succeeds(log_has_string("nbxplorer", "LBTC: RPC connection successful"))
     wait_for_open_port(ip("nbxplorer"), 24444)
+    # Regression guard: NBXplorer's .NET host takes its content root from the
+    # working directory and (by default) watches it recursively. With no
+    # WorkingDirectory that was `/`, i.e. an inotify watch per directory of the
+    # whole root filesystem (the Nix store included), which exhausted the
+    # per-user watch limit on a production node in days. The content root must
+    # be the immutable app dir (a writable one would honor a planted
+    # appsettings.json), and with reload-on-change off nothing is watched.
+    nbx_pid = succeed("systemctl show -p MainPID --value nbxplorer").strip()
+    assert_matches(f"readlink /proc/{nbx_pid}/cwd", r"^/nix/store/[^/]+-nbxplorer-[^/]+/lib/nbxplorer$")
+    nbx_watches = int(succeed(f"cat /proc/{nbx_pid}/fdinfo/* 2>/dev/null | grep -c '^inotify wd:' || true").strip() or 0)
+    assert nbx_watches < 100, f"nbxplorer holds {nbx_watches} inotify watches"
 
     assert_running("btcpayserver")
     machine.wait_until_succeeds(log_has_string("btcpayserver", "Now listening on"))
