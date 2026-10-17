@@ -529,6 +529,30 @@ def _():
             f"curl -fsS http://{ip('nginx')}:60845/api/v1/blocks/tip/height", str(num_blocks)
         )
 
+# Impure: restarts lnd. Runs after `regtest`, so lnd is synced.
+@test("lnd-restart-on-clean-exit")
+def _():
+    # `lncli stop` shuts lnd down cleanly (exit status 0), like lnd's chain
+    # backend health check does when bitcoind stays unreachable. lnd must come
+    # back on its own (`Restart = "always"`).
+    #
+    # Stop the lnd clients first: a client that `requires` lnd and restarts on
+    # failure would start lnd again itself and hide a missing `Restart=`.
+    clients = [u for u in ["lightning-loop", "lightning-pool"] if u in enabled_tests]
+    for unit in clients:
+        succeed(f"systemctl stop {unit}")
+    assert_running("lnd")
+    before = succeed("systemctl show -P InvocationID lnd").strip()
+    succeed("runuser -u operator -- lncli stop")
+    # Right after `lncli stop`, lnd may still be active (shutting down).
+    # Poll for a new invocation instead of polling `is-active`.
+    machine.wait_until_succeeds(f"[[ $(systemctl show -P InvocationID lnd) != '{before}' ]]")
+    machine.wait_for_unit("lnd")
+    machine.wait_until_succeeds("runuser -u operator -- lncli getinfo")
+    for unit in clients:
+        succeed(f"systemctl start {unit}")
+        machine.wait_for_unit(unit)
+
 @test("trustedcoin")
 def _():
     def expect_clightning_log(str):

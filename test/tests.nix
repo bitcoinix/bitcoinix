@@ -301,6 +301,7 @@ let
 
     regtestBase = { config, pkgs, ... }: {
       tests.regtest = true;
+      tests.lnd-restart-on-clean-exit = config.services.lnd.enable;
       test.data.num_blocks = 100;
 
       services.bitcoind.regtest = true;

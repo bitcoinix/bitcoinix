@@ -258,7 +258,12 @@ in {
         ExecStart = "${cfg.package}/bin/lnd --configfile='${cfg.dataDir}/lnd.conf'";
         User = cfg.user;
         TimeoutSec = "15min";
-        Restart = "on-failure";
+        # `always`, not `on-failure`: when bitcoind stays unreachable, lnd's
+        # chain backend health check gives up and lnd shuts down cleanly with
+        # exit status 0. `on-failure` then left lnd down after bitcoind came
+        # back. `systemctl stop lnd` still stops lnd for good, because an
+        # explicit stop never triggers `Restart=`.
+        Restart = "always";
         RestartSec = "10s";
         ReadWritePaths = [ cfg.dataDir ];
         ExecStartPost = let
