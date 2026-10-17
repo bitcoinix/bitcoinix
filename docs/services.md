@@ -515,3 +515,48 @@ To work around this and connect via clearnet instead, set this option:
 ```nix
 services.clightning.plugins.trustedcoin.tor.proxy = false;
 ```
+
+# UTXOracle
+
+[UTXOracle](https://utxo.live/oracle/) derives the bitcoin price in USD from
+confirmed transactions in your node's blocks, without any external price source.
+
+UTXOracle is **not free software**. Read its
+[license](https://github.com/Unbesteveable/UTXOracle/blob/main/LICENSE) before
+enabling it. In short:
+- You may run it unmodified to compute the daily average price of the last full UTC
+  day or the price over the last 144 blocks. These outputs must be called the
+  "UTXOracle Consensus Price" and the "UTXOracle Block Window Price".
+- It forbids live or real-time price feeds, updates more often than once per block,
+  trading bots, financial APIs, commercial use of the prices without the author's
+  permission, and offering a public-facing service under the UTXOracle name.
+
+The module's defaults follow these terms: it runs the script unmodified, daily or
+hourly, and doesn't expose its output on any network interface. If you change
+`services.utxoracle.interval`, keep it at most once per block (every 10 minutes).
+What you do with the output is up to you and the license.
+
+Because the license is unfree, you have to allow the package explicitly:
+```nix
+services.utxoracle.enable = true;
+nixpkgs.config.allowUnfreePredicate = pkg: builtins.elem (lib.getName pkg) [ "utxoracle" ];
+```
+If you already set `allowUnfreePredicate`, extend your existing predicate to also
+allow `"utxoracle"` instead: the option can only be defined once.\
+With `nix-bitcoin.useVersionLockedPkgs = true`, `nixpkgs.config` doesn't apply to
+bitcoinix packages. Set `services.utxoracle.package` to a package from a pkgs
+instance that allows it instead.
+
+UTXOracle needs mainnet blocks: on regtest or the test chains it can't detect a price.
+Set `services.utxoracle.mode` to choose between the "UTXOracle Consensus Price"
+(`consensus`, the default, computed daily at 03:00 UTC) and the
+"UTXOracle Block Window Price" (`blockWindow`, hourly by default).
+
+Each run writes a chart to an HTML file in `services.utxoracle.dataDir`, with the
+canonical price name above the plot. In `consensus` mode the price is also written to
+the journal. In `blockWindow` mode, charts older than 30 days are deleted
+(`services.utxoracle.outputMaxAge`).
+```shell
+journalctl -u utxoracle -n 20
+ls /var/lib/utxoracle
+```

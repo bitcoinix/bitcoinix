@@ -128,6 +128,7 @@ NixOS modules ([src](modules/modules.nix))
   * [btcpayserver](https://github.com/btcpayserver/btcpayserver)
   * [liquid](https://github.com/elementsproject/elements): federated sidechain
   * [bitcoin-core-hwi](https://github.com/bitcoin-core/HWI)
+  * [UTXOracle](https://utxo.live/oracle/) ([unfree, local only](docs/services.md#utxoracle)): bitcoin price from confirmed on-chain data
 * Helper
   * [netns-isolation](modules/netns-isolation.nix): isolates applications on the network-level via network namespaces
   * [nodeinfo](modules/nodeinfo.nix): script which prints info about the node's services

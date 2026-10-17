@@ -132,6 +132,13 @@ let
 
       tests.charge-lnd = cfg.charge-lnd.enable;
 
+      tests.utxoracle = cfg.utxoracle.enable;
+      # The test pkgs don't allow unfree packages and ignore `nixpkgs.config`.
+      # Users allow the package with `nixpkgs.config.allowUnfreePredicate` instead.
+      services.utxoracle.package = config.nix-bitcoin.pkgs.utxoracle.overrideAttrs (old: {
+        meta = old.meta // { license = old.meta.license // { free = true; }; };
+      });
+
       tests.electrs = cfg.electrs.enable;
 
       services.fulcrum.port = 50002;
@@ -222,6 +229,7 @@ let
       services.fulcrum.enable = true;
       services.liquidd.enable = true;
       services.btcpayserver.enable = true;
+      services.utxoracle.enable = true;
       services.backups.enable = true;
 
       nix-bitcoin.nodeinfo.enable = true;
@@ -273,6 +281,7 @@ let
       services.electrs.enable = true;
       services.fulcrum.enable = true;
       services.btcpayserver.enable = true;
+      services.utxoracle.enable = true;
     };
 
     # netns and regtest, without secure-node.nix

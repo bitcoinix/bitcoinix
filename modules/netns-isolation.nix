@@ -294,6 +294,10 @@ in {
           (if (config.services.mempool.electrumServer == "electrs") then "electrs" else "fulcrum")
         ];
       };
+      utxoracle = {
+        id = 34;
+        connections = [ "bitcoind" ];
+      };
     };
 
     services.bitcoind = {

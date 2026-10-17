@@ -254,6 +254,32 @@ def _():
     succeed("systemctl start charge-lnd")
     assert_no_failure("charge-lnd")
 
+@test("utxoracle")
+def _():
+    rpc = "bitcoin-cli -rpcuser=utxoracle -rpcpassword=$(cat /secrets/bitcoin-rpcpassword-utxoracle)"
+    # The RPC user may call what UTXOracle.py needs, and nothing else
+    succeed(
+        f"{rpc} getblockcount",
+        f"{rpc} getblock $(bitcoin-cli getblockhash 0) 0",
+    )
+    machine.fail(f"{rpc} getblockchaininfo")
+    machine.wait_until_succeeds(
+        log_has_string("bitcoind", "RPC User utxoracle not allowed to call method getblockchaininfo")
+    )
+
+    # utxoracle is a oneshot service that is started by a timer under regular operation.
+    # It can't compute a price without mainnet blocks: on regtest it fails
+    # while looking for the previous day's blocks (`getblockhash` with a
+    # negative height). So only check that its RPC calls are authenticated
+    # and allowed by the whitelist.
+    if "regtest" in enabled_tests:
+        machine.execute("systemctl start utxoracle")
+        succeed(log_has_string("utxoracle", "5% done"))
+        machine.fail(log_has_string("utxoracle", "HTTP error 40[13]"))
+        machine.fail(log_has_string("utxoracle", "Error reading .cookie"))
+        # The runtime dir with the RPC password is removed after each run
+        machine.fail("test -e /run/utxoracle")
+
 @test("btcpayserver")
 def _():
     assert_running("nbxplorer")

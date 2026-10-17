@@ -18,6 +18,7 @@
     ./lightning-loop.nix
     ./lightning-pool.nix
     ./charge-lnd.nix
+    ./utxoracle.nix
     ./lndconnect.nix # Requires onion-addresses.nix
     ./rtl.nix
     ./mempool.nix
