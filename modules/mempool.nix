@@ -246,6 +246,8 @@ in {
       enable = true;
       package = pkgs.mariadb;
       ensureDatabases = [ cfg.database.name ];
+      # mempool connects over the unix socket
+      settings.mysqld.bind-address = mkDefault "127.0.0.1";
       ensureUsers = [
         {
           name = cfg.user;
@@ -261,6 +263,7 @@ in {
         # mempool doesn't support regtest
         NETWORK = "mainnet";
         BACKEND = "electrum";
+        HTTP_HOST = cfg.address;
         HTTP_PORT = cfg.port;
         CACHE_DIR = "${cacheDir}/cache";
         STDOUT_LOG_MIN_PRIORITY = mkDefault "info";

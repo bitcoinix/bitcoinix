@@ -50,7 +50,11 @@ rec {
   mempool-backend = mkDerivationMempool {
     pname = "mempool-backend";
 
-    patches = [ ./0001-allow-disabling-mining-pool-fetching.patch ];
+    patches = [
+      ./0001-allow-disabling-mining-pool-fetching.patch
+      # Stock mempool listens on all interfaces; bind to `MEMPOOL.HTTP_HOST`
+      ./0002-bind-backend-to-HTTP_HOST.patch
+    ];
 
     buildPhase = ''
       cd backend

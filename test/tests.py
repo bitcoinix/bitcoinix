@@ -368,6 +368,11 @@ def _():
         log_has_string("mempool", "Mempool Server is running on port 8999")
     )
     assert_matches(f"curl -L {ip('nginx')}:60845", "mempool - Bitcoin Explorer")
+    # The backend listens on `services.mempool.address` only, not on all interfaces
+    # (with netns, it runs in its own namespace and is checked by `netns-isolation`)
+    if "netns-isolation" not in enabled_tests:
+        assert_full_match("ss -ltnH 'sport = :8999' | awk '{print $4}'", "127.0.0.1:8999\n")
+        assert_full_match("ss -ltnH 'sport = :3306' | awk '{print $4}'", "127.0.0.1:3306\n")
 
 @test("nodeinfo")
 def _():
