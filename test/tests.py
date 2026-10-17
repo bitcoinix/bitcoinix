@@ -93,29 +93,16 @@ def _():
     machine.wait_until_succeeds("bitcoin-cli getnetworkinfo")
     assert_matches("runuser -u operator -- bitcoin-cli getnetworkinfo | jq", '"version"')
 
-    regtest = "regtest/" if "regtest" in enabled_tests else ""
-    cookie = f"/var/lib/bitcoind/{regtest}.cookie"
-    # bitcoind creates the cookie world-readable (`rpccookieperms=all` in ./tests.nix)
+    # The cookie lives in a runtime directory that only the bitcoin user can write
+    cookie = "/run/bitcoind/.cookie"
+    assert_full_match("stat -c '%U:%G %a' /run/bitcoind", "bitcoin:bitcoin 750\n")
     assert_full_match(f"stat -c '%a' {cookie}", "640\n")
     # Group members can read the cookie
     succeed(f"runuser -u operator -- cat {cookie} >/dev/null")
-    # postStart refuses to chmod a cookie that was replaced by a symlink
-    post_start = succeed(
-        "systemctl show -p ExecStartPost --value bitcoind | grep -o 'path=[^ ;]*' | cut -d= -f2"
-    ).split()
-    assert len(post_start) == 1, post_start
-    target = "/var/lib/bitcoind/cookie-symlink-target"
-    succeed(
-        f"install -o bitcoin -g bitcoin -m 600 /dev/null {target}",
-        f"mv {cookie} {cookie}.orig",
-        f"ln -s {target} {cookie}",
-    )
-    assert_matches(
-        f'! out=$(runuser -u bitcoin -- {post_start[0]} 2>&1) && echo "$out"',
-        "is not a regular file",
-    )
-    assert_full_match(f"stat -c '%a' {target}", "600\n")
-    succeed(f"rm {cookie} {target}", f"mv {cookie}.orig {cookie}")
+    # Group members cannot replace it
+    machine.fail(f"runuser -u operator -- mv {cookie} {cookie}.moved")
+    # No cookie is left in the group-writable data directory
+    succeed("! test -e /var/lib/bitcoind/.cookie", "! test -e /var/lib/bitcoind/regtest/.cookie")
 
     # RPC access for user 'public' should be restricted
     machine.fail(

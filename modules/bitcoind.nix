@@ -288,6 +288,11 @@ let
   cfg = config.services.bitcoind;
   nbLib = config.nix-bitcoin.lib;
   secretsDir = config.nix-bitcoin.secretsDir;
+  # The RPC cookie lives outside the data directory. The data directory is
+  # group-writable, so a group member could swap the cookie for a symlink
+  # while bitcoind sets its mode by path. This directory is a RuntimeDirectory
+  # with mode 0750: only the bitcoin user writes it, group members read it.
+  rpcCookieDir = "/run/bitcoind";
 
   i2pSAM = config.services.i2pd.proto.sam;
 
@@ -330,6 +335,9 @@ let
     rpcconnect=${cfg.rpc.address}
     ${optionalString (cfg.rpc.threads != null) "rpcthreads=${toString cfg.rpc.threads}"}
     rpcwhitelistdefault=0
+    rpccookiefile=${rpcCookieDir}/.cookie
+    # Mode 0640: group members (the operator) can read the cookie
+    rpccookieperms=group
     ${concatMapStrings (user: ''
         ${optionalString (!user.passwordHMACFromFile) "rpcauth=${user.name}:${user.passwordHMAC}"}
         ${optionalString (user.rpcwhitelist != [])
@@ -430,29 +438,13 @@ in {
         fi
       '';
 
-      # Enable RPC access for group.
-      # Set the full mode instead of only adding group read, so the cookie is
-      # never readable by others, whatever mode bitcoind created it with
-      # (see bitcoind option `rpccookieperms`).
-      # The data dir is writable by the group, so refuse a cookie that was
-      # replaced by a symlink: chmod would follow it and change the mode of
-      # another bitcoind file (like a wallet).
-      postStart = ''
-        cookie='${cfg.dataDir}/${optionalString cfg.regtest "regtest/"}.cookie'
-        if [[ -L $cookie || ! -f $cookie ]]; then
-          echo "Error: RPC cookie '$cookie' is not a regular file" >&2
-          exit 1
-        fi
-        chmod 0640 "$cookie"
-      '' + (optionalString cfg.regtest) ''
-        chmod g=x '${cfg.dataDir}/regtest'
-      '';
-
       serviceConfig = nbLib.defaultHardening // {
         Type = "notify";
         NotifyAccess = "all";
         User = cfg.user;
         Group = cfg.group;
+        RuntimeDirectory = baseNameOf rpcCookieDir;
+        RuntimeDirectoryMode = "0750";
         TimeoutStartSec = "30min";
         TimeoutStopSec = "30min";
         ExecStart = "${cfg.package}/bin/bitcoind -datadir='${cfg.dataDir}'";
