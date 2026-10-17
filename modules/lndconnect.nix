@@ -158,24 +158,20 @@ let
       #   sed replacement below works correctly.
       ''
         macaroonHex=$(${getExe pkgs.xxd} -p -u -c 99999 '${authSecretPath}')
-        url=$(
-          echo "$url" | ${getExe pkgs.gnused} "
-            s|^lndconnect|c-lightning-rest|
-            s|macaroon=.*|macaroon=$macaroonHex|
-          ";
-        )
+        # Bash substitution, not sed: a sed program is an argv element and is
+        # readable by every local user through /proc/<pid>/cmdline while it runs.
+        url=''${url/#lndconnect/c-lightning-rest}
+        url=''${url/macaroon=*/macaroon=$macaroonHex}
       ''
     }
 
     ${optionalString isClnrest
       # Change URL procotcol to clnrest
       ''
-        url=$(
-          echo "$url" | ${getExe pkgs.gnused} "
-            s|^lndconnect|clnrest|
-            s|macaroon=.*|rune=$(cat '${authSecretPath}')|
-          ";
-        )
+        rune=$(cat '${authSecretPath}')
+        # Bash substitution, not sed; see the clightning-rest branch above.
+        url=''${url/#lndconnect/clnrest}
+        url=''${url/macaroon=*/rune=$rune}
       ''
      }
 
