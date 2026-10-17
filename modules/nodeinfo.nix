@@ -149,6 +149,7 @@ in {
       clightning-rest = mkInfo "";
       electrs = mkInfo "";
       fulcrum = mkInfo "";
+      rbitcoin = mkInfo "";
       btcpayserver = mkInfo "";
       rtl = mkInfo "";
       mempool = mkInfo "";

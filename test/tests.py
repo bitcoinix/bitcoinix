@@ -140,6 +140,27 @@ def _():
     assert_running("fulcrum")
     machine.wait_until_succeeds(log_has_string("fulcrum", "started ok"))
 
+@test("rbitcoin")
+def _():
+    assert_running("rbitcoin")
+    # The operator reaches the node through the unix socket
+    machine.wait_until_succeeds("runuser -u operator -- rbitcoin-cli getblockcount")
+
+    if not test_data["rbitcoin"]["rpc"]:
+        return
+    cookie = "/run/rbitcoin/rpc.cookie"
+    assert_full_match(f"stat -c '%a %U %G' {cookie}", "640 rbitcoin rbitcoinrpc\n")
+    # Only group `rbitcoinrpc` can read the cookie
+    machine.fail(f"runuser -u operator -- cat {cookie}")
+    # The cookie authenticates Bitcoin Core style HTTP Basic RPC, other credentials don't
+    rpc = (
+        """curl -s -o /dev/null -w '%{http_code}' --data-binary """
+        """'{"jsonrpc":"1.0","id":0,"method":"getblockcount","params":[]}' """
+        f"http://{ip('rbitcoin')}:18453/"
+    )
+    assert_full_match(f"{rpc} --user \"$(cat {cookie})\"", "200")
+    assert_full_match(f"{rpc} --user __cookie__:wrong", "401")
+
 # Impure: Stops electrs
 # Stop electrs from spamming the test log with 'waiting for 0 blocks to download' messages
 @test("stop-electrs")
@@ -498,6 +519,17 @@ def _():
         machine.wait_until_succeeds(log_has_string("fulcrum", "listening for connections"))
         assert_full_match(get_block_height(ip('fulcrum'), 50002), f"{num_blocks}\n")
 
+    if enabled("rbitcoin"):
+        # rbitcoin syncs bitcoind's chain (its only peer) and agrees on the tip
+        machine.wait_until_succeeds(
+            f"[[ $(runuser -u operator -- rbitcoin-cli getblockcount) == {num_blocks} ]]"
+        )
+        best = succeed("runuser -u operator -- rbitcoin-cli getbestblockhash").strip().strip('"')
+        assert best == succeed("bitcoin-cli getbestblockhash").strip(), best
+        if test_data["rbitcoin"]["electrum"]:
+            wait_for_open_port(ip("rbitcoin"), 50003)
+            assert_full_match(get_block_height(ip('rbitcoin'), 50003), f"{num_blocks}\n")
+
     if enabled("clightning"):
         machine.wait_until_succeeds(
             f"[[ $(runuser -u operator -- lightning-cli getinfo | jq -M .blockheight) == {num_blocks} ]]"
@@ -528,6 +560,37 @@ def _():
         assert_full_match(
             f"curl -fsS http://{ip('nginx')}:60845/api/v1/blocks/tip/height", str(num_blocks)
         )
+
+# Impure: mines a block. Runs after `regtest`, which checks the block count.
+@test("rbitcoin-mempool")
+def _():
+    api = f"http://{ip('nginx')}:60845/api/v1"
+    num_blocks = test_data["num_blocks"]
+
+    # Address data comes from rbitcoin's Electrum server, not its RPC.
+    # Query by scripthash: mempool decodes addresses as mainnet, so a regtest
+    # address would fail before reaching Electrum.
+    script = succeed(
+        "bitcoin-cli getblock $(bitcoin-cli getblockhash 1) 2"
+        " | jq -r '.tx[0].vout[0].scriptPubKey.hex'"
+    ).strip()
+    scripthash = succeed(
+        f"printf \"$(echo {script} | sed 's/../\\\\x&/g')\" | sha256sum | cut -d' ' -f1"
+    ).strip()
+    machine.wait_until_succeeds(
+        f"[[ $(curl -fsS {api}/scripthash/{scripthash} | jq .chain_stats.tx_count) -ge 1 ]]"
+    )
+
+    # rbitcoin writes a new RPC cookie on every start. mempool must pick it up
+    # (it re-reads COOKIE_PATH after an HTTP 401) and keep following the chain.
+    succeed("systemctl restart rbitcoin")
+    succeed(
+        "bitcoin-cli -rpcwallet=test generatetoaddress 1"
+        " $(bitcoin-cli -rpcwallet=test getnewaddress)"
+    )
+    machine.wait_until_succeeds(
+        f"[[ $(curl -fsS {api}/blocks/tip/height) == {num_blocks + 1} ]]"
+    )
 
 @test("trustedcoin")
 def _():

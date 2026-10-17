@@ -148,6 +148,12 @@
   #   Enable with:
   #     services.mempool.electrumServer = "fulcrum";
   #
+  # - rbitcoin (experimental):
+  #   Use rbitcoin instead of bitcoind as mempool's node and Electrum server.
+  #   See section RBITCOIN below.
+  #   Enable with:
+  #     services.mempool.electrumServer = "rbitcoin";
+  #
   # Set this to create an onion service to make the mempool web interface
   # available via Tor:
   # nix-bitcoin.onionServices.mempool-frontend.enable = true;
@@ -166,6 +172,15 @@
   # see the description of option `enable` in ../modules/fulcrum.nix
   #
   # services.fulcrum.enable = true;
+
+  ### RBITCOIN
+  # Set this to enable rbitcoin, an experimental Bitcoin full node in Rust
+  # with a built-in Electrum server. It keeps its own data directory and
+  # can run next to bitcoind or replace it as mempool's node.
+  # Read docs/services.md#rbitcoin before enabling it.
+  #
+  # services.rbitcoin.enable = true;
+  # services.rbitcoin.electrum.enable = true;
 
   ### BTCPayServer
   # Set this to enable BTCPayServer, a self-hosted, open-source

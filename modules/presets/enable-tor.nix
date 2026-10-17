@@ -27,6 +27,7 @@ in {
     # btcpayserver = defaultEnableTorProxy;
     lightning-pool = defaultEnableTorProxy;
     mempool = defaultEnableTorProxy;
+    rbitcoin = defaultEnableTorProxy;
 
     # These services don't make outgoing connections but we restrict them to
     # Tor just to be safe.

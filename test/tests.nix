@@ -91,7 +91,7 @@ let
 
       tests.mempool = cfg.mempool.enable;
       services.mempool = {
-        electrumServer = "fulcrum";
+        electrumServer = mkDefault "fulcrum";
         settings.MEMPOOL.POOLS_JSON_URL = mkIf config.test.noConnections "disable-pool-fetching";
       };
 
@@ -143,6 +143,27 @@ let
       tests.charge-lnd = cfg.charge-lnd.enable;
 
       tests.electrs = cfg.electrs.enable;
+
+      tests.rbitcoin = cfg.rbitcoin.enable;
+      services.rbitcoin = {
+        network = mkIf cfg.bitcoind.regtest "regtest";
+        # Ports that don't collide with bitcoind, electrs and fulcrum
+        port = 18454;
+        rpc.port = 18453;
+        electrum.port = 50003;
+        # Sync from bitcoind only, so the test needs no internet access
+        connect = [
+          (config.nix-bitcoin.lib.addressWithPort cfg.bitcoind.address cfg.bitcoind.port)
+        ];
+      };
+      services.bitcoind.listen = mkIf cfg.rbitcoin.enable true;
+      test.data.rbitcoin = {
+        rpc = cfg.rbitcoin.rpc.enable;
+        electrum = cfg.rbitcoin.electrum.enable;
+      };
+      tests.rbitcoin-mempool = cfg.mempool.enable && cfg.mempool.electrumServer == "rbitcoin";
+      nix-bitcoin.netns-isolation.services.rbitcoin.connections =
+        mkIf cfg.rbitcoin.enable [ "bitcoind" ];
 
       services.fulcrum.port = 50002;
       tests.fulcrum = cfg.fulcrum.enable;
@@ -273,7 +294,16 @@ let
       services.charge-lnd.enable = true;
       services.electrs.enable = true;
       services.fulcrum.enable = true;
+      services.rbitcoin.enable = true;
+      services.rbitcoin.electrum.enable = true;
       services.btcpayserver.enable = true;
+    };
+
+    # rbitcoin as mempool's node and Electrum server
+    rbitcoinMempool = {
+      imports = [ scenarios.regtestBase ];
+      services.mempool.enable = true;
+      services.mempool.electrumServer = "rbitcoin";
     };
 
     # netns and regtest, without secure-node.nix

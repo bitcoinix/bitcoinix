@@ -10,6 +10,7 @@
 
     # Main features
     ./bitcoind.nix
+    ./rbitcoin.nix
     ./clightning.nix
     ./clightning-plugins
     ./clightning-rest.nix

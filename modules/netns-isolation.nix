@@ -280,13 +280,16 @@ in {
         id = 31;
         connections = [ "bitcoind" ];
       };
+      rbitcoin = {
+        id = 33;
+      };
       mempool = {
         id = 32;
-        connections = [
-          "bitcoind"
-          "nginx"
-          (if (config.services.mempool.electrumServer == "electrs") then "electrs" else "fulcrum")
-        ];
+        connections = [ "nginx" ] ++ (
+          if config.services.mempool.electrumServer == "rbitcoin"
+          then [ "rbitcoin" ]
+          else [ "bitcoind" config.services.mempool.electrumServer ]
+        );
       };
     };
 
@@ -322,6 +325,12 @@ in {
     services.rtl.address = netns.rtl.address;
 
     services.clightning-rest.address = netns.clightning-rest.address;
+
+    services.rbitcoin = {
+      address = netns.rbitcoin.address;
+      rpc.address = netns.rbitcoin.address;
+      electrum.address = netns.rbitcoin.address;
+    };
 
     services.mempool.address = netns.mempool.address;
     services.mempool.frontend.address = netns.nginx.address;
