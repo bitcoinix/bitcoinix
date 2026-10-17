@@ -10,7 +10,8 @@ let
         description = ''
           Enable Mempool, a fully featured Bitcoin visualizer, explorer, and API service.
 
-          Note: Mempool enables `txindex` in bitcoind (this is a requirement).
+          Note: With `electrumServer` set to `electrs` or `fulcrum`, Mempool
+          enables `txindex` in bitcoind (this is a requirement).
 
           This module has two components:
           - A backend service (systemd service `mempool`)
@@ -94,7 +95,7 @@ let
         description = "Mempool backend port.";
       };
       electrumServer = mkOption {
-        type = types.enum [ "electrs" "fulcrum" ];
+        type = types.enum [ "electrs" "fulcrum" "rbitcoin" ];
         default = "electrs";
         description = ''
           The Electrum server to use for fetching address information.
@@ -104,6 +105,11 @@ let
             Small database size, slow when querying new addresses.
           - fulcrum:
             Large database size, quickly serves arbitrary address queries.
+          - rbitcoin:
+            Use rbitcoin as the node (instead of bitcoind) and as the Electrum
+            server. Mempool reads rbitcoin's RPC cookie instead of a password.
+            Addresses with more than `services.rbitcoin.maxShCreates`
+            outputs cannot be shown.
         '';
       };
       settings = mkOption {
@@ -170,7 +176,10 @@ let
   inherit (config.services)
     bitcoind
     electrs
-    fulcrum;
+    fulcrum
+    rbitcoin;
+
+  useRbitcoin = cfg.electrumServer == "rbitcoin";
 
   torSocket = config.services.tor.client.socksListenAddress;
 
@@ -238,11 +247,16 @@ in {
   inherit options;
 
   config = mkIf cfg.enable {
-    services.bitcoind.txindex = true;
+    services.bitcoind.txindex = mkIf (!useRbitcoin) true;
     # Called by mempool's block indexer when bitcoind has `coinstatsindex` enabled
-    services.bitcoind.rpc.users.public.rpcwhitelist = [ "gettxoutsetinfo" ];
+    services.bitcoind.rpc.users.public.rpcwhitelist = mkIf (!useRbitcoin) [ "gettxoutsetinfo" ];
     services.electrs.enable = mkIf (cfg.electrumServer == "electrs" ) true;
     services.fulcrum.enable = mkIf (cfg.electrumServer == "fulcrum" ) true;
+    services.rbitcoin = mkIf useRbitcoin {
+      enable = true;
+      rpc.enable = true;
+      electrum.enable = true;
+    };
     services.mysql = {
       enable = true;
       package = pkgs.mariadb;
@@ -270,7 +284,15 @@ in {
         STDOUT_LOG_MIN_PRIORITY = mkDefault "info";
         AUTOMATIC_POOLS_UPDATE = true;
       };
-      CORE_RPC = {
+      # rbitcoin regenerates its cookie on every start. Mempool re-reads the
+      # cookie after an HTTP 401 only when it reads it from `COOKIE_PATH`,
+      # so pass the path, not the contents.
+      CORE_RPC = if useRbitcoin then {
+        HOST = nbLib.address rbitcoin.rpc.address;
+        PORT = rbitcoin.rpc.port;
+        COOKIE = true;
+        COOKIE_PATH = rbitcoin.rpc.cookieFile;
+      } else {
         HOST = bitcoind.rpc.address;
         PORT = bitcoind.rpc.port;
         USERNAME = bitcoind.rpc.users.public.name;
@@ -278,9 +300,10 @@ in {
         PASSWORD = null;
       };
       ELECTRUM = let
-        server = config.services.${cfg.electrumServer};
+        server = if useRbitcoin then rbitcoin.electrum else config.services.${cfg.electrumServer};
       in {
-        HOST = server.address;
+        # A listener bound to 0.0.0.0 or :: is reached via loopback
+        HOST = nbLib.address server.address;
         PORT = server.port;
         TLS_ENABLED = false;
       };
@@ -307,16 +330,21 @@ in {
       after = requires ++ wants;
       preStart = ''
         mkdir -p '${cacheDir}/cache'
-        # jq reads the password from the file itself. A sed program would carry
-        # the password in its argv, readable by every local user through
-        # /proc/<pid>/cmdline while it runs. jq also escapes it as JSON.
-        # Only the default (null) is filled in; an explicit
-        # `settings.CORE_RPC.PASSWORD` stays as configured.
-        conf=$(${pkgs.jq}/bin/jq --rawfile pw '${secretsDir}/bitcoin-rpcpassword-public' \
-          '.CORE_RPC.PASSWORD |= (if . == null then ($pw | sub("\n+$"; "")) else . end)' ${configFile})
-        # config.json holds the public RPC password. Replace it in one step with mode 600,
-        # also when an earlier version left a file with laxer permissions.
-        install -T -m 600 <(echo "$conf") '${cacheDir}/config.json'
+        ${if useRbitcoin then ''
+          # Cookie auth: the config holds no secret. Same mode as below.
+          install -T -m 600 ${configFile} '${cacheDir}/config.json'
+        '' else ''
+          # jq reads the password from the file itself. A sed program would carry
+          # the password in its argv, readable by every local user through
+          # /proc/<pid>/cmdline while it runs. jq also escapes it as JSON.
+          # Only the default (null) is filled in; an explicit
+          # `settings.CORE_RPC.PASSWORD` stays as configured.
+          conf=$(${pkgs.jq}/bin/jq --rawfile pw '${secretsDir}/bitcoin-rpcpassword-public' \
+            '.CORE_RPC.PASSWORD |= (if . == null then ($pw | sub("\n+$"; "")) else . end)' ${configFile})
+          # config.json holds the public RPC password. Replace it in one step with mode 600,
+          # also when an earlier version left a file with laxer permissions.
+          install -T -m 600 <(echo "$conf") '${cacheDir}/config.json'
+        ''}
       '';
       environment.MEMPOOL_CONFIG_FILE = "${cacheDir}/config.json";
       serviceConfig = nbLib.defaultHardening // {
@@ -354,7 +382,7 @@ in {
     users.users.${cfg.user} = {
       isSystemUser = true;
       group = cfg.group;
-      extraGroups = [ "bitcoinrpc-public" ];
+      extraGroups = [ (if useRbitcoin then "rbitcoinrpc" else "bitcoinrpc-public") ];
     };
     users.groups.${cfg.group} = {};
   };

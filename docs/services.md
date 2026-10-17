@@ -534,3 +534,50 @@ To work around this and connect via clearnet instead, set this option:
 ```nix
 services.clightning.plugins.trustedcoin.tor.proxy = false;
 ```
+
+# rbitcoin
+
+[rbitcoin](https://github.com/reardencode/rbitcoin) is an **experimental**
+Bitcoin full node written in Rust, with built-in Electrum and Esplora servers.
+It is a separate implementation of the consensus rules, not a build of Bitcoin
+Core. Run it as an extra node, or as mempool's node in place of bitcoind:
+
+```nix
+services.mempool.enable = true;
+services.mempool.electrumServer = "rbitcoin";
+```
+
+Things to know before enabling it:
+
+- **Ports.** rbitcoin's defaults are Bitcoin Core's (P2P 8333, RPC 8332,
+  Electrum 50001). If bitcoind, electrs or fulcrum also run on the host
+  without netns isolation (e.g. with `secure-node.nix`, which enables
+  bitcoind), set `services.rbitcoin.port`, `rpc.port` and `electrum.port`
+  to free ports; evaluation fails on a collision.
+- **Own data directory.** rbitcoin keeps its own archive format
+  (`services.rbitcoin.dataDir`, default `/var/lib/rbitcoin`) and cannot reuse
+  bitcoind's blocks. A mainnet sync downloads and stores the whole chain again.
+- **Address index.** `services.rbitcoin.electrum.enable` turns on the
+  scripthash index. It is built after the node reaches the tip, which takes
+  several hours on mainnet, and the Electrum port only opens once it is ready.
+- **RPC.** With `services.rbitcoin.rpc.enable`, rbitcoin serves a Bitcoin Core
+  compatible JSON-RPC subset over TCP. Clients authenticate with the cookie at
+  `/run/rbitcoin/rpc.cookie`, readable by group `rbitcoinrpc`. The cookie
+  changes on every start, so clients should read it from that path (mempool
+  does). The operator's `rbitcoin-cli` uses the unix socket in `dataDir`.
+  rbitcoin logs `cookie … mode 640 is group or world accessible` on every
+  start; mode 0640 is what lets group `rbitcoinrpc` read it, so this warning
+  is expected.
+- **Tor.** With `services.rbitcoin.tor.proxy` (enabled by `secure-node.nix`),
+  all P2P connections, including DNS seed lookups, go through Tor.
+- **Large addresses.** `services.rbitcoin.maxShCreates` (default 10000)
+  refuses unpaged history and balance queries for scripts with more outputs,
+  so mempool cannot show such addresses. Each of these queries loads every
+  output: on a mainnet node with 4 GiB RAM, scripts with 100k outputs took up
+  to about a minute and 2 GiB, and some scripts have millions. Raise the cap
+  only with RAM to spare.
+- **Network isolation.** With `nix-bitcoin.netns-isolation.enable`, rbitcoin
+  runs in its own network namespace. Services that should reach it list
+  `rbitcoin` in their `connections` (mempool does this automatically). If
+  `services.rbitcoin.connect` points at a local bitcoind, also set
+  `nix-bitcoin.netns-isolation.services.rbitcoin.connections = [ "bitcoind" ];`.
