@@ -119,6 +119,28 @@ def test_fulcrum():
     machine.wait_until_succeeds(current_run_log_has_string("fulcrum", "started ok"))
 
 
+@test("rbitcoin")
+def test_rbitcoin():
+    assert_running("rbitcoin")
+    # The operator reaches the node through the unix socket
+    machine.wait_until_succeeds("runuser -u operator -- rbitcoin-cli getblockcount")
+
+    if not test_data["rbitcoin"]["rpc"]:
+        return
+    cookie = "/run/rbitcoin/rpc.cookie"
+    assert_full_match(f"stat -c '%a %U %G' {cookie}", "640 rbitcoin rbitcoinrpc\n")
+    # Only group `rbitcoinrpc` can read the cookie
+    machine.fail(f"runuser -u operator -- cat {cookie}")
+    # The cookie authenticates Bitcoin Core style HTTP Basic RPC, other credentials don't
+    rpc = (
+        """curl -s -o /dev/null -w '%{http_code}' --data-binary """
+        """'{"jsonrpc":"1.0","id":0,"method":"getblockcount","params":[]}' """
+        f"http://{ip('rbitcoin')}:18453/"
+    )
+    assert_full_match(f"{rpc} --user \"$(cat {cookie})\"", "200")
+    assert_full_match(f"{rpc} --user __cookie__:wrong", "401")
+
+
 @test("clightning")
 def test_clightning():
     assert_running("clightning")
