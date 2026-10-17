@@ -372,6 +372,7 @@ def _():
     # (with netns, it runs in its own namespace and is checked by `netns-isolation`)
     if "netns-isolation" not in enabled_tests:
         assert_full_match("ss -ltnH 'sport = :8999' | awk '{print $4}'", "127.0.0.1:8999\n")
+        assert_full_match("ss -ltnH 'sport = :3306' | awk '{print $4}'", "127.0.0.1:3306\n")
 
 @test("nodeinfo")
 def _():

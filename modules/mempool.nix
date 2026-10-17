@@ -246,6 +246,8 @@ in {
       enable = true;
       package = pkgs.mariadb;
       ensureDatabases = [ cfg.database.name ];
+      # mempool connects over the unix socket
+      settings.mysqld.bind-address = mkDefault "127.0.0.1";
       ensureUsers = [
         {
           name = cfg.user;
