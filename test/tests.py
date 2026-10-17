@@ -547,6 +547,90 @@ def _():
         expect_clightning_log(rf"plugin-trustedcoin\b.*?\breturning block {num_blocks}")
 
 
+# Impure: stops lnd and bitcoind, and leaves the units that require bitcoind
+# (clightning, electrs, ...) stopped. Keep it the last test.
+@test("lnd-restart-dependents")
+def _():
+    # lightning-loop and lightning-pool `require` lnd and are `wantedBy` it.
+    # Starting or restarting lnd brings them back, an explicit stop of lnd or
+    # bitcoind stays a stop, and `Restart = "always"` never undoes it.
+    dependents = test_data["lnd-restart-dependents"]
+    # An RPC call that only succeeds when the daemon is up and connected to lnd
+    rpc = {
+        "lightning-loop": "runuser -u operator -- loop getparams",
+        "lightning-pool": "runuser -u operator -- pool orders list",
+    }
+    # Longer than `RestartSec = "10s"`, so an automatic restart would show
+    restart_window = 25
+
+    def invocation_id(unit):
+        return succeed(f"systemctl show -P InvocationID {unit}").strip()
+
+    def wait_for_rpc(unit):
+        machine.wait_for_unit(unit)
+        machine.wait_until_succeeds(rpc[unit])
+
+    def start_lnd():
+        succeed("systemctl start lnd")
+        machine.wait_for_unit("lnd")
+        machine.wait_until_succeeds("runuser -u operator -- lncli getinfo")
+        # `wait_for_unit` alone can return while the old process is still
+        # winding down, so wait for a working RPC.
+        for unit in dependents:
+            wait_for_rpc(unit)
+
+    def inactive_since(unit):
+        return succeed(f"systemctl show -P InactiveEnterTimestampMonotonic {unit}").strip()
+
+    def assert_stays_stopped(units, reason):
+        stopped = {unit: inactive_since(unit) for unit in units}
+        machine.sleep(restart_window)
+        for unit in units:
+            # `is-active` also fails for `activating`, so check the state.
+            # A start followed by another exit moves the timestamp.
+            state = succeed(f"systemctl show -P ActiveState {unit}").strip()
+            assert state == "inactive" and inactive_since(unit) == stopped[unit], \
+                f"{unit} was started again after {reason}"
+
+    # charge-lnd's timer requires lnd and would start it, and bitcoind with it
+    if "charge-lnd" in enabled_tests:
+        succeed("systemctl stop charge-lnd.timer")
+    for unit in dependents:
+        wait_for_rpc(unit)
+
+    # Deploy path: lnd is stopped and started, not restarted
+    succeed("systemctl stop lnd")
+    start_lnd()
+    settled = {unit: invocation_id(unit) for unit in dependents}
+    machine.sleep(15)
+    for unit in dependents:
+        wait_for_rpc(unit)
+        assert invocation_id(unit) == settled[unit], f"{unit} restarted again after lnd came back"
+
+    succeed("systemctl restart lnd")
+    machine.wait_until_succeeds("runuser -u operator -- lncli getinfo")
+    for unit in dependents:
+        wait_for_rpc(unit)
+        assert invocation_id(unit) != settled[unit], f"{unit} was not restarted with lnd"
+
+    # lnd exits on its own: no stop job, so `Restart = "always"` brings them back
+    succeed("systemctl kill --signal=KILL lnd")
+    machine.wait_until_succeeds("runuser -u operator -- lncli getinfo")
+    for unit in dependents:
+        wait_for_rpc(unit)
+
+    succeed("systemctl stop lnd")
+    assert_stays_stopped(["lnd", *dependents], "an explicit stop of lnd")
+    start_lnd()
+
+    # The stop-before-copy workflow from docs/configuration.md
+    succeed("systemctl stop bitcoind")
+    assert_stays_stopped(["bitcoind", "lnd", *dependents], "an explicit stop of bitcoind")
+    succeed("systemctl start bitcoind")
+    start_lnd()
+    if "charge-lnd" in enabled_tests:
+        succeed("systemctl start charge-lnd.timer")
+
 if "netns-isolation" in enabled_tests:
     def ip(name):
         return test_data["netns"][name]["address"]

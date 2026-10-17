@@ -324,6 +324,12 @@ let
       services.lightning-pool.extraConfig = ''
         auctionserver=127.0.0.1
       '';
+
+      # loop and pool must come back after an lnd restart
+      tests.lnd-restart-dependents = config.test.data.lnd-restart-dependents != [];
+      test.data.lnd-restart-dependents =
+        optional config.services.lightning-loop.enable "lightning-loop"
+        ++ optional config.services.lightning-pool.enable "lightning-pool";
     };
 
     # Test the special bitcoin RPC setup that lnd uses when bitcoin is pruned

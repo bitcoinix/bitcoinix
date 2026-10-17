@@ -124,13 +124,26 @@ in {
     services.lightning-loop.certificate.extraIPs = mkIf (cfg.rpcAddress != "127.0.0.1") [ "${cfg.rpcAddress}" ];
 
     systemd.services.lightning-loop = {
-      wantedBy = [ "multi-user.target" ];
+      wantedBy = [ "multi-user.target" "lnd.service" ];
+      # Tie loopd to lnd, so a deliberate stop stays a stop:
+      # - `requires`: stopping or restarting lnd stops or restarts loopd
+      #   too. A `systemctl stop lnd` (or `systemctl stop bitcoind`, which
+      #   stops lnd) keeps loopd down, and loopd never pulls lnd back up.
+      #   With `wants`, each automatic restart started lnd again, and
+      #   bitcoind with it through lnd's `requires`.
+      # - `wantedBy` lnd: a NixOS deploy that changes lnd stops it and starts
+      #   the new unit. `requires` only propagates the stop, so the start of
+      #   lnd must start loopd again.
+      # `after` orders it behind lnd.
       requires = [ "lnd.service" ];
       after = [ "lnd.service" "nix-bitcoin-secrets.target" ];
       serviceConfig = nbLib.defaultHardening // {
         ExecStart = "${cfg.package}/bin/loopd --configfile=${configFile}";
         User = lnd.user;
-        Restart = "on-failure";
+        # `always`: when lnd exits on its own (a crash, or its chain backend
+        # health check) there is no stop job for loopd, so it must come back.
+        # loopd exits with status 1 then.
+        Restart = "always";
         RestartSec = "10s";
         ReadWritePaths = [ cfg.dataDir ];
       } // nbLib.allowedIPAddresses cfg.tor.enforce;

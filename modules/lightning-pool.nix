@@ -91,7 +91,17 @@ in {
     ];
 
     systemd.services.lightning-pool = {
-      wantedBy = [ "multi-user.target" ];
+      wantedBy = [ "multi-user.target" "lnd.service" ];
+      # Tie poold to lnd, so a deliberate stop stays a stop:
+      # - `requires`: stopping or restarting lnd stops or restarts poold
+      #   too. A `systemctl stop lnd` (or `systemctl stop bitcoind`, which
+      #   stops lnd) keeps poold down, and poold never pulls lnd back up.
+      #   With `wants`, each automatic restart started lnd again, and
+      #   bitcoind with it through lnd's `requires`.
+      # - `wantedBy` lnd: a NixOS deploy that changes lnd stops it and starts
+      #   the new unit. `requires` only propagates the stop, so the start of
+      #   lnd must start poold again.
+      # `after` orders it behind lnd.
       requires = [ "lnd.service" ];
       after = [ "lnd.service" ];
       preStart = ''
@@ -103,7 +113,10 @@ in {
         ExecStartPre = "${pkgs.coreutils}/bin/sleep 5";
         ExecStart = "${cfg.package}/bin/poold --basedir='${cfg.dataDir}' --network=${network}";
         User = "lnd";
-        Restart = "on-failure";
+        # `always`: when lnd exits on its own (a crash, or its chain backend
+        # health check) there is no stop job for poold, so it must come back.
+        # poold exits with status 0 then, which `on-failure` would not restart.
+        Restart = "always";
         RestartSec = "10s";
         ReadWritePaths = [ cfg.dataDir ];
       } // (nbLib.allowedIPAddresses cfg.tor.enforce)
