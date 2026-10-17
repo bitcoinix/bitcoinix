@@ -225,7 +225,13 @@ in {
 
     systemd.services.lnd = {
       wantedBy = [ "multi-user.target" ];
-      requires = [ "bitcoind.service" ];
+      # `wants`, not `requires`: lnd is built to tolerate its chain backend
+      # going away and reconnects on its own. A hard `requires` meant every
+      # bitcoind restart (e.g. any deploy that touches bitcoind config) STOPPED
+      # lnd, and `nixos-rebuild switch` did not restart it — leaving lnd (and
+      # Lightning) down until a manual start. `after` still orders lnd behind
+      # bitcoind at boot; `wants` pulls bitcoind in without the cascade-stop.
+      wants = [ "bitcoind.service" ];
       after = [ "bitcoind.service" "nix-bitcoin-secrets.target" ];
       preStart = ''
         install -m600 ${configFile} '${cfg.dataDir}/lnd.conf'

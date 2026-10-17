@@ -156,7 +156,14 @@ in {
     systemd.services.clightning = {
       path  = [ bitcoind.package ];
       wantedBy = [ "multi-user.target" ];
-      requires = [ "bitcoind.service" ];
+      # `wants`, not `requires`: with `requires`, every bitcoind stop/start
+      # (e.g. a deploy that touches bitcoin.conf) stopped lightningd, and
+      # `nixos-rebuild switch` did not bring it back. A running lightningd
+      # retries bitcoind through its bcli plugin until it is back. During
+      # startup (`getchaininfo`) a bitcoind outage is fatal, and
+      # `Restart = "on-failure"` below handles that. `after` still orders it
+      # behind bitcoind at boot. Same change as lnd and electrs.
+      wants = [ "bitcoind.service" ];
       after = [ "bitcoind.service" "nix-bitcoin-secrets.target" ];
       preStart = ''
         # Remove an existing socket so that `postStart` can detect when when a new
