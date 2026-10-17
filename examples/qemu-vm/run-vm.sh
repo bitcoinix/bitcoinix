@@ -27,7 +27,10 @@ runVM() {
     sshPort=$4
 
     export NIX_DISK_IMAGE="$tmpDir/img"
-    export QEMU_NET_OPTS="hostfwd=tcp::${sshPort}-:22"
+    # Bind the SSH forward to loopback only. The demo VM authorizes the
+    # committed key `id-vm` for root, so a wildcard bind would let every host
+    # on the network log in as root while the VM runs.
+    export QEMU_NET_OPTS="hostfwd=tcp:127.0.0.1:${sshPort}-:22"
     # shellcheck disable=SC2211
     </dev/null "$vm"/bin/run-*-vm -m "$vmMemoryMiB" -smp "$vmNumCPUs" &>/dev/null &
     qemuPID=$!
