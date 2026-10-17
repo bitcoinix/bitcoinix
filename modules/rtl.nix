@@ -234,12 +234,20 @@ in {
           (nbLib.rootScript "rtl-copy-macaroon" ''
             ${installAsRtl}
             ${runuser} -u ${lnd.user} -- head -c 65536 '${lnd.networkDir}/admin.macaroon' > "$tmpFile"
+            if [[ ! -s $tmpFile ]]; then
+              echo "Error: '${lnd.networkDir}/admin.macaroon' is empty" >&2
+              exit 1
+            fi
             installAsRtl '${cfg.dataDir}/macaroons/admin.macaroon'
           '')
         ++ optional cfg.nodes.clightning.enable
           (nbLib.rootScript "rtl-create-clnrest-rune-file" ''
             ${installAsRtl}
             rune=$(${runuser} -u ${clightning.user} -- head -c 65536 '${clightning.networkDir}/admin-rune')
+            if [[ ! $rune ]]; then
+              echo "Error: '${clightning.networkDir}/admin-rune' is empty" >&2
+              exit 1
+            fi
             printf 'LIGHTNING_RUNE="%s"\n' "$rune" > "$tmpFile"
             installAsRtl '${runePath}'
           '');

@@ -394,6 +394,18 @@ def _():
         machine.fail(f"grep -q canary {dest}")
         assert_canary_untouched()
 
+        # Source is empty.
+        # The script must fail with a clear error and keep the current destination.
+        succeed(
+            f"{as_owner} mv -T {src} {src}.orig",
+            f"{as_owner} cp /dev/null {src}",
+        )
+        status, output = machine.execute(f"{script} 2>&1")
+        succeed(f"{as_owner} mv -T {src}.orig {src}")
+        if status == 0 or f"Error: '{src}' is empty" not in output:
+            raise Exception(f"Unexpected result when reading empty {src}: {status}, '{output}'")
+        assert_dest_ok(dest, expected_content_cmd)
+
         succeed(script)
         assert_dest_ok(dest, expected_content_cmd)
 
