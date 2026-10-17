@@ -114,6 +114,9 @@ in {
       wants = [ "bitcoind.service" ];
       after = [ "bitcoind.service" "nix-bitcoin-secrets.target" ];
       preStart = ''
+        # fulcrum.conf holds the public RPC password, so create it with mode 600
+        # instead of relying on the data directory mode alone.
+        install -m 600 /dev/null '${cfg.dataDir}/fulcrum.conf'
         {
           cat ${configFile}
           echo "rpcpassword = $(cat ${secretsDir}/bitcoin-rpcpassword-public)"

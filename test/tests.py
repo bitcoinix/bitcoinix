@@ -128,6 +128,8 @@ def _():
 @test("electrs")
 def _():
     assert_running("electrs")
+    # electrs.toml holds the public RPC password
+    assert machine.succeed("stat -c %a /var/lib/electrs/electrs.toml").strip() == "600"
     wait_for_open_port(ip("electrs"), 4224)  # prometeus metrics provider
     # Check RPC connection to bitcoind
     if not "regtest" in enabled_tests:
@@ -138,6 +140,8 @@ def _():
 @test("fulcrum")
 def _():
     assert_running("fulcrum")
+    # fulcrum.conf holds the public RPC password
+    assert machine.succeed("stat -c %a /var/lib/fulcrum/fulcrum.conf").strip() == "600"
     machine.wait_until_succeeds(log_has_string("fulcrum", "started ok"))
 
 # Impure: Stops electrs
