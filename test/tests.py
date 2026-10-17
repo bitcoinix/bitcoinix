@@ -340,6 +340,114 @@ def _():
         log_has_string("rtl", "Server is up and running")
     )
 
+@test("rtl-credentials")
+def _():
+    # The lnd macaroon and the clightning rune are copied to RTL by root scripts.
+    # The source dirs are writable by lnd/clightning and the destination dir is
+    # writable by rtl.
+    # Test that the scripts don't follow symlinks placed there by these users.
+    assert_running("rtl")
+    data = test_data["rtl-credentials"]
+    data_dir = data["dataDir"]
+    as_rtl = f"runuser -u {data['user']} --"
+    exec_start_pre = succeed("systemctl show rtl -p ExecStartPre --value")
+
+    def get_script(name):
+        match = re.search(rf"/nix/store/[^ ;]+-{name}", exec_start_pre)
+        if not match:
+            raise Exception(f"Script {name} not found in ExecStartPre: '{exec_start_pre}'")
+        return match.group(0)
+
+    canary = "/run/rtl-test-canary"
+    canary_dir = "/run/rtl-test-canary-dir"
+    succeed(f"install -m 600 <(echo canary) {canary}", f"mkdir -m 700 {canary_dir}")
+
+    def assert_canary_untouched():
+        assert_full_match(f"cat {canary}", "canary\n")
+        assert_full_match(f"stat -c '%U %a' {canary}", "root 600\n")
+        assert_full_match(f"stat -c '%U %a' {canary_dir}", "root 700\n")
+        assert_full_match(f"ls -A {canary_dir}", "")
+
+    def assert_dest_ok(dest, expected_content_cmd):
+        assert_full_match(f"stat -c '%F %U %G %a' {dest}",
+                          f"regular file {data['user']} {data['group']} 640\n")
+        succeed(f"cmp {dest} <({expected_content_cmd})")
+
+    def check(script, owner, src, dest, expected_content_cmd):
+        as_owner = f"runuser -u {owner} --"
+
+        # Destination is a symlink to a root-only file
+        succeed(f"{as_rtl} ln -sfn {canary} {dest}", script)
+        assert_canary_untouched()
+        assert_dest_ok(dest, expected_content_cmd)
+
+        # Source is a symlink to a root-only file.
+        # It must not be read and copied to the destination.
+        succeed(
+            f"{as_owner} mv -T {src} {src}.orig",
+            f"{as_owner} ln -s {canary} {src}",
+        )
+        status, output = machine.execute(f"{script} 2>&1")
+        succeed(f"{as_owner} mv -T {src}.orig {src}")
+        if status == 0 or "Permission denied" not in output:
+            raise Exception(f"Unexpected result when reading {src}: {status}, '{output}'")
+        machine.fail(f"grep -q canary {dest}")
+        assert_canary_untouched()
+
+        # Source is empty.
+        # The script must fail with a clear error and keep the current destination.
+        succeed(
+            f"{as_owner} mv -T {src} {src}.orig",
+            f"{as_owner} cp /dev/null {src}",
+        )
+        status, output = machine.execute(f"{script} 2>&1")
+        succeed(f"{as_owner} mv -T {src}.orig {src}")
+        if status == 0 or f"Error: '{src}' is empty" not in output:
+            raise Exception(f"Unexpected result when reading empty {src}: {status}, '{output}'")
+        assert_dest_ok(dest, expected_content_cmd)
+
+        succeed(script)
+        assert_dest_ok(dest, expected_content_cmd)
+
+    if lnd := data["lnd"]:
+        script = get_script("rtl-copy-macaroon")
+        admin_macaroon = f"{lnd['networkDir']}/admin.macaroon"
+        macaroons_dir = f"{data_dir}/macaroons"
+        dest = f"{macaroons_dir}/admin.macaroon"
+
+        # Destination dir is a symlink to a root-only dir.
+        # Neither the script nor systemd-tmpfiles may write to the dir or change its owner.
+        succeed(
+            f"{as_rtl} mv -T {macaroons_dir} {macaroons_dir}.orig",
+            f"{as_rtl} ln -s {canary_dir} {macaroons_dir}",
+        )
+        machine.execute(script)
+        machine.execute(f"systemd-tmpfiles --create --prefix={macaroons_dir}")
+        succeed(f"{as_rtl} rm {macaroons_dir}", f"{as_rtl} mv -T {macaroons_dir}.orig {macaroons_dir}")
+        assert_canary_untouched()
+
+        # Earlier versions created the destination dir as root.
+        # systemd-tmpfiles changes the owner, so that the rtl user can update the macaroon.
+        succeed(
+            f"chown root:root {macaroons_dir}",
+            f"chmod 755 {macaroons_dir}",
+            f"systemd-tmpfiles --create --prefix={macaroons_dir}",
+        )
+        assert_full_match(f"stat -c '%U %G %a' {macaroons_dir}",
+                          f"{data['user']} {data['group']} 770\n")
+        succeed(f"{as_rtl} cp /dev/null {dest}", script)
+        assert_dest_ok(dest, f"cat {admin_macaroon}")
+
+        check(script, lnd["user"], admin_macaroon, dest, f"cat {admin_macaroon}")
+
+    if cln := data["clightning"]:
+        script = get_script("rtl-create-clnrest-rune-file")
+        admin_rune = f"{cln['networkDir']}/admin-rune"
+        check(script, cln["user"], admin_rune, f"{data_dir}/clightning-admin-rune",
+              f"printf 'LIGHTNING_RUNE=\"%s\"\\n' \"$(cat {admin_rune})\"")
+
+    succeed(f"rm -r {canary} {canary_dir}")
+
 @test("clightning-rest")
 def _():
     assert_running("clightning-rest")
