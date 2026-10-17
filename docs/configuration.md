@@ -103,6 +103,11 @@ networking.firewall.allowedTCPPorts = [ config.services.bitcoind.port ];
 
 ## Allow bitcoind RPC connections from LAN
 
+Binding `0.0.0.0` with a wide `rpc.allowip` and an unscoped firewall rule
+exposes RPC to every network the host is on. The public RPC whitelist limits
+which methods a caller may use, not who can connect. Scope `rpc.allowip` and
+the firewall rule to your LAN.
+
 ```nix
 services.bitcoind = {
   # Listen to RPC connections on all interfaces
@@ -112,15 +117,15 @@ services.bitcoind = {
   rpc.allowip = [
     "10.10.0.0/24" # Allow a subnet
     "10.50.0.3" # Allow a specific address
-    "0.0.0.0/0" # Allow all addresses
   ];
 
   # Set this if you're using the `secure-node.nix` template
   tor.enforce = false;
 };
 
-# Open the RPC port in the firewall
-networking.firewall.allowedTCPPorts = [ config.services.bitcoind.rpc.port ];
+# Open the RPC port in the firewall on the LAN interface only.
+# Replace `<lan-interface>` with the name of your LAN interface, for example `eth0`.
+networking.firewall.interfaces.<lan-interface>.allowedTCPPorts = [ config.services.bitcoind.rpc.port ];
 ```
 
 ## Allow connections to electrs
@@ -206,12 +211,15 @@ services.bitcoind = {
 
   rpc.users = let
     # The fully privileged bitcoind RPC username of the other node
-    name = "myrpcuser";
+    privilegedName = "myrpcuser";
+    # A restricted RPC user on the other node. Set its `rpcwhitelist` to the
+    # methods listed in `modules/bitcoind-rpc-public-whitelist.nix`.
+    publicName = "mypublicrpcuser";
   in {
-    privileged.name = name;
-    public.name = name;
-    ## Set this if you use btcpayserver
-    # btcpayserver.name = name;
+    privileged.name = privilegedName;
+    public.name = publicName;
+    ## Set this if you use btcpayserver. nbxplorer only needs the public methods.
+    # btcpayserver.name = publicName;
   };
 };
 ```
@@ -221,16 +229,26 @@ For each service that connects to bitcoind and has option
 `secure-node.nix` or `enable-tor.nix`), you need to
 allow the remote bitcoind connection:
 ```nix
-systemd.services.<service>.serviceConfig.IPAddressAllow = [ ${services.bitcoind.rpc.address} ];
+systemd.services.<service>.serviceConfig.IPAddressAllow = [ config.services.bitcoind.rpc.address ];
 ```
 
 > The above configuration is only required if the remote bitcoind **is
 > not** accessed via Tor.
 
 
-Now save the password of the RPC user to the following files on your bitcoinix node:
+Services that only need the public RPC methods connect as `public`. Do not
+use the privileged user for `public.name`: that gives every such service full
+RPC access to the other node.
+
+When you add an `rpcwhitelist` for the public user on the other node, also set
+`rpcwhitelistdefault=0` there. Otherwise Bitcoin Core gives every user without
+a whitelist, including the privileged user, an empty whitelist.
+
+Now save the RPC passwords to the following files on your bitcoinix node:
 ```shell
+# Password of the privileged user (`privilegedName`)
 $secretsDir/bitcoin-rpcpassword-privileged
+# Password of the restricted user (`publicName`)
 $secretsDir/bitcoin-rpcpassword-public
 
 ## Only needed when set in the above config snippet
