@@ -147,7 +147,8 @@ let
   nodes = if cfg.nodes.reverseOrder then reverseList nodes' else nodes';
 
   rtlConfig = {
-    multiPass = "@multiPass@";
+    # Set at service start from the secret file, see `rtl-setup-config`
+    multiPass = null;
     host = cfg.address;
     port = cfg.port;
     SSO.rtlSSO = 0;
@@ -197,8 +198,12 @@ in {
       environment.DB_DIRECTORY_PATH = cfg.dataDir;
       serviceConfig = nbLib.defaultHardening // {
         ExecStartPre = [
+          # jq reads the password from the file itself. A sed program would carry
+          # the password in its argv, readable by every local user through
+          # /proc/<pid>/cmdline while it runs. jq also escapes it as JSON.
           (nbLib.script "rtl-setup-config" ''
-            <${configFile} sed "s|@multiPass@|$(cat ${secretsDir}/rtl-password)|" \
+            ${pkgs.jq}/bin/jq --rawfile pw '${secretsDir}/rtl-password' \
+              '.multiPass = ($pw | sub("\n+$"; ""))' ${configFile} \
               > '${cfg.dataDir}/RTL-Config.json'
           '')
         ]
