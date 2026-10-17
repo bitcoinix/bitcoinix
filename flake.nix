@@ -94,6 +94,8 @@
           "netns-exec"
           "pinned"
           "nbPython3Packages"
+          # Unfree, so `nix flake check` can't evaluate it
+          "utxoracle"
         ]) // {
           inherit (import ./examples/qemu-vm/minimal-vm.nix self pkgs system)
             # A simple demo VM.

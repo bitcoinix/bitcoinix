@@ -21,6 +21,7 @@ let self = {
     mempool-rust-gbt
     mempool-nginx-conf;
   trustedcoin = pkgs.callPackage ./trustedcoin { };
+  utxoracle = pkgs.callPackage ./utxoracle { };
 
   inherit (self.pyPkgs.nbPython3PackagesWithUnlockedEcdsa) hwi;
 
