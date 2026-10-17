@@ -1,4 +1,5 @@
 from collections import OrderedDict
+import hmac
 import json
 import os
 import re
@@ -86,6 +87,74 @@ def _():
         )
         # The 'operator' with group 'proc' has full access
         assert_full_match("runuser -u operator -- systemctl status bitcoind 2>&1 >/dev/null", "")
+
+@test("secrets-no-argv")
+def _():
+    # Passwords must not be passed as command-line arguments during secret
+    # generation. Any local user can read those via /proc/<pid>/cmdline.
+    gen_dir = "/tmp/secrets-no-argv"
+    # A hand-placed password file with a CRLF line ending. Clients send the
+    # password via `$(cat file)`, which keeps the CR, so the HMAC must too.
+    crlf_password = "CrLfPassword12345\r"
+    succeed(
+        f"rm -rf {gen_dir} && mkdir -m 700 {gen_dir} && cd {gen_dir} && "
+        "printf 'CrLfPassword12345\\r\\n' > bitcoin-rpcpassword-public && "
+        f"strace -f -qq -e trace=execve -s 4096 -o {gen_dir}.trace "
+        f"{test_data['secrets-no-argv']['generator']}"
+    )
+    trace = succeed(f"cat {gen_dir}.trace")
+    assert_str_matches(trace, "rpcauth")
+    files = succeed(f"cd {gen_dir} && ls -1").split()
+    for file in files:
+        if "password" not in file:
+            continue
+        password = succeed(f"cat {gen_dir}/{file}").rstrip("\n")
+        # Skip trivial test passwords (like the 'rtl-password' override)
+        if len(password) >= 16 and password in trace:
+            raise Exception(f"Secret '{file}' was passed as a command-line argument")
+
+    def assert_hmac_matches(user):
+        password = succeed(f"cat {gen_dir}/bitcoin-rpcpassword-{user}").rstrip("\n")
+        hmac_line = succeed(f"cat {gen_dir}/bitcoin-HMAC-{user}")
+        assert_str_matches(hmac_line, r"\A[0-9a-f]{32}\$[0-9a-f]{64}\n\Z")
+        salt, digest = hmac_line.rstrip("\n").split("$")
+        expected = hmac.new(salt.encode(), password.encode(), "SHA256").hexdigest()
+        if digest != expected:
+            raise Exception(f"bitcoin-HMAC-{user} doesn't match bitcoin-rpcpassword-{user}")
+        return password
+
+    # The HMACs written by secret generation match their passwords
+    rpc_users = [f.removeprefix("bitcoin-rpcpassword-") for f in files
+                 if f.startswith("bitcoin-rpcpassword-")]
+    assert rpc_users
+    for user in rpc_users:
+        password = assert_hmac_matches(user)
+        if user == "public":
+            assert password == crlf_password, repr(password)
+
+    generate = f"cd {gen_dir} && {test_data['secrets-no-argv']['generator']}"
+    password_file = f"{gen_dir}/bitcoin-rpcpassword-public"
+    hmac_file = f"{gen_dir}/bitcoin-HMAC-public"
+
+    # A failed HMAC generation leaves no HMAC file behind. Make it fail with a
+    # password "file" that can't be read.
+    succeed(f"rm {password_file} {hmac_file}", f"mkdir {password_file}")
+    status, out = machine.execute(f"{generate} 2>&1")
+    assert status != 0 and "IsADirectoryError" in out, out
+    succeed(f"[[ ! -e {hmac_file} && ! -e {hmac_file}.tmp ]]")
+
+    # An empty HMAC file is regenerated, even when it is newer than the password
+    succeed(f"rmdir {password_file}",
+            f"echo validPassword123456 > {password_file}",
+            f"touch -d '+1 hour' {hmac_file}",
+            generate)
+    assert assert_hmac_matches("public") == "validPassword123456"
+
+    # An empty password file is regenerated, and so is its HMAC
+    succeed(f"truncate -s 0 {password_file}", generate)
+    assert_str_matches(succeed(f"cat {password_file}"), r"\A[a-zA-Z0-9]{20}\n\Z")
+    assert_hmac_matches("public")
+    succeed(f"rm -rf {gen_dir} {gen_dir}.trace")
 
 @test("bitcoind")
 def _():

@@ -77,8 +77,22 @@ let
           url = "https://raw.githubusercontent.com/bitcoin/bitcoin/d6cde007db9d3e6ee93bd98a9bbfdce9bfa9b15b/share/rpcauth/rpcauth.py";
           sha256 = "189mpplam6yzizssrgiyv70c9899ggh8cac76j4n7v0xqzfip07n";
         };
+        # Usage: rpcauth <password-file>
+        # Prints `<salt>$<hmac>`, the part after `rpcauth=<user>:` in bitcoin.conf.
+        # rpcauth.py only accepts the password as an argv element, which any local
+        # user can read via /proc/<pid>/cmdline. So reuse its salt and HMAC
+        # functions and read the password from the file instead.
+        # Clients read the password with `$(cat file)`, so match that: keep CR
+        # bytes (`newline=""`) and strip trailing newlines only.
         rpcauth = pkgs.writers.writeBash "rpcauth" ''
-          exec ${pkgs.python3}/bin/python ${rpcauthSrc} "$@"
+          exec ${pkgs.python3}/bin/python -c '
+          import runpy, sys
+          rpcauth = runpy.run_path(sys.argv[1])
+          with open(sys.argv[2], newline="") as f:
+              password = f.read().rstrip("\n")
+          salt = rpcauth["generate_salt"](16)
+          print(salt + "$" + rpcauth["password_to_hmac"](salt, password))
+          ' ${rpcauthSrc} "$1"
         '';
       # Writes secrets to PWD
       in pkgs.writers.writeBash "generate-secrets" ''
@@ -86,17 +100,30 @@ let
 
         export PATH=${lib.makeBinPath (with pkgs; [ coreutils gnugrep ])}
 
+        # Writes the output of a command to a temp file first, so that a failed
+        # run leaves no empty or partial secret file behind.
+        writeSecret() {
+          local out=$1
+          shift
+          if ! "$@" > "$out.tmp"; then
+            rm -f "$out.tmp"
+            exit 1
+          fi
+          mv "$out.tmp" "$out"
+        }
         makePasswordSecret() {
-          # Passwords have alphabet {a-z, A-Z, 0-9} and ~119 bits of entropy
-          [[ -e $1 ]] || ${pkgs.pwgen}/bin/pwgen -s 20 1 > "$1"
+          # Passwords have alphabet {a-z, A-Z, 0-9} and ~119 bits of entropy.
+          # Also regenerate an empty file, left by a failed run of an earlier version.
+          [[ -s $1 ]] || writeSecret "$1" ${pkgs.pwgen}/bin/pwgen -s 20 1
         }
         makeBitcoinRPCPassword() {
           user=$1
           file=bitcoin-rpcpassword-$user
           HMACfile=bitcoin-HMAC-$user
           makePasswordSecret "$file"
-          if [[ $file -nt $HMACfile ]]; then
-            ${rpcauth} $user $(cat "$file") | grep rpcauth | cut -d ':' -f 2 > "$HMACfile"
+          # Also regenerate an empty HMAC file, left by a failed run of an earlier version
+          if [[ $file -nt $HMACfile || ! -s $HMACfile ]]; then
+            writeSecret "$HMACfile" ${rpcauth} "$file"
           fi
         }
         makeCert() {
