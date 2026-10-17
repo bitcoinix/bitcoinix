@@ -186,6 +186,11 @@
   # Afterwards you need to go into Store > General Settings > Lightning Nodes
   # and select "the internal lightning node of this BTCPay Server".
   #
+  # Set this to let nbxplorer scan the UTXO set, for BTCPayServer's wallet
+  # UTXO scan. Each scan takes minutes of CPU on bitcoind, so it is off by
+  # default.
+  # services.bitcoind.rpc.users.btcpayserver.rpcwhitelist = [ "scantxoutset" ];
+  #
   # Set this to create an onion service to make the btcpayserver web interface
   # accessible via Tor.
   # Security WARNING: Create a btcpayserver administrator account before allowing

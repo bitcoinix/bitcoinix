@@ -145,6 +145,9 @@ in {
       # Increase rpc thread count due to reports that lightning implementations fail
       # under high bitcoind rpc load
       rpc.threads = 16;
+      # bcli falls back to fetching a block from peers when `getblock` fails,
+      # e.g. on a pruned node
+      rpc.users.public.rpcwhitelist = mkIf cfg.useBcliPlugin [ "getblockfrompeer" ];
     };
 
     environment.systemPackages = [ cfg.package (hiPrio cfg.cli) ];

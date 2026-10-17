@@ -240,6 +240,8 @@ in {
 
   config = mkIf cfg.enable {
     services.bitcoind.txindex = true;
+    # Called by mempool's block indexer when bitcoind has `coinstatsindex` enabled
+    services.bitcoind.rpc.users.public.rpcwhitelist = [ "gettxoutsetinfo" ];
     services.electrs.enable = mkIf (cfg.electrumServer == "electrs" ) true;
     services.fulcrum.enable = mkIf (cfg.electrumServer == "fulcrum" ) true;
     services.mysql = {

@@ -32,6 +32,13 @@ let
       ]);
 
       tests.bitcoind = cfg.bitcoind.enable;
+      tests.rpc-whitelist = cfg.bitcoind.enable;
+      # Which consumers are enabled decides which extra methods they may grant
+      test.data.rpc-whitelist = {
+        btcpayserver = cfg.btcpayserver.enable;
+        clightning-bcli = cfg.clightning.enable && cfg.clightning.useBcliPlugin;
+        mempool = cfg.mempool.enable;
+      };
       services.bitcoind = {
         enable = true;
         extraConfig = mkMerge [
