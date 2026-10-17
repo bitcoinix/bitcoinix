@@ -270,7 +270,8 @@ in {
         HOST = bitcoind.rpc.address;
         PORT = bitcoind.rpc.port;
         USERNAME = bitcoind.rpc.users.public.name;
-        PASSWORD = "@btcRpcPassword@";
+        # Set at service start from the secret file, see `preStart`
+        PASSWORD = null;
       };
       ELECTRUM = let
         server = config.services.${cfg.electrumServer};
@@ -302,8 +303,13 @@ in {
       after = requires ++ wants;
       preStart = ''
         mkdir -p '${cacheDir}/cache'
-        <${configFile} sed \
-          -e "s|@btcRpcPassword@|$(cat ${secretsDir}/bitcoin-rpcpassword-public)|" \
+        # jq reads the password from the file itself. A sed program would carry
+        # the password in its argv, readable by every local user through
+        # /proc/<pid>/cmdline while it runs. jq also escapes it as JSON.
+        # Only the default (null) is filled in; an explicit
+        # `settings.CORE_RPC.PASSWORD` stays as configured.
+        ${pkgs.jq}/bin/jq --rawfile pw '${secretsDir}/bitcoin-rpcpassword-public' \
+          '.CORE_RPC.PASSWORD |= (if . == null then ($pw | sub("\n+$"; "")) else . end)' ${configFile} \
           > '${cacheDir}/config.json'
       '';
       environment.MEMPOOL_CONFIG_FILE = "${cacheDir}/config.json";
