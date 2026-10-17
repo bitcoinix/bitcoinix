@@ -121,10 +121,11 @@ let
     '';
   });
 
-  commonVmConfig = {
+  commonVmConfig = { config, ... }: {
     virtualisation = {
-      # Needed because duplicity requires 270 MB of free temp space, regardless of backup size
-      diskSize = 1024;
+      # Needed because duplicity requires 270 MB of free temp space, regardless of backup size.
+      # rbitcoin's store takes ~900 MB for the 100 regtest blocks of the tests.
+      diskSize = if config.services.rbitcoin.enable then 4096 else 1024;
 
       # The `netns` scenarios need more than 2 GiB: netns-isolation adds a
       # network namespace per service, which costs a few hundred MiB of slab.
