@@ -122,5 +122,47 @@ makeTestVM {
               f"curl -fsS --max-time 3 --insecure --header 'macaroon: {api.macaroon_hex}' "
               f"--header 'encodingtype: hex' -X GET https://{api.host}:{api.port}/v1/getinfo"
           )
+
+      with subtest("wg peer unit uses validated pubkey"):
+          unit = "wireguard-wg-nb-peer-peer0.service"
+          key_file = "/etc/nix-bitcoin-secrets/wg-peer-public-key"
+          pubkey = server.succeed(f"cat {key_file}").strip()
+
+          # The unit scripts must not re-execute their own source with the key spliced in
+          scripts = server.succeed(
+              f"systemctl cat {unit} | sed -nE 's/^Exec(Start|StopPost)=([^ ]+).*/\\2/p'"
+          ).split()
+          assert len(scripts) == 2, scripts
+          for script in scripts:
+              server.fail(f"grep -E 'BASH_SOURCE|inPatchedSrc|peer0' {script}")
+
+          # Stop removes the peer, start adds it with the right allowed IPs
+          server.succeed(f"systemctl stop {unit}")
+          server.fail(f"wg show wg-nb peers | grep -qxF '{pubkey}'")
+          server.succeed(f"cp -p {key_file} /tmp/wg-peer-public-key.orig")
+
+          bad_keys = [
+              "$(touch /tmp/wg-pwned)",
+              f"{pubkey}\ntouch /tmp/wg-pwned",
+              f"{pubkey}|touch /tmp/wg-pwned",
+              pubkey[:-1],
+          ]
+          for bad_key in bad_keys:
+              b64 = base64.b64encode(bad_key.encode('utf-8')).decode()
+              server.succeed(f"echo -n {b64} | base64 -d > {key_file}")
+              status, _ = server.execute(f"systemctl start {unit}")
+              server.fail("test -e /tmp/wg-pwned")
+              assert status != 0, f"{unit} started with malformed key {bad_key!r}"
+              # The key check must reject the input, not `wg` itself
+              journal = f"journalctl -o cat _SYSTEMD_INVOCATION_ID=$(systemctl show -P InvocationID {unit})"
+              server.wait_until_succeeds(
+                  f"{journal} | grep -qF 'does not contain a valid WireGuard public key'", timeout=10
+              )
+              server.fail(f"{journal} | grep -qF 'Key is not the correct length or format'")
+              server.succeed(f"systemctl reset-failed {unit}")
+
+          server.succeed(f"cp -p /tmp/wg-peer-public-key.orig {key_file}")
+          server.succeed(f"systemctl start {unit}")
+          server.succeed(f"wg show wg-nb allowed-ips | grep -qxF '{pubkey}\t10.10.0.2/32'")
   '';
 }

@@ -116,10 +116,11 @@ in {
       allowedIPsAsRoutes = false;
       peers = [
         {
-          # To use the actual public key from the secrets file, use dummy pubkey
-          # `peer0` and replace it via `getPubkeyFromFile` (see further below)
-          # at peer service runtime.
-          publicKey = "peer0";
+          # The pubkey is only known at runtime (secrets file). nixpkgs splices
+          # `publicKey` into the peer unit scripts inside double quotes, so pass
+          # a shell variable that is set and validated by `readPeerPubkey` below.
+          name = "peer0";
+          publicKey = "$publicKey";
           allowedIPs = [ "${peerAddress}/32" ];
         }
       ];
@@ -131,20 +132,22 @@ in {
         after = wants;
       };
 
-      # HACK: Modify start/stop scripts of the peer setup service to read
-      # the pubkey from a secrets file.
       wireguard-wg-nb-peer-peer0 = let
-        getPubkeyFromFile = mkBefore ''
-          if [[ ! -v inPatchedSrc ]]; then
-            export inPatchedSrc=1
-            publicKey=$(cat "${secretsDir}/wg-peer-public-key")
-            <"''${BASH_SOURCE[0]}" sed "s|\bpeer0\b|$publicKey|g" | ${pkgs.bash}/bin/bash -s
-            exit
+        pubkeyFile = "${secretsDir}/wg-peer-public-key";
+        # Accept only a canonical `wg pubkey` output: 32 bytes as base64.
+        # The last char before `=` encodes 2 bits of padding, which must be zero.
+        readPeerPubkey = mkBefore ''
+          publicKey=$(<"${pubkeyFile}")
+          if [[ ! $publicKey =~ ^[A-Za-z0-9+/]{42}[AEIMQUYcgkosw048]=$ ]]; then
+            echo "${pubkeyFile} does not contain a valid WireGuard public key" >&2
+            exit 1
           fi
         '';
       in {
-        script = getPubkeyFromFile;
-        postStop = getPubkeyFromFile;
+        # nixpkgs appends ` (<publicKey>)`, which would be a literal `$publicKey` here
+        description = mkForce "WireGuard Peer - wg-nb - peer0";
+        script = readPeerPubkey;
+        postStop = readPeerPubkey;
       };
     };
 
