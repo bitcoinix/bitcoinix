@@ -129,6 +129,7 @@ let
   };
 
   cfg = config.nix-bitcoin;
+  nbLib = config.nix-bitcoin.lib;
 in {
   inherit options;
 
@@ -169,15 +170,33 @@ in {
     systemd.services.setup-secrets = mkIf cfg.setupSecrets {
       requiredBy = [ "nix-bitcoin-secrets.target" ];
       before = [ "nix-bitcoin-secrets.target" ];
-      serviceConfig = {
+      serviceConfig = nbLib.defaultHardening // {
          Type = "oneshot";
          RemainAfterExit = true;
+         # This unit only chowns, chmods and generates files in `secretsDir`.
+         # It must map real uids to chown secrets to service users.
+         PrivateUsers = false;
+         CapabilityBoundingSet = [ "CAP_CHOWN" "CAP_FOWNER" "CAP_DAC_OVERRIDE" ];
+         PrivateNetwork = true;
+         RestrictAddressFamilies = "AF_UNIX";
+         # `-`: a missing dir is reported by the script instead of failing
+         # the namespace setup.
+         ReadWritePaths = [ "-${cfg.secretsDir}" ];
+         # ProtectSystem=strict alone leaves host files writable here, so a
+         # secret symlinked to them would get its target re-permissioned:
+         # /run, when combined with ProtectKernelTunables, ProtectControlGroups,
+         # ProtectProc or ProcSubset (systemd 260), and /dev/{shm,mqueue,hugepages,pts},
+         # which PrivateDevices bind-mounts from the host.
+         ReadOnlyPaths = [ "/run" "/dev" ];
+         # `ProtectHome = true` would make a `secretsDir` below /home unreachable,
+         # because ReadWritePaths can't be nested in inaccessible paths.
+         ProtectHome = "read-only";
+      } // optionalAttrs cfg.generateSecrets {
+         # Runs outside the sandbox so that the dir exists when the
+         # sandbox for the main script is set up.
+         ExecStartPre = mkBefore [ "+${pkgs.coreutils}/bin/mkdir -p -m 0700 \"${cfg.secretsDir}\"" ];
       };
       script = ''
-        # Use the same sort order for globbing and sorting as in Nix attrsets.
-        # Required for `comm` below.
-        export LC_COLLATE=C
-
         ${optionalString cfg.generateSecrets ''
           mkdir -p "${cfg.secretsDir}"
           cd "${cfg.secretsDir}"
@@ -195,8 +214,8 @@ in {
              echo "Error: Secret file '$file' is missing"
              exit 1
            fi
-           chown "$user:$group" "$file"
-           chmod "$permissions" "$file"
+           chown -- "$user:$group" "$file"
+           chmod -- "$permissions" "$file"
            processedFiles+=("$file")
         }
 
@@ -206,6 +225,11 @@ in {
           exit 1
         fi
         chown root: "$dir"
+        # No one else may add or swap entries while they are processed below.
+        # This fails closed: if a step below fails (e.g. a declared secret is
+        # missing), the dir stays 0700, so every service loses access to its
+        # secrets, not only the service whose secret failed.
+        chmod 0700 "$dir"
         cd "$dir"
 
         processedFiles=()
@@ -215,17 +239,26 @@ in {
           '') cfg.secrets)
         }
 
-        # Make all other files accessible to root only
-        unprocessedFiles=$(
-          comm -23 <(shopt -s nullglob; printf '%s\n' *) <(printf '%s\n' "''${processedFiles[@]}")
-        )
-        if [[ $unprocessedFiles ]]; then
-          IFS=$'\n'
-          # shellcheck disable=SC2086
-          chown root: $unprocessedFiles
-          # shellcheck disable=SC2086
-          chmod 0440 $unprocessedFiles
-        fi
+        isProcessed() {
+          local f
+          for f in "''${processedFiles[@]}"; do
+            [[ $f == "$1" ]] && return 0
+          done
+          return 1
+        }
+
+        # Make all other files accessible to root only, including dotfiles.
+        while IFS= read -r -d "" file; do
+          file=''${file#./}
+          isProcessed "$file" && continue
+          if [[ -L $file ]]; then
+            # chmod would follow the link and change its target
+            chown -h root: -- "$file"
+          else
+            chown root: -- "$file"
+            chmod 0440 -- "$file"
+          fi
+        done < <(find . -mindepth 1 -maxdepth 1 -print0)
 
         # Now make the secrets dir accessible to other users
         chmod 0751 "$dir"
