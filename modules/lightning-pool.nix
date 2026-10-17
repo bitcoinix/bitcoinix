@@ -92,7 +92,12 @@ in {
 
     systemd.services.lightning-pool = {
       wantedBy = [ "multi-user.target" ];
-      requires = [ "lnd.service" ];
+      # `wants`, not `requires`: with `requires`, every lnd stop/start (e.g. a
+      # deploy that touches lnd.conf) stopped poold for good. While lnd is
+      # down, poold exits and comes back through `Restart = "always"`
+      # below; the `lnd-restart-dependents` test checks that it is back up. `after`
+      # still orders it behind lnd at boot.
+      wants = [ "lnd.service" ];
       after = [ "lnd.service" ];
       preStart = ''
         mkdir -p '${cfg.dataDir}/${network}'
@@ -103,7 +108,10 @@ in {
         ExecStartPre = "${pkgs.coreutils}/bin/sleep 5";
         ExecStart = "${cfg.package}/bin/poold --basedir='${cfg.dataDir}' --network=${network}";
         User = "lnd";
-        Restart = "on-failure";
+        # `always`: the daemon must come back whenever it exits on its own.
+        # When lnd goes away, poold shuts down cleanly with status 0, which
+        # `on-failure` does not restart, so it stayed down until a manual start.
+        Restart = "always";
         RestartSec = "10s";
         ReadWritePaths = [ cfg.dataDir ];
       } // (nbLib.allowedIPAddresses cfg.tor.enforce)

@@ -469,6 +469,44 @@ def _():
         expect_clightning_log(rf"plugin-trustedcoin\b.*?\breturning block {num_blocks}")
 
 
+# Impure: restarts lnd. Runs after `lightning-loop`, `lightning-pool` and
+# `regtest`, so it does not disturb them.
+@test("lnd-restart-dependents")
+def _():
+    # lightning-loop and lightning-pool `want` lnd instead of `require` it.
+    # With `requires`, `systemctl stop lnd` stops them, and starting lnd
+    # again does not start them. Both exit when lnd goes away and come back
+    # through `Restart = "always"`.
+    dependents = test_data["lnd-restart-dependents"]
+    # An RPC call that only succeeds when the daemon is up and connected to lnd
+    rpc = {
+        "lightning-loop": "runuser -u operator -- loop getparams",
+        "lightning-pool": "runuser -u operator -- pool orders list",
+    }
+
+    def invocation_id(unit):
+        return succeed(f"systemctl show -P InvocationID {unit}").strip()
+
+    def wait_for_rpc(unit):
+        machine.wait_for_unit(unit)
+        machine.wait_until_succeeds(rpc[unit])
+
+    for unit in dependents:
+        wait_for_rpc(unit)
+    succeed("systemctl stop lnd")
+    succeed("systemctl start lnd")
+    machine.wait_for_unit("lnd")
+    machine.wait_until_succeeds("runuser -u operator -- lncli getinfo")
+    # `wait_for_unit` alone can return while the old process is still winding
+    # down, so wait for a working RPC before taking the settled InvocationID.
+    for unit in dependents:
+        wait_for_rpc(unit)
+    settled = {unit: invocation_id(unit) for unit in dependents}
+    machine.sleep(15)
+    for unit in dependents:
+        wait_for_rpc(unit)
+        assert invocation_id(unit) == settled[unit], f"{unit} restarted again after lnd came back"
+
 if "netns-isolation" in enabled_tests:
     def ip(name):
         return test_data["netns"][name]["address"]
