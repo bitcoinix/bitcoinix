@@ -261,6 +261,7 @@ in {
         # mempool doesn't support regtest
         NETWORK = "mainnet";
         BACKEND = "electrum";
+        HTTP_HOST = cfg.address;
         HTTP_PORT = cfg.port;
         CACHE_DIR = "${cacheDir}/cache";
         STDOUT_LOG_MIN_PRIORITY = mkDefault "info";
