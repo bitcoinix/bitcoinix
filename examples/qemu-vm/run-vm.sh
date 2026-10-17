@@ -3,8 +3,9 @@ qemuDir=$(cd "${BASH_SOURCE[0]%/*}" && pwd)
 # shellcheck disable=SC1091
 source "$qemuDir/wait-until.sh"
 
-tmpDir=/tmp/nix-bitcoin-qemu-vm
-mkdir -p "$tmpDir"
+# A private directory: a fixed path under /tmp lets another local user
+# pre-create it and swap the VM link or disk image before they are used.
+tmpDir=$(mktemp -d /tmp/nix-bitcoin-qemu-vm.XXXXXX)
 
 # Cleanup on exit
 cleanup() {
@@ -43,7 +44,7 @@ vmWaitForSSH() {
 c() {
     ssh -p "$sshPort" -i "$identityFile" -o IdentitiesOnly=yes -o ConnectTimeout=1 \
         -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
-        -o ControlMaster=auto -o ControlPath=$tmpDir/ssh-connection -o ControlPersist=60 \
+        -o ControlMaster=auto -o ControlPath="$tmpDir/ssh-connection" -o ControlPersist=60 \
         root@127.0.0.1 "$@"
 }
 export identityFile
