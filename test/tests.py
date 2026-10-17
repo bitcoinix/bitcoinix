@@ -382,6 +382,97 @@ def _():
 def _():
     assert_running("onion-addresses")
 
+@test("onion-addresses")
+def _():
+    # The onion-addresses service runs as root.
+    # It writes to per-user dirs that are owned by the target users and it reads
+    # Tor hostname files in dirs that are writable by user tor.
+    # Test that it doesn't follow symlinks placed there and that it only copies
+    # valid onion addresses.
+    data = test_data["onion-addresses"]
+    data_dir = data["dataDir"]
+    # On the unfixed service, the first user's dir is created right before
+    # the service waits for this user's first hostname file
+    user = next(user for user in sorted(data["access"]) if data["access"][user])
+    service = data["access"][user][0]
+    dest = f"{data_dir}/{user}/{service}"
+    hostname = f"/var/lib/tor/onion/{service}/hostname"
+    hostname_orig = f"{hostname}.test-orig"
+    unit = "onion-addresses"
+    fake_address = "a" * 56 + ".onion"
+
+    machine.wait_for_unit(unit)
+    address = succeed(f"cat {hostname}")
+
+    def assert_addresses_copied():
+        assert_full_match(f"stat -c '%F %U %a' {dest}", f"regular file {user} 600\n")
+        assert_full_match(f"cat {dest}", re.escape(address))
+        for srv, srv_user in data["serviceUsers"].items():
+            path = f"{data_dir}/services/{srv}"
+            assert_full_match(f"stat -c '%F %U %a' {path}", f"regular file {srv_user} 400\n")
+            assert_full_match(f"cat {path}", re.escape(succeed(f"cat /var/lib/tor/onion/{srv}/hostname")))
+
+    def wait_until_finished():
+        machine.wait_until_succeeds(f"test $(systemctl show -p ActiveState --value {unit}) != activating")
+
+    canary = "/run/onion-addresses-test-canary"
+    canary_dir = "/run/onion-addresses-test-canary-dir"
+    succeed(f"install -m 600 <(echo canary) {canary}", f"mkdir -m 700 {canary_dir}")
+
+    def assert_canary_untouched():
+        assert_full_match(f"cat {canary}", "canary\n")
+        assert_full_match(f"stat -c '%U %a' {canary}", "root 600\n")
+        assert_full_match(f"ls -A {canary_dir}", "")
+
+    def plant_symlink_while_running(target):
+        # Hide the hostname file so that the service waits for it.
+        # Meanwhile, place a symlink at the destination path as the target user.
+        succeed(
+            f"mv -T {hostname} {hostname_orig}",
+            f"systemctl restart --no-block {unit}",
+        )
+        machine.wait_until_succeeds(
+            f"cat /sys/fs/cgroup/system.slice/{unit}.service/cgroup.procs"
+            " | xargs -I{} cat /proc/{}/comm | grep -qx sleep"
+        )
+        succeed(f"runuser -u {user} -- ln -sfn {target} {dest}")
+        succeed(f"mv -T {hostname_orig} {hostname}")
+        wait_until_finished()
+        succeed(f"systemctl is-active {unit}")
+        assert_canary_untouched()
+        assert_addresses_copied()
+
+    # Destination is a symlink to a root-only file
+    plant_symlink_while_running(canary)
+    # Destination is a symlink to a root-only dir
+    plant_symlink_while_running(canary_dir)
+
+    def assert_rejected(*replace_hostname):
+        succeed(f"mv -T {hostname} {hostname_orig}", *replace_hostname)
+        status, _ = machine.execute(f"systemctl restart {unit}")
+        succeed(f"rm -f {hostname}", f"mv -T {hostname_orig} {hostname}")
+        if status == 0:
+            raise Exception("onion-addresses accepted an invalid hostname file")
+        succeed(f"test ! -e {dest}")
+        machine.fail(f"grep -rq 'rpcallowip\\|{fake_address}' {data_dir}")
+        # The other addresses are still copied
+        for other in data["access"][user][1:]:
+            succeed(f"test -f {data_dir}/{user}/{other}")
+
+    # Extra lines would be spliced into config files like bitcoin.conf
+    assert_rejected(
+        f"install -o tor -g tor -m 600 <(cat {hostname_orig}; echo rpcallowip=0.0.0.0/0) {hostname}"
+    )
+    # Hostname file is a symlink to a root-only file.
+    # It must not be read by root.
+    onion_canary = "/run/onion-addresses-test-canary.onion"
+    succeed(f"install -m 600 <(echo {fake_address}) {onion_canary}")
+    assert_rejected(f"ln -s {onion_canary} {hostname}")
+
+    succeed(f"rm -r {canary} {canary_dir} {onion_canary}", f"systemctl restart {unit}")
+    machine.succeed(f"systemctl reset-failed {unit}")
+    assert_addresses_copied()
+
 # Run this test before the following tests that shut down services
 # (and their corresponding network namespaces).
 @test("netns-isolation")
