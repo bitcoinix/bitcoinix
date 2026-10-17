@@ -292,7 +292,8 @@ let
       nix-bitcoin.netns-isolation.enable = true;
       test.data.netns = config.nix-bitcoin.netns-isolation.netns;
       tests.netns-isolation = true;
-      environment.systemPackages = [ pkgs.fping ];
+      # libcap provides `getcap`, used to check the netns-exec wrapper
+      environment.systemPackages = [ pkgs.fping pkgs.libcap ];
 
       # Used for testing that `netns-exec` is not executable by users other than
       # the operator. Like all normal users, this user is a member of group `users`.

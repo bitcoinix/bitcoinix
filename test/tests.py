@@ -414,18 +414,27 @@ def _():
         f"nc -l {ip('bitcoind')} 1080 2>&1 || true", "nc: Cannot assign requested address"
     )
 
-    # netns-exec should fail for unauthorized namespaces
-    assert_matches(
-        "runuser -u operator -- netns-exec nb-clightning ip a 2>&1 || true",
-        "nb-clightning is not an allowed netns",
+    # The netns-exec wrapper should keep its capability and restrictive owner/mode
+    assert_matches("getcap /run/wrappers/bin/netns-exec", "cap_sys_admin")
+    assert_full_match("stat -c '%U %a' /run/wrappers/bin/netns-exec", "operator 500\n")
+
+    # netns-exec should reject relative command paths, so PATH can't redirect the exec target
+    status, out = machine.execute("runuser -u operator -- netns-exec nb-bitcoind ip a 2>&1")
+    assert status != 0 and "absolute path" in out, f"status {status}, output: {out}"
+
+    # netns-exec should fail for unauthorized namespaces.
+    # The allowlist is empty, so every netns is rejected.
+    status, out = machine.execute(
+        "runuser -u operator -- netns-exec nb-bitcoind /run/current-system/sw/bin/ip a 2>&1"
     )
+    assert status != 0 and "nb-bitcoind is not an allowed netns" in out, f"status {status}, output: {out}"
 
     # netns-exec should only be executable by the operator user.
     # User `unauthorized` is a member of group `users`, like all normal users.
     # Netns `nb-clightning` is rejected by netns-exec before it accesses the
     # netns, so the error below can only originate from the exec permissions.
     assert_matches(
-        "runuser -u unauthorized -- netns-exec nb-clightning ip a 2>&1 || true",
+        "runuser -u unauthorized -- netns-exec nb-clightning /run/current-system/sw/bin/ip a 2>&1 || true",
         "Permission denied",
     )
 
