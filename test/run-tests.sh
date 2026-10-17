@@ -302,6 +302,7 @@ basic=(
     default
     netns
     netnsRegtest
+    rbitcoinMempool
 )
 basic() { buildTests basic "$@"; }
 

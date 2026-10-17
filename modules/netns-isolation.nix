@@ -483,13 +483,16 @@ in {
         id = 31;
         connections = [ "bitcoind" ];
       };
+      rbitcoin = {
+        id = 34;
+      };
       mempool = {
         id = 32;
-        connections = [
-          "bitcoind"
-          "nginx"
-          config.services.mempool.electrumServer
-        ];
+        connections = [ "nginx" ] ++ (
+          if config.services.mempool.electrumServer == "rbitcoin"
+          then [ "rbitcoin" ]
+          else [ "bitcoind" config.services.mempool.electrumServer ]
+        );
       };
       unbeholden-lnurl = {
         id = 34;
@@ -530,6 +533,12 @@ in {
     services.btcpayserver.address = netns.btcpayserver.address;
 
     services.rtl.address = netns.rtl.address;
+
+    services.rbitcoin = {
+      address = netns.rbitcoin.address;
+      rpc.address = netns.rbitcoin.address;
+      electrum.address = netns.rbitcoin.address;
+    };
 
     services.mempool.address = netns.mempool.address;
     services.mempool.frontend.address = netns.nginx.address;
