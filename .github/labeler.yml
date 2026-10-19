@@ -1,0 +1,49 @@
+# Path-based area labels for actions/labeler (v5 and later).
+# Keep these rules aligned with the repository's label descriptions:
+# https://github.com/bitcoinix/bitcoinix/labels
+# Areas may overlap; type, status and breaking labels require human judgment.
+
+'area: ci':
+  - changed-files:
+      - any-glob-to-any-file:
+          - '.github/**'
+          - 'test/**'
+          - 'dev/**'
+
+'area: docs':
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'docs/**'
+          - '**/README.md'
+          - 'examples/**'
+          - 'SECURITY.md'
+          - 'book.toml'
+          - 'assets/**'
+
+'area: modules':
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'modules/**'
+          - 'pkgs/lib.nix'
+
+'area: packages':
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'pkgs/**'
+          - 'flake.nix'
+          - 'flake.lock'
+          - 'default.nix'
+          - 'helper/update-flake.*'
+          - 'helper/update-fixed-output-derivation.sh'
+
+'area: release':
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'helper/fetch-release.sh'
+          - 'helper/make-release.sh'
+          - 'helper/release-keys/**'
+          - 'test/fetch-release-test.sh'
+          - 'test/make-release-test.sh'
+          - 'test/release-keys-test.sh'
+          - 'examples/nix-bitcoin-release.nix'
+          - '.github/workflows/release.yml'

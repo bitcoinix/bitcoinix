@@ -9,6 +9,13 @@ Option namespaces and internal names stay `nix-bitcoin.*`; don't rename them to
 `bitcoinix` (breaks existing user configs). `docs/` is largely inherited from nix-bitcoin
 and is built with mdBook (`book.toml`; `docs/SUMMARY.md` lists the pages).
 
+## AI-assisted contributions
+
+Commits made with assistance from LLM-based AI tooling **must** include an
+`Assisted-by:` Git commit trailer naming at least the tool and the primary model
+name and version used for the contribution. A `Co-authored-by:` trailer does not
+satisfy this policy.
+
 ## Commands
 
 All work happens through the flake. Nix is required (flakes enabled).
@@ -92,11 +99,32 @@ and add a `mkRemovedOptionModule` with the reason to `modules/obsolete-options.n
 (the joinmarket entries are the template). Then purge it from `test/tests.nix`,
 `test/tests.py`, `flake.nix`, `examples/`, and `docs/`.
 
-## Breaking config changes
+## Breaking changes
 
-Append an entry to `changes` in `modules/versioning.nix` and bump
-`nix-bitcoin.configVersion` in `examples/configuration.nix` (see the header comment
-in `versioning.nix`).
+Any change that breaks functionality from the user's point of view **must** add an
+entry to `changes` in `modules/versioning.nix`, so users hit it at evaluation time
+when they update. A release note alone is not enough. This includes:
+
+- a removed or renamed option, or a removed module/service (also add a
+  `mkRemovedOptionModule`, see "Removing a service")
+- a changed default that changes behaviour, e.g. a listen address (the 0.1.1
+  clightning-rest entry)
+- required manual action or downtime: a database/index reindex or resync (the electrs
+  entries), a data migration
+- data no longer covered by a service, e.g. backups (the 0.1.1 Liquid entry)
+- something that used to work and now fails at runtime, e.g. a permission, RPC method
+  or sandboxing restriction
+
+For each entry:
+
+- `version` is the next release (bump only the last component). Append at the end of
+  `changes`; several entries per version are fine.
+- Set `condition` so only affected users see it, e.g. users who already set the
+  new value don't.
+- The `message` says what changed and what to do. Put longer migration steps in
+  `docs/configuration.md` under "Upgrading to config version <version>" and link them.
+- Set `nix-bitcoin.configVersion` in `examples/configuration.nix` to that version
+  unless it already is.
 
 ## Documentation
 

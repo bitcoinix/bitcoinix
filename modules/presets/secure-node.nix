@@ -41,14 +41,6 @@ in {
       dbCache = 1000;
     };
 
-    services.liquidd = {
-      # Enable `validatepegin` to verify that a transaction sending BTC into
-      # Liquid exists on Bitcoin. Without it, a malicious liquid federation can
-      # make the node accept a sidechain that is not fully backed.
-      validatepegin = true;
-      listen = true;
-    };
-
     nix-bitcoin.nodeinfo.enable = true;
 
     services.backups.frequency = "daily";

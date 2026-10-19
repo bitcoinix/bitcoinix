@@ -234,15 +234,6 @@ post stores/$store/lightning/BTC/setup "" --data-raw 'LightningNodeType=Internal
 nix run --inputs-from . nixpkgs#lynx -- --dump http://$ip:23000/embed/$store/BTC/ln
 
 #―――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――
-# liquid
-run-tests.sh -s liquid container
-
-c systemctl status liquidd
-c elements-cli getpeerinfo
-c elements-cli getnetworkinfo
-c liquidswap-cli --help
-
-#―――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――
 # tor
 run-tests.sh container
 

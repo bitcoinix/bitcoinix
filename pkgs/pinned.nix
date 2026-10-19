@@ -17,7 +17,6 @@ pkgs: pkgsUnstable:
   inherit (pkgsUnstable)
     bitcoind-knots
     clboss
-    elementsd
     fulcrum
     lightning-loop
     lnd;

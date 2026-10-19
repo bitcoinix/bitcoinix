@@ -1,4 +1,4 @@
-{ prevVersions ? null }:
+{ prevVersions ? null, removedPkgs ? [] }:
 let
   flake = builtins.getFlake (toString ../.);
   inherit (flake.inputs.nixpkgs) lib;
@@ -12,7 +12,8 @@ in rec {
   # identical to the unstable version.
   versions = let
     pinned = flake.legacyPackages.x86_64-linux.pinned;
-    pinnedPkgs = lib.filterAttrs (n: v: lib.isDerivation v) pinned;
+    # Allow regenerating pinned.nix after removing a package.
+    pinnedPkgs = lib.filterAttrs (n: v: lib.isDerivation v) (builtins.removeAttrs pinned removedPkgs);
     stable = pinned.pkgs;
     unstable = pinned.pkgsUnstable;
     isStable = builtins.partition (pkgName:

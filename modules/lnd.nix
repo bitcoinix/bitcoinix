@@ -267,19 +267,36 @@ in {
           # Setting macaroon permissions for other users needs root permissions
           # The admin macaroon is passed to curl via a fd because argv is
           # world-readable through /proc/<pid>/cmdline
+          #
+          # This script runs as root, but the lnd data dir and $RUNTIME_DIRECTORY
+          # are writable by the lnd user, which could place symlinks there.
+          # So never read or write files as root via paths in these dirs:
+          # - Read the admin macaroon as the lnd user.
+          # - Create the macaroons in a root-only dir and move them to
+          #   $RUNTIME_DIRECTORY via rename (`mv -T`), which doesn't follow symlinks.
+          #   Renaming requires both dirs to be on the same filesystem (`/run`).
           script = nbLib.rootScript "lnd-create-macaroons" ''
+            tmpDir=$(mktemp -d /run/lnd-macaroons.XXXXXX)
+            trap 'rm -rf "$tmpDir"' EXIT
             umask ug=r,o=
             ${lib.concatMapStrings (macaroon: ''
               echo "Create custom macaroon ${macaroon}"
-              macaroonPath="$RUNTIME_DIRECTORY/${macaroon}.macaroon"
-              adminMacaroonHex=$(${pkgs.xxd}/bin/xxd -ps -u -c 99999 '${networkDir}/admin.macaroon')
+              tmpMacaroon="$tmpDir/${macaroon}.macaroon"
+              adminMacaroonHex=$(
+                ${pkgs.util-linux}/bin/runuser -u ${cfg.user} -- \
+                  ${pkgs.xxd}/bin/xxd -ps -u -c 99999 '${networkDir}/admin.macaroon'
+              )
+              # The response is controlled by lnd.
+              # Limit its size and fail if it contains no macaroon string.
               ${curl} \
                 -H @<(printf 'Grpc-Metadata-macaroon: %s\n' "$adminMacaroonHex") \
                 -X POST \
                 -d '{"permissions":[${cfg.macaroons.${macaroon}.permissions}]}' \
                 ${restUrl}/macaroon |\
-                ${pkgs.jq}/bin/jq -c '.macaroon' | ${pkgs.xxd}/bin/xxd -p -r > "$macaroonPath"
-              chown ${cfg.macaroons.${macaroon}.user}: "$macaroonPath"
+                head -c 65536 |\
+                ${pkgs.jq}/bin/jq -ce '.macaroon | strings | select(. != "")' | ${pkgs.xxd}/bin/xxd -p -r > "$tmpMacaroon"
+              chown ${cfg.macaroons.${macaroon}.user}: "$tmpMacaroon"
+              mv -fT "$tmpMacaroon" "$RUNTIME_DIRECTORY/${macaroon}.macaroon"
             '') (attrNames cfg.macaroons)}
           '';
         in [

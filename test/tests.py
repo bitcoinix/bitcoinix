@@ -146,13 +146,6 @@ def _():
 def _():
     succeed("systemctl stop electrs")
 
-@test("liquidd")
-def _():
-    assert_running("liquidd")
-    machine.wait_until_succeeds("elements-cli getnetworkinfo")
-    assert_matches("runuser -u operator -- elements-cli getnetworkinfo | jq", '"version"')
-    succeed("runuser -u operator -- liquidswap-cli --help")
-
 @test("clightning")
 def _():
     assert_running("clightning")
@@ -195,6 +188,73 @@ def _():
     assert_str_matches(cert_alt_names, '10.0.0.1')
     assert_str_matches(cert_alt_names, '20.0.0.1')
     assert_str_matches(cert_alt_names, 'example.com')
+
+@test("lnd-macaroons")
+def _():
+    # Custom macaroons are created by a root script that operates in dirs that are
+    # writable by the lnd user.
+    # Test that the script doesn't follow symlinks placed there by the lnd user.
+    #
+    # Services like lightning-pool and btcpayserver read the live macaroons, so
+    # the test never touches them: the script writes to a test runtime dir, and
+    # for the admin macaroon it runs in a private mount namespace where a test dir
+    # is bind-mounted over the lnd network dir.
+    assert_running("lnd")
+    data = test_data["lnd-macaroons"]
+    name, user = next(iter(data["users"].items()))
+    as_lnd = f"runuser -u {data['user']} --"
+    runtime_dir = "/run/lnd-macaroons-test"
+    network_dir = "/run/lnd-macaroons-test-network"
+    macaroon = f"{runtime_dir}/{name}.macaroon"
+    script = succeed(
+        "systemctl show lnd -p ExecStartPost --value"
+        " | grep -oE '/nix/store/[^ ]+-lnd-create-macaroons' | head -1"
+    ).strip()
+    create_macaroons = f"RUNTIME_DIRECTORY={runtime_dir} {script} 2>&1"
+    live_macaroons = "stat -c '%n %i %Y' /run/lnd/*.macaroon"
+
+    canary = "/run/lnd-test-canary"
+    canary_dir = "/run/lnd-test-canary-dir"
+    succeed(
+        f"install -m 600 <(echo canary) {canary}",
+        f"mkdir -m 700 {canary_dir}",
+        f"install -d -m 750 -o {data['user']} {runtime_dir} {network_dir}",
+    )
+    live_before = succeed(live_macaroons)
+
+    def assert_macaroon_created():
+        assert_full_match(f"stat -c '%F %U %a' {macaroon}", f"regular file {user} 440\n")
+
+    def assert_canary_untouched():
+        assert_full_match(f"cat {canary}", "canary\n")
+        assert_full_match(f"stat -c '%U %a' {canary}", "root 600\n")
+        assert_full_match(f"ls -A {canary_dir}", "")
+
+    # Macaroon path is a symlink to a root-only file
+    succeed(f"{as_lnd} ln -sfn {canary} {macaroon}", create_macaroons)
+    assert_canary_untouched()
+    assert_macaroon_created()
+
+    # Macaroon path is a symlink to a root-only dir
+    succeed(f"{as_lnd} ln -sfn {canary_dir} {macaroon}", create_macaroons)
+    assert_canary_untouched()
+    assert_macaroon_created()
+
+    # Admin macaroon is a symlink to a root-only file.
+    # The file must not be read and sent to lnd.
+    succeed(f"{as_lnd} ln -s {canary} {network_dir}/admin.macaroon")
+    status, output = machine.execute(
+        "unshare --mount --propagation private sh -c"
+        f" 'mount --bind {network_dir} {data['networkDir']} && {create_macaroons}'"
+    )
+    denied = f"{data['networkDir']}/admin.macaroon: Permission denied"
+    if status == 0 or denied not in output:
+        raise Exception(f"Unexpected result when reading the admin macaroon: {status}, '{output}'")
+    assert_canary_untouched()
+
+    # The live macaroons were never replaced
+    assert_full_match(live_macaroons, re.escape(live_before))
+    succeed(f"rm -r {canary} {canary_dir} {runtime_dir} {network_dir}")
 
 @test("lndconnect-onion-lnd")
 def _():
@@ -258,8 +318,6 @@ def _():
 def _():
     assert_running("nbxplorer")
     machine.wait_until_succeeds(log_has_string("nbxplorer", "BTC: RPC connection successful"))
-    if test_data["btcpayserver-lbtc"]:
-        machine.wait_until_succeeds(log_has_string("nbxplorer", "LBTC: RPC connection successful"))
     wait_for_open_port(ip("nbxplorer"), 24444)
 
     assert_running("btcpayserver")
@@ -282,12 +340,133 @@ def _():
         log_has_string("rtl", "Server is up and running")
     )
 
+@test("rtl-credentials")
+def _():
+    # The lnd macaroon and the clightning rune are copied to RTL by root scripts.
+    # The source dirs are writable by lnd/clightning and the destination dir is
+    # writable by rtl.
+    # Test that the scripts don't follow symlinks placed there by these users.
+    assert_running("rtl")
+    data = test_data["rtl-credentials"]
+    data_dir = data["dataDir"]
+    as_rtl = f"runuser -u {data['user']} --"
+    exec_start_pre = succeed("systemctl show rtl -p ExecStartPre --value")
+
+    def get_script(name):
+        match = re.search(rf"/nix/store/[^ ;]+-{name}", exec_start_pre)
+        if not match:
+            raise Exception(f"Script {name} not found in ExecStartPre: '{exec_start_pre}'")
+        return match.group(0)
+
+    canary = "/run/rtl-test-canary"
+    canary_dir = "/run/rtl-test-canary-dir"
+    succeed(f"install -m 600 <(echo canary) {canary}", f"mkdir -m 700 {canary_dir}")
+
+    def assert_canary_untouched():
+        assert_full_match(f"cat {canary}", "canary\n")
+        assert_full_match(f"stat -c '%U %a' {canary}", "root 600\n")
+        assert_full_match(f"stat -c '%U %a' {canary_dir}", "root 700\n")
+        assert_full_match(f"ls -A {canary_dir}", "")
+
+    def assert_dest_ok(dest, expected_content_cmd):
+        assert_full_match(f"stat -c '%F %U %G %a' {dest}",
+                          f"regular file {data['user']} {data['group']} 640\n")
+        succeed(f"cmp {dest} <({expected_content_cmd})")
+
+    def check(script, owner, src, dest, expected_content_cmd):
+        as_owner = f"runuser -u {owner} --"
+
+        # Destination is a symlink to a root-only file
+        succeed(f"{as_rtl} ln -sfn {canary} {dest}", script)
+        assert_canary_untouched()
+        assert_dest_ok(dest, expected_content_cmd)
+
+        # Source is a symlink to a root-only file.
+        # It must not be read and copied to the destination.
+        succeed(
+            f"{as_owner} mv -T {src} {src}.orig",
+            f"{as_owner} ln -s {canary} {src}",
+        )
+        status, output = machine.execute(f"{script} 2>&1")
+        succeed(f"{as_owner} mv -T {src}.orig {src}")
+        if status == 0 or "Permission denied" not in output:
+            raise Exception(f"Unexpected result when reading {src}: {status}, '{output}'")
+        machine.fail(f"grep -q canary {dest}")
+        assert_canary_untouched()
+
+        # Source is empty.
+        # The script must fail with a clear error and keep the current destination.
+        succeed(
+            f"{as_owner} mv -T {src} {src}.orig",
+            f"{as_owner} cp /dev/null {src}",
+        )
+        status, output = machine.execute(f"{script} 2>&1")
+        succeed(f"{as_owner} mv -T {src}.orig {src}")
+        if status == 0 or f"Error: '{src}' is empty" not in output:
+            raise Exception(f"Unexpected result when reading empty {src}: {status}, '{output}'")
+        assert_dest_ok(dest, expected_content_cmd)
+
+        succeed(script)
+        assert_dest_ok(dest, expected_content_cmd)
+
+    if lnd := data["lnd"]:
+        script = get_script("rtl-copy-macaroon")
+        admin_macaroon = f"{lnd['networkDir']}/admin.macaroon"
+        macaroons_dir = f"{data_dir}/macaroons"
+        dest = f"{macaroons_dir}/admin.macaroon"
+
+        # Destination dir is a symlink to a root-only dir.
+        # Neither the script nor systemd-tmpfiles may write to the dir or change its owner.
+        succeed(
+            f"{as_rtl} mv -T {macaroons_dir} {macaroons_dir}.orig",
+            f"{as_rtl} ln -s {canary_dir} {macaroons_dir}",
+        )
+        machine.execute(script)
+        machine.execute(f"systemd-tmpfiles --create --prefix={macaroons_dir}")
+        succeed(f"{as_rtl} rm {macaroons_dir}", f"{as_rtl} mv -T {macaroons_dir}.orig {macaroons_dir}")
+        assert_canary_untouched()
+
+        # Earlier versions created the destination dir as root.
+        # systemd-tmpfiles changes the owner, so that the rtl user can update the macaroon.
+        succeed(
+            f"chown root:root {macaroons_dir}",
+            f"chmod 755 {macaroons_dir}",
+            f"systemd-tmpfiles --create --prefix={macaroons_dir}",
+        )
+        assert_full_match(f"stat -c '%U %G %a' {macaroons_dir}",
+                          f"{data['user']} {data['group']} 770\n")
+        succeed(f"{as_rtl} cp /dev/null {dest}", script)
+        assert_dest_ok(dest, f"cat {admin_macaroon}")
+
+        check(script, lnd["user"], admin_macaroon, dest, f"cat {admin_macaroon}")
+
+    if cln := data["clightning"]:
+        script = get_script("rtl-create-clnrest-rune-file")
+        admin_rune = f"{cln['networkDir']}/admin-rune"
+        check(script, cln["user"], admin_rune, f"{data_dir}/clightning-admin-rune",
+              f"printf 'LIGHTNING_RUNE=\"%s\"\\n' \"$(cat {admin_rune})\"")
+
+    succeed(f"rm -r {canary} {canary_dir}")
+
 @test("clightning-rest")
 def _():
     assert_running("clightning-rest")
     machine.wait_until_succeeds(
         log_has_string("clightning-rest", "cl-rest api server is ready and listening")
     )
+
+@test("clightning-rest-local-bind")
+def _():
+    assert_running("clightning-rest")
+    machine.wait_until_succeeds(
+        log_has_string("clightning-rest", "cl-rest doc server is ready and listening")
+    )
+    # The REST and doc servers must listen on localhost only
+    for port in test_data["clightning-rest-local-bind"]:
+        wait_for_open_port("127.0.0.1", port)
+        assert_full_match(
+            f"ss -Htnl 'sport = :{port}' | awk '{{print $4}}' | sort -u", f"127.0.0.1:{port}\n"
+        )
 
 @test("mempool")
 def _():
@@ -333,9 +512,16 @@ def _():
             )
 
     # These reachability tests are non-exhaustive
-    assert_reachable("bitcoind", ["clightning", "lnd", "liquidd"])
+    assert_reachable("bitcoind", ["clightning", "lnd"])
     assert_unreachable("bitcoind", ["btcpayserver", "rtl", "lightning-loop"])
     assert_unreachable("btcpayserver", ["bitcoind", "lightning-loop"])
+
+    # The netns firewall rules are IPv4 only, so the veth inside a netns must
+    # have no IPv6 address. Otherwise it is reachable over link-local IPv6
+    # from every other netns on the bridge.
+    for service in enabled_tests.intersection(test_data["netns"]):
+        veth = f"nb-veth-{test_data['netns'][service]['id']}"
+        assert_full_match(f"ip netns exec nb-{service} ip -6 addr show dev {veth}", "")
 
     # netns addresses can not be bound to in the main netns.
     # This prevents processes in the main netns from impersonating nix-bitcoin services.
@@ -343,18 +529,27 @@ def _():
         f"nc -l {ip('bitcoind')} 1080 2>&1 || true", "nc: Cannot assign requested address"
     )
 
-    # netns-exec should fail for unauthorized namespaces
-    assert_matches(
-        "runuser -u operator -- netns-exec nb-clightning ip a 2>&1 || true",
-        "nb-clightning is not an allowed netns",
+    # The netns-exec wrapper should keep its capability and restrictive owner/mode
+    assert_matches("getcap /run/wrappers/bin/netns-exec", "cap_sys_admin")
+    assert_full_match("stat -c '%U %a' /run/wrappers/bin/netns-exec", "operator 500\n")
+
+    # netns-exec should reject relative command paths, so PATH can't redirect the exec target
+    status, out = machine.execute("runuser -u operator -- netns-exec nb-bitcoind ip a 2>&1")
+    assert status != 0 and "absolute path" in out, f"status {status}, output: {out}"
+
+    # netns-exec should fail for unauthorized namespaces.
+    # The allowlist is empty, so every netns is rejected.
+    status, out = machine.execute(
+        "runuser -u operator -- netns-exec nb-bitcoind /run/current-system/sw/bin/ip a 2>&1"
     )
+    assert status != 0 and "nb-bitcoind is not an allowed netns" in out, f"status {status}, output: {out}"
 
     # netns-exec should only be executable by the operator user.
     # User `unauthorized` is a member of group `users`, like all normal users.
     # Netns `nb-clightning` is rejected by netns-exec before it accesses the
     # netns, so the error below can only originate from the exec permissions.
     assert_matches(
-        "runuser -u unauthorized -- netns-exec nb-clightning ip a 2>&1 || true",
+        "runuser -u unauthorized -- netns-exec nb-clightning /run/current-system/sw/bin/ip a 2>&1 || true",
         "Permission denied",
     )
 

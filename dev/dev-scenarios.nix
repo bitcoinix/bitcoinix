@@ -8,7 +8,6 @@ with lib;
     imports = [ scenarios.regtestBase ];
     services.btcpayserver.enable = true;
     test.container.exposeLocalhost = true;
-    # services.btcpayserver.lbtc = false;
 
     # Required for testing interactive plugin installation
     test.container.enableWAN = true;
@@ -102,7 +101,6 @@ with lib;
       enable = true;
       frontend = {
         address = "0.0.0.0";
-        settings.LIQUID_ENABLED = true;
       };
     };
     nix-bitcoin.nodeinfo.enable = true;

@@ -126,7 +126,6 @@ NixOS modules ([src](modules/modules.nix))
   * [electrs](https://github.com/romanz/electrs): Electrum server
   * [fulcrum](https://github.com/cculianu/Fulcrum): Electrum server (see [the module](modules/fulcrum.nix) for a comparison with electrs)
   * [btcpayserver](https://github.com/btcpayserver/btcpayserver)
-  * [liquid](https://github.com/elementsproject/elements): federated sidechain
   * [bitcoin-core-hwi](https://github.com/bitcoin-core/HWI)
 * Helper
   * [netns-isolation](modules/netns-isolation.nix): isolates applications on the network-level via network namespaces

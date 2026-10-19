@@ -89,6 +89,11 @@ let
           # Print URL
           lndconnect-clightning --url
         ```
+
+        This does not change the listen address of the clightning-rest server
+        (`services.clightning-rest.address`), which is localhost by default.
+        To connect a client, enable `services.clightning-rest.lndconnect.onion`,
+        use the WireGuard preset, or set the address yourself.
       '';
       };
       onion = mkOption {
@@ -272,7 +277,7 @@ in {
             }
           )];
 
-          # clightning-rest always binds to all interfaces
+          # Don't change `clightning-rest.address`. Exposing the REST API must be an explicit choice.
         }
 
         (mkIf clightning-rest.lndconnect.onion {

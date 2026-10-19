@@ -27,6 +27,39 @@ This fetches the latest release, verifies the signature on its release tag and u
 It refuses to switch to a release older than the one currently pinned. To downgrade on purpose,
 run `fetch-release.sh` with `releaseVersion=<version>` and write its output to `nix-bitcoin-release.nix`.
 
+### Upgrading to config version 0.1.1
+
+Liquid support has been removed, including the Elements daemon, liquid-swap, and
+BTCPay Server's LBTC integration. Liquid peg-outs were suspended after the
+September 2026 Elements consensus bug
+([incident assessment](https://blog.liquid.net/liquid-network-security-incident-assessment/)).
+
+If you used Liquid, remove `services.liquidd`, `services.btcpayserver.lbtc`, and any
+Liquid-specific onion service or network namespace settings from your configuration.
+
+Upgrading does not delete Liquid data. These files stay on the node:
+- the data directory (default: `/var/lib/liquidd`), which holds your Liquid wallets
+- the secret `liquid-rpcpassword` in the secrets directory (default: `/etc/nix-bitcoin-secrets`)
+- the onion service keys in `/var/lib/tor/onion/liquidd`, if Liquid had an onion service
+  (the default with the `secure-node.nix` preset)
+
+The backups service no longer includes the data directory. To keep backing up the
+wallets without the chain data (as before, unless `with-bulk-data` was set), add:
+```nix
+services.backups.extraFiles = [
+  "- /var/lib/liquidd/*/blocks"
+  "- /var/lib/liquidd/*/chainstate"
+  "- /var/lib/liquidd/*/indexes"
+  "/var/lib/liquidd"
+];
+```
+To access the wallets later, run upstream Elements Core 23.3.4 or later on a copy of
+the data directory. Earlier versions, including the `elementsd` package in
+nixpkgs 26.05, lack the fix for that bug.
+Delete the files above once you no longer need them.
+
+After migrating your configuration, set `nix-bitcoin.configVersion = "0.1.1";`.
+
 # Customizing your configuration
 
 ## Get started with Nix

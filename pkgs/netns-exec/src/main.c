@@ -9,6 +9,10 @@
 #include <fcntl.h>
 #include <sys/capability.h>
 
+/* Intentionally empty until a service needs to run commands in its netns.
+   To allow one, add its netns name here, e.g. "nb-bitcoind".
+   Netns names are `nb-<service>` (see modules/netns-isolation.nix).
+   With no entries, the array has length 0 and every netns is rejected. */
 static char *allowed_netns[] = { };
 
 int is_netns_allowed(char *netns) {
@@ -27,51 +31,70 @@ void print_capabilities() {
     cap_free(caps);
 }
 
-void drop_capabilities() {
+int drop_capabilities() {
     cap_t caps = cap_get_proc();
-    cap_clear(caps);
-    cap_set_proc(caps);
+    if (caps == NULL) return -1;
+    if (cap_clear(caps) < 0) { cap_free(caps); return -1; }
+    int rc = cap_set_proc(caps);
     cap_free(caps);
+    return rc;
 }
 
 int main(int argc, char **argv) {
     char netns_path[256];
 
     if (argc < 3) {
-        printf("usage: %s <netns> <command>\n", argv[0]);
+        fprintf(stderr, "usage: %s <netns> <absolute command path> [args...]\n", argv[0]);
+        return 1;
+    }
+
+    /* Require an absolute path so PATH cannot redirect the exec target.
+       The caller's environment is otherwise inherited. Only the allowed
+       user may run this wrapper: by default the operator, a regular user
+       with group access to the services. */
+    if (argv[2][0] != '/') {
+        fprintf(stderr, "command must be an absolute path.\n");
         return 1;
     }
 
     if (!is_netns_allowed(argv[1])) {
-        printf("%s is not an allowed netns.\n", argv[1]);
+        fprintf(stderr, "%s is not an allowed netns.\n", argv[1]);
         return 1;
     }
 
-    if(snprintf(netns_path, sizeof(netns_path), "/var/run/netns/%s", argv[1]) < 0) {
-        printf("Path length exceeded for netns %s.\n", argv[1]);
+    int len = snprintf(netns_path, sizeof(netns_path), "/var/run/netns/%s", argv[1]);
+    if (len < 0 || (size_t)len >= sizeof(netns_path)) {
+        fprintf(stderr, "Path length exceeded for netns %s.\n", argv[1]);
         return 1;
     }
 
     int fd = open(netns_path, O_RDONLY);
     if (fd < 0) {
-        printf("Failed opening netns %s: %d, %s \n", netns_path, errno, strerror(errno));
+        fprintf(stderr, "Failed opening netns %s: %d, %s \n", netns_path, errno, strerror(errno));
         return 1;
     }
 
     if (setns(fd, CLONE_NEWNET) < 0) {
-        printf("Failed setns %d, %s \n", errno, strerror(errno));
+        fprintf(stderr, "Failed setns %d, %s \n", errno, strerror(errno));
+        close(fd);
         return 1;
     }
+    close(fd);
 
-    /* Drop capabilities */
+    /* Drop capabilities. Never run the command with CAP_SYS_ADMIN still held. */
     #ifdef DEBUG
     print_capabilities();
     #endif
-    drop_capabilities();
+    if (drop_capabilities() < 0) {
+        fprintf(stderr, "Failed to drop capabilities: %d, %s \n", errno, strerror(errno));
+        return 1;
+    }
     #ifdef DEBUG
     print_capabilities();
     #endif
 
-    execvp(argv[2], &argv[2]);
-    return 0;
+    execv(argv[2], &argv[2]);
+    /* Only reached on exec failure */
+    fprintf(stderr, "Failed to exec %s: %d, %s \n", argv[2], errno, strerror(errno));
+    return 1;
 }

@@ -6,8 +6,11 @@ on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
 
-env:
-  CACHIX_SIGNING_KEY: ${{ secrets.CACHIX_SIGNING_KEY }}
+# The Cachix signing key is passed only to the jobs that push to the cache
+# (build_test_drivers, test_scenario). The other jobs run repository scripts
+# too, and must not be able to sign store paths.
+permissions:
+  contents: read
 
 # Strategy:
 # Job `build_test_drivers` evals all VM tests and builds all test drivers in a single Nix build.
@@ -20,11 +23,13 @@ env:
 jobs:
   build_test_drivers:
     runs-on: ubuntu-latest
+    env:
+      CACHIX_SIGNING_KEY: ${{ secrets.CACHIX_SIGNING_KEY }}
     outputs:
       run_scenario_tests: ${{ steps.main.outputs.run_scenario_tests }}
     steps:
-      - uses: actions/checkout@v7
-      - uses: cachix/install-nix-action@v31
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: cachix/install-nix-action@448cde739abec1eaf0646249e3d25bb8d9bc7702 # v31.11.2
       - id: main
         name: Build test drivers
         run: |
@@ -33,24 +38,27 @@ jobs:
 
   test_scenario:
     runs-on: ubuntu-latest
+    env:
+      CACHIX_SIGNING_KEY: ${{ secrets.CACHIX_SIGNING_KEY }}
     strategy:
       matrix:
         scenario:
           - default
           - netns
           - netnsRegtest
+          - wireguard-lndconnect
     needs: build_test_drivers
     if: needs.build_test_drivers.outputs.run_scenario_tests == 'true'
     steps:
-      - uses: actions/checkout@v7
-      - uses: cachix/install-nix-action@v31
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: cachix/install-nix-action@448cde739abec1eaf0646249e3d25bb8d9bc7702 # v31.11.2
       - run: nix shell --inputs-from . nixpkgs#{bash,coreutils,cachix} -c ./test/ci/build.sh ${{ matrix.scenario }}
 
   check_flake:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
-      - uses: cachix/install-nix-action@v31
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: cachix/install-nix-action@448cde739abec1eaf0646249e3d25bb8d9bc7702 # v31.11.2
       - run: nix flake check --all-systems
       - run: ./test/nixos-search/ci-test.sh
       - run: ./test/shellcheck.sh
@@ -58,8 +66,8 @@ jobs:
   release_tooling:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
-      - uses: cachix/install-nix-action@v31
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: cachix/install-nix-action@448cde739abec1eaf0646249e3d25bb8d9bc7702 # v31.11.2
       - name: Check release signing keys
         run: nix shell --inputs-from . nixpkgs#openssh -c ./test/release-keys-test.sh
       - name: Test fetch-release

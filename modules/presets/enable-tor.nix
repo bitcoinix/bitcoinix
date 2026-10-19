@@ -22,7 +22,6 @@ in {
     clightning = defaultEnableTorProxy;
     lnd = defaultEnableTorProxy;
     lightning-loop = defaultEnableTorProxy;
-    liquidd = defaultEnableTorProxy;
     # TODO-EXTERNAL:
     # disable Tor enforcement until btcpayserver can fetch rates over Tor
     # btcpayserver = defaultEnableTorProxy;
@@ -42,7 +41,6 @@ in {
   # Add onion services for incoming connections
   nix-bitcoin.onionServices = {
     bitcoind.enable = defaultTrue;
-    liquidd.enable = defaultTrue;
     electrs.enable = defaultTrue;
     fulcrum.enable = defaultTrue;
     rtl.enable = defaultTrue;

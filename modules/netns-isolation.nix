@@ -174,6 +174,10 @@ in {
 
         setupInNetns = ''
           ${ip} link set lo up
+          # The iptables rules below cover IPv4 only. Without this, the link
+          # gets an IPv6 link-local address and other netns can reach it over
+          # the bridge unfiltered.
+          echo 1 > /proc/sys/net/ipv6/conf/${veth}/disable_ipv6
           ${ip} addr add ${v.address}/24 dev ${veth}
           ${ip} link set ${veth} up
           ${ip} route add default via ${bridgeIp}
@@ -235,10 +239,6 @@ in {
         id = 14;
         connections = [ "bitcoind" ];
       };
-      liquidd = {
-        id = 15;
-        connections = [ "bitcoind" ];
-      };
       electrs = {
         id = 16;
         connections = [ "bitcoind" ];
@@ -252,14 +252,12 @@ in {
       };
       nbxplorer = {
         id = 23;
-        connections = [ "bitcoind" ]
-                      ++ optional config.services.btcpayserver.lbtc "liquidd";
+        connections = [ "bitcoind" ];
       };
       btcpayserver = {
         id = 24;
         connections = [ "nbxplorer" ]
-                      ++ optional (config.services.btcpayserver.lightningBackend == "lnd") "lnd"
-                      ++ optional config.services.btcpayserver.lbtc "liquidd";
+                      ++ optional (config.services.btcpayserver.lightningBackend == "lnd") "lnd";
         # communicates with clightning over rpc socket
       };
       lightning-pool = {
@@ -312,15 +310,6 @@ in {
       address = netns.lnd.address;
       rpcAddress = netns.lnd.address;
       restAddress = netns.lnd.address;
-    };
-
-    services.liquidd = {
-      address = netns.liquidd.address;
-      rpc.address = netns.liquidd.address;
-      rpcallowip = [
-        bridgeIp # For operator user
-        netns.liquidd.address
-      ] ++ map (n: netns.${n}.address) netns.liquidd.availableNetns;
     };
 
     services.electrs.address = netns.electrs.address;

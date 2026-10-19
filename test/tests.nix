@@ -73,6 +73,12 @@ let
       tests.clightning-rest = cfg.clightning-rest.enable;
 
       tests.rtl = cfg.rtl.enable;
+      tests.rtl-credentials = cfg.rtl.enable;
+      test.data.rtl-credentials = {
+        inherit (cfg.rtl) dataDir user group;
+        lnd = if cfg.rtl.nodes.lnd.enable then { inherit (cfg.lnd) networkDir user; } else null;
+        clightning = if cfg.rtl.nodes.clightning.enable then { inherit (cfg.clightning) networkDir user; } else null;
+      };
       services.rtl = {
         nodes = {
           lnd = {
@@ -96,6 +102,11 @@ let
       };
 
       tests.lnd = cfg.lnd.enable;
+      tests.lnd-macaroons = cfg.lnd.enable && cfg.lnd.macaroons != {};
+      test.data.lnd-macaroons = {
+        inherit (cfg.lnd) networkDir user;
+        users = mapAttrs (_: macaroon: macaroon.user) cfg.lnd.macaroons;
+      };
       services.lnd = {
         port = 9736;
         certificate = {
@@ -125,6 +136,11 @@ let
           port = cfg.clightning.plugins.clnrest.port;
         };
 
+      # With netns-isolation, the address is set by netns-isolation.
+      tests.clightning-rest-local-bind =
+        cfg.clightning-rest.enable && !config.nix-bitcoin.netns-isolation.enable;
+      test.data.clightning-rest-local-bind = with cfg.clightning-rest; [ port docPort ];
+
       tests.lightning-loop = cfg.lightning-loop.enable;
       services.lightning-loop.certificate.extraIPs = [ "20.0.0.1" ];
 
@@ -137,15 +153,8 @@ let
       services.fulcrum.port = 50002;
       tests.fulcrum = cfg.fulcrum.enable;
 
-      tests.liquidd = cfg.liquidd.enable;
-      services.liquidd.extraConfig = mkIf config.test.noConnections "connect=0";
-
       tests.btcpayserver = cfg.btcpayserver.enable;
-      services.btcpayserver = {
-        lightningBackend = mkDefault "lnd";
-        lbtc = mkDefault true;
-      };
-      test.data.btcpayserver-lbtc = config.services.btcpayserver.lbtc;
+      services.btcpayserver.lightningBackend = mkDefault "lnd";
 
       tests.nodeinfo = config.nix-bitcoin.nodeinfo.enable;
 
@@ -220,7 +229,6 @@ let
       services.mempool.enable = true;
       services.electrs.enable = true;
       services.fulcrum.enable = true;
-      services.liquidd.enable = true;
       services.btcpayserver.enable = true;
       services.backups.enable = true;
 
@@ -262,7 +270,6 @@ let
       };
       test.features.clightningPlugins = true;
       services.clightning-rest.enable = true;
-      services.liquidd.enable = true;
       services.rtl.enable = true;
       services.mempool.enable = true;
       services.lnd.enable = true;
@@ -291,7 +298,8 @@ let
       nix-bitcoin.netns-isolation.enable = true;
       test.data.netns = config.nix-bitcoin.netns-isolation.netns;
       tests.netns-isolation = true;
-      environment.systemPackages = [ pkgs.fping ];
+      # libcap provides `getcap`, used to check the netns-exec wrapper
+      environment.systemPackages = [ pkgs.fping pkgs.libcap ];
 
       # Used for testing that `netns-exec` is not executable by users other than
       # the operator. Like all normal users, this user is a member of group `users`.
@@ -323,24 +331,6 @@ let
       services.lightning-pool.extraConfig = ''
         auctionserver=127.0.0.1
       '';
-
-      # `validatepegin` is incompatible with regtest
-      services.liquidd.validatepegin = mkForce false;
-
-      # TODO-EXTERNAL:
-      # Reenable `btcpayserver.lbtc` in regtest (and add test in tests.py)
-      # when nbxplorer can parse liquidd regtest blocks.
-      #
-      # When `btcpayserver.lbtc` is enabled in regtest, nxbplorer tries to
-      # generate regtest blocks, which fails because no liquidd wallet exists.
-      # When blocks are pre-generated via `liquidd.postStart`, nbxplorer
-      # fails to parse the blocks:
-      #   info: NBXplorer.Indexer.LBTC: Full node version detected: 210002
-      #   info: NBXplorer.Indexer.LBTC: NBXplorer is correctly whitelisted by the node
-      #     fail: NBXplorer.Indexer.LBTC: Unhandled exception in the indexer, retrying in 10 seconds
-      #       System.IO.EndOfStreamException: No more byte to read
-      #         at NBitcoin.BitcoinStream.ReadWriteBytes(Span`1 data)
-      services.btcpayserver.lbtc = mkForce false;
     };
 
     # Test the special bitcoin RPC setup that lnd uses when bitcoin is pruned

@@ -192,14 +192,6 @@
   # public access to the web interface.
   # nix-bitcoin.onionServices.btcpayserver.enable = true;
 
-  ### LIQUIDD
-  # Enable this module to use Liquid, a sidechain for an inter-exchange
-  # settlement network linking together cryptocurrency exchanges and
-  # institutions around the world.
-  # services.liquidd.enable = true;
-  #
-  # Liquid can be controlled with command 'elements-cli'.
-
   ### Hardware wallets
   # Enable the following to allow using hardware wallets.
   # See https://github.com/bitcoin-core/HWI for more information.
@@ -266,7 +258,7 @@
   #   hostNames = [ "host" ];
   #   publicKey = "<ssh public from `ssh-keyscan`>";
   # };
-  # If you also want to backup bulk data like the Bitcoin & Liquid blockchains
+  # If you also want to backup bulk data like the Bitcoin blockchain
   # and electrs data directory, enable
   # services.backups.with-bulk-data = true;
 
@@ -315,5 +307,5 @@
   # The nix-bitcoin release version that your config is compatible with.
   # When upgrading to a backwards-incompatible release, nix-bitcoin will display an
   # an error and provide instructions for migrating your config to the new release.
-  nix-bitcoin.configVersion = "0.1.0";
+  nix-bitcoin.configVersion = "0.1.1";
 }

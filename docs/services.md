@@ -205,7 +205,8 @@ See: [Secrets dir](./configuration.md#secrets-dir)
 
 ### Connecting without Tor or WireGuard
 Enabling `lndconnect` or `lnconnect` does not change the address that the REST server
-listens on. By default, the lnd and clnrest REST servers only listen on localhost.
+listens on. By default, the lnd, clnrest and clightning-rest REST servers only listen
+on localhost.
 
 The REST API grants full control over your lightning node, so only expose it to networks
 you trust. To reach it directly (e.g. via your local network or your own VPN), opt in
@@ -235,10 +236,21 @@ services.clightning = {
 networking.firewall.interfaces.eth0.allowedTCPPorts = [ config.services.clightning.plugins.clnrest.port ];
 ```
 
+##### For clightning-rest
+```nix
+services.clightning-rest = {
+  address = "0.0.0.0";
+  # Only needed when using `secure-node.nix` or `enable-tor.nix`
+  tor.enforce = false;
+};
+networking.firewall.interfaces.eth0.allowedTCPPorts = [ config.services.clightning-rest.port ];
+```
+
 Then create the QR code with your node address as the host:
 ```bash
 lndconnect --host 192.168.1.10
 lnconnect-clnrest --host 192.168.1.10
+lndconnect-clightning --host 192.168.1.10
 ```
 
 # Use Zeus (mobile lightning wallet) via WireGuard

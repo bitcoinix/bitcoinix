@@ -23,7 +23,6 @@
     ./mempool.nix
     ./electrs.nix
     ./fulcrum.nix
-    ./liquid.nix
     ./btcpayserver.nix
     ./hardware-wallets.nix
 

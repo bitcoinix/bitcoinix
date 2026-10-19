@@ -107,6 +107,15 @@ in {
         assertion = !(config.nix-bitcoin.netns-isolation.enable or false);
         message = "`nix-bitcoin.wireguard` is not compatible with `netns-isolation`.";
       }
+      {
+        # The REST APIs below are bound to 0.0.0.0 and are protected only by the
+        # `extraCommands` rules, which also enforce `restrictPeer`. `extraCommands`
+        # run only with the iptables backend: NixOS rejects a non-empty
+        # `extraCommands` under nftables, and firewalld silently ignores them.
+        assertion = !(lndconnect || lnconnect-clnrest || lndconnect-clightning || cfg.restrictPeer)
+                    || (config.networking.firewall.enable && config.networking.firewall.backend == "iptables");
+        message = "`nix-bitcoin.wireguard` protects the REST API of the enabled `*connect` helpers (bound to 0.0.0.0) and enforces `restrictPeer` only through `networking.firewall.extraCommands`, which run only with the iptables backend. Enable `networking.firewall` and disable `networking.nftables` and `services.firewalld`, so that the firewall defaults to the iptables backend.";
+      }
     ];
 
     networking.wireguard.interfaces.wg-nb = {
@@ -169,19 +178,26 @@ in {
     in {
       allowedUDPPorts = [ wg-nb.listenPort ];
 
+      # Accept REST traffic from the WireGuard subnet only when it arrived via `wg-nb`
+      # and is addressed to the server's tunnel address. `-s` alone would also match
+      # a spoofed subnet source address on any other interface, e.g. the LAN, and
+      # without `-d` a peer could reach the ports via another local address of the
+      # server, which `restrictPeer` is meant to rule out.
       extraCommands =
         optionalString lndconnect ''
-          iptables -w -A nixos-fw -p tcp -s ${wgSubnet}.0/24 --dport ${toString lnd.restPort} -j nixos-fw-accept
+          iptables -w -A nixos-fw -i wg-nb -p tcp -s ${wgSubnet}.0/24 -d ${serverAddress} --dport ${toString lnd.restPort} -j nixos-fw-accept
         ''
         + optionalString lnconnect-clnrest ''
-          iptables -w -A nixos-fw -p tcp -s ${wgSubnet}.0/24 --dport ${toString clnrest.port} -j nixos-fw-accept
+          iptables -w -A nixos-fw -i wg-nb -p tcp -s ${wgSubnet}.0/24 -d ${serverAddress} --dport ${toString clnrest.port} -j nixos-fw-accept
         ''
         + optionalString lndconnect-clightning ''
-          iptables -w -A nixos-fw -p tcp -s ${wgSubnet}.0/24 --dport ${toString clightning-rest.port} -j nixos-fw-accept
+          iptables -w -A nixos-fw -i wg-nb -p tcp -s ${wgSubnet}.0/24 -d ${serverAddress} --dport ${toString clightning-rest.port} -j nixos-fw-accept
         ''
+        # Insert first: NixOS fills `nixos-fw` with its ACCEPT rules (`allowedTCPPorts`) before `extraCommands`.
+        # The rule only matches peer traffic not sent to `serverAddress`, so tunnel flows still pass.
         + optionalString cfg.restrictPeer ''
-          iptables -w -A nixos-fw ${restrictPeerRule}
-          iptables -w -A FORWARD ${restrictPeerRule}
+          iptables -w -I nixos-fw 1 ${restrictPeerRule}
+          iptables -w -I FORWARD 1 ${restrictPeerRule}
         '';
 
       extraStopCommands =
@@ -204,7 +220,7 @@ in {
     services.clightning.tor.enforce = mkIf lnconnect-clnrest false;
 
     services.clightning-rest = mkIf lndconnect-clightning {
-      # clightning-rest always listens on "0.0.0.0"
+      address = "0.0.0.0";
       tor.enforce = false;
     };
 

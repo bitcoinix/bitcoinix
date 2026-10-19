@@ -36,13 +36,14 @@ let
       default = clightning.group;
       description = "The group under which clightning-rest is run.";
     };
-    # Rest server address.
-    # Not configurable. The server always listens on all interfaces:
-    # https://github.com/Ride-The-Lightning/c-lightning-REST/issues/84
-    # Required by netns-isolation.
     address = mkOption {
-      internal = true;
-      default = "0.0.0.0";
+      type = types.str;
+      default = "127.0.0.1";
+      description = ''
+        Address to listen for REST and API documentation connections.
+        The REST API grants full control over clightning, so only expose it
+        to networks you trust.
+      '';
     };
     tor.enforce = nbLib.tor.enforce;
   };
@@ -58,6 +59,7 @@ let
   configFile = builtins.toFile "clightning-rest-config" (builtins.toJSON ({
     PORT = cfg.port;
     DOCPORT = cfg.docPort;
+    BIND = cfg.address;
     LNRPCPATH = "${clightning.dataDir}/${bitcoind.makeNetworkName "bitcoin" "regtest"}/lightning-rpc";
     EXECMODE = "production";
     PROTOCOL = "https";

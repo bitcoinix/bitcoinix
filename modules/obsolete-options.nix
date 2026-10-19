@@ -28,8 +28,6 @@ in {
     (mkRenamedOptionModule [ "services" "lnd" "listen" ] [ "services" "lnd" "address" ])
     (mkRenamedOptionModule [ "services" "lnd" "listenPort" ] [ "services" "lnd" "port" ])
     (mkRenamedOptionModule [ "services" "btcpayserver" "bind" ] [ "services" "btcpayserver" "address" ])
-    (mkRenamedOptionModule [ "services" "liquidd" "bind" ] [ "services" "liquidd" "address" ])
-    (mkRenamedOptionModule [ "services" "liquidd" "rpcbind" ] [ "services" "liquidd" "rpc" "address" ])
     # 0.0.70
     (mkRenamedOptionModule [ "services" "rtl" "cl-rest" ] [ "services" "clightning-rest" ])
 
@@ -72,7 +70,6 @@ in {
     "clightning"
     "lightning-loop"
     "lightning-pool"
-    "liquid"
     "lnd"
     "bitcoind"
   ]) ++
@@ -126,6 +123,20 @@ in {
     '')
     (mkRemovedOptionModule [ "services" "joinmarket-ob-watcher" ] ''
       The joinmarket-ob-watcher is no longer maintained.
+    '')
+  ]
+  ++
+  # 0.1.1
+  [
+    (mkRemovedOptionModule [ "services" "liquidd" ] ''
+      Liquid support has been removed from bitcoinix. Remove services.liquidd and any
+      Liquid-specific onion service or network namespace settings from your configuration.
+      Your Liquid wallets are not deleted; see docs/configuration.md,
+      "Upgrading to config version 0.1.1".
+    '')
+    (mkRemovedOptionModule [ "services" "btcpayserver" "lbtc" ] ''
+      Liquid support has been removed from bitcoinix. Remove services.btcpayserver.lbtc
+      from your configuration. BTCPay Server now supports Bitcoin and Lightning only.
     '')
   ];
 

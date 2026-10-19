@@ -150,7 +150,6 @@ in {
       electrs = mkInfo "";
       fulcrum = mkInfo "";
       btcpayserver = mkInfo "";
-      liquidd = mkInfo "";
       rtl = mkInfo "";
       mempool = mkInfo "";
       mempool-frontend = name: cfg: mkInfoLong {
