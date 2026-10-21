@@ -105,7 +105,7 @@ NixOS modules ([src](modules/modules.nix))
   * [clightning](https://github.com/ElementsProject/lightning) with support for announcing an onion service
     and [database replication](docs/services.md#clightning-database-replication).\
     Available plugins:
-    * [clboss](https://github.com/ZmnSCPxj/clboss): automated C-Lightning Node Manager
+    * [clboss](https://github.com/ksedgwic/clboss): automated C-Lightning Node Manager
     * [clnrest](https://docs.corelightning.org/docs/rest): REST API and websocket notifications for clightning
     * [currencyrate](https://github.com/lightningd/plugins/tree/master/currencyrate): currency converter
     * [feeadjuster](https://github.com/lightningd/plugins/tree/master/feeadjuster): automatically adjusts channel fees to keep channels balanced

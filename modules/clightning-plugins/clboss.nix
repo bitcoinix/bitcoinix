@@ -9,7 +9,7 @@ let cfg = config.services.clightning.plugins.clboss; in
       default = false;
       description = ''
         Whether to enable CLBOSS (clightning plugin).
-        See also: https://github.com/ZmnSCPxj/clboss#operating
+        See also: https://github.com/ksedgwic/clboss#operating
       '';
     };
     min-onchain = mkOption {
