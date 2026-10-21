@@ -8,10 +8,10 @@ let
         type = types.bool;
         default = false;
         description = ''
-          Enable clnrest (clightning plugin).
+          Enable clnrest (Core Lightning plugin).
 
-          clnrest provides a clightning REST API, using clightning RPC calls as its backend.
-          It also broadcasts clightning notifications to listeners connected to its websocket server.
+          clnrest provides a Core Lightning REST API, using Core Lightning RPC calls as its backend.
+          It also broadcasts Core Lightning notifications to listeners connected to its websocket server.
 
           See here for all available options:
           https://docs.corelightning.org/docs/rest

@@ -39,7 +39,7 @@ let
     deployment.secretsDir = mkOption {
       type = types.path;
       description = ''
-        Directory of local secrets that are transferred to the nix-bitcoin node on deployment
+        Directory of local secrets that are transferred to the bitcoinix node on deployment
       '';
     };
 

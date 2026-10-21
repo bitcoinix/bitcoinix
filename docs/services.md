@@ -29,14 +29,16 @@ systemctl cat bitcoind
 systemctl show bitcoind
 ```
 
-# clightning database replication
+<a id="clightning-database-replication"></a>
 
-The clightning database can be replicated to a local path
+# Core Lightning database replication
+
+The Core Lightning database can be replicated to a local path
 or to a remote SSH target.\
-When remote replication is enabled, bitcoinix mounts a SSHFS to a local path.\
+When remote replication is enabled, bitcoinix mounts an SSHFS to a local path.\
 Optionally, backups can be encrypted via `gocryptfs`.
 
-Note: You should also backup the static file `hsm_secret` (located at
+Note: You should also back up the static file `hsm_secret` (located at
 `/var/lib/clightning/bitcoin/hsm_secret` by default), either manually
 or via the `services.backups` module.
 
@@ -60,7 +62,7 @@ or via the `services.backups` module.
 2. Deploy
 
 3. To allow SSH access from the bitcoinix node to the target node, either
-   use the remote node config below, or copy the contents of `$secretsDir/clightning-replication-ssh.pub`
+   use the remote node config below, or copy the contents of `$secretsDir/clightning-replication-ssh-key.pub`
    to the `authorized_keys` file of `user` (or use `ssh-copy-id`).
 
 4. You can restrict the bitcoinix node's capabilities on the SSHFS target
@@ -92,7 +94,7 @@ or via the `services.backups` module.
      isSystemUser = true;
      group = "nb-replication";
      shell = "${pkgs.coreutils}/bin/false";
-     openssh.authorizedKeys.keys = [ "<contents of $secretsDir/clightning-replication-ssh.pub>" ];
+     openssh.authorizedKeys.keys = [ "<contents of $secretsDir/clightning-replication-ssh-key.pub>" ];
    };
    users.groups.nb-replication = {};
    ```
@@ -116,7 +118,7 @@ or via the `services.backups` module.
 
 2. Deploy
 
-clightning will now replicate database files to `local.directory`. This
+Core Lightning will now replicate database files to `local.directory`. This
 can be used to replicate to an external HDD by mounting it at path
 `local.directory`.
 
@@ -160,7 +162,7 @@ See: [Secrets dir](./configuration.md#secrets-dir)
    };
    ```
 
-   ##### For clightning
+   ##### For Core Lightning
 
    Add the following config:
    ```nix
@@ -183,7 +185,7 @@ See: [Secrets dir](./configuration.md#secrets-dir)
    lndconnect
    ```
 
-   ##### For clightning
+   ##### For Core Lightning
    ```
    lnconnect-clnrest
    ```
@@ -226,7 +228,7 @@ services.lnd = {
 networking.firewall.interfaces.eth0.allowedTCPPorts = [ config.services.lnd.restPort ];
 ```
 
-##### For clightning
+##### For Core Lightning
 ```nix
 services.clightning = {
   plugins.clnrest.address = "0.0.0.0";
@@ -281,7 +283,7 @@ There are two ways to establish a secure, direct connection:
    # For lnd
    services.lnd.lndconnect.enable = true;
 
-   # For clightning
+   # For Core Lightning
    services.clightning = {
      plugins.clnrest = {
        enable = true;
@@ -328,7 +330,7 @@ There are two ways to establish a secure, direct connection:
    lndconnect-wg
    ```
 
-   ##### For clightning
+   ##### For Core Lightning
    ```
    lnconnect-clnrest-wg
    ```
@@ -490,11 +492,16 @@ lndconnect-wg --url
 
 8. Follow Bitcoin Core's instructions on [Using Bitcoin Core with Hardware Wallets](https://github.com/bitcoin-core/HWI/blob/master/docs/bitcoin-core-usage.md) to use your Trezor with `bitcoin-cli` on your bitcoinix node
 
-# clightning
+<a id="clightning"></a>
+
+# Core Lightning
+
+Core Lightning (CLN), formerly c-lightning, uses the `services.clightning`
+options, `clightning` systemd service, and `lightning-cli` command in bitcoinix.
 
 ## Plugins
-There is a number of [plugins](https://github.com/lightningd/plugins) available for clightning.
-See [`Readme: Features → clightning`](https://github.com/bitcoinix/bitcoinix/blob/master/README.md) or [search.nixos.org][1] for a complete list.
+There are a number of [plugins](https://github.com/lightningd/plugins) available for Core Lightning.
+See [`README: Features → Core Lightning`](https://github.com/bitcoinix/bitcoinix/blob/master/README.md) or [search.nixos.org][1] for a complete list.
 
 [1]: https://search.nixos.org/flakes?channel=unstable&from=0&size=30&sort=relevance&type=options&query=services.clightning.plugins
 
@@ -517,7 +524,7 @@ When `services.clightning.tor.proxy` is enabled, [trustedcoin](https://github.co
 also uses Tor for all external connections by default.
 In this case, connections to block explorers can sometimes get blocked.
 
-An example of clightning log error output when connections are getting blocked:
+An example of Core Lightning log error output when connections are getting blocked:
 ```
 lightningd[5138]: plugin-trustedcoin estimatefees error: https://blockstream.info/api error: 403 Forbidden
 lightningd[4933]: plugin-trustedcoin getblock error: got something that isn't a block hash: <html><head>...

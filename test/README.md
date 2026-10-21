@@ -1,5 +1,5 @@
 The [`run-tests.sh`](./run-tests.sh) command is the most convenient and versatile way to run tests.\
-It leave no traces (outside of `/nix/store`) on the host system.
+It leaves no traces (outside of `/nix/store`) on the host system.
 
 `run-tests.sh` requires Nix with [Flakes](https://wiki.nixos.org/wiki/Flakes).
 
@@ -62,7 +62,7 @@ c systemctl status bitcoind
 
 # Running tests with Flakes
 
-Tests can also be accessed via the nix-bitcoin flake:
+Tests can also be accessed via the bitcoinix flake:
 
 ```bash
 # Build test

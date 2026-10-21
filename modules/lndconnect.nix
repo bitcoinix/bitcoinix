@@ -43,7 +43,7 @@ let
         default = false;
         description = ''
           Add a `lnconnect-clnrest` binary to the system environment which prints
-          connection info for clightning clients.
+          connection info for Core Lightning clients.
           See: https://github.com/LN-Zap/lndconnect
 
           Usage:
@@ -78,7 +78,7 @@ let
         default = false;
         description = ''
         Add a `lndconnect-clightning` binary to the system environment which prints
-        connection info for clightning clients.
+        connection info for Core Lightning clients.
         See: https://github.com/LN-Zap/lndconnect
 
         Usage:
@@ -100,7 +100,7 @@ let
         type = types.bool;
         default = false;
         description = ''
-          Create an onion service for the clightning REST server,
+          Create an onion service for the Core Lightning REST server,
           which is used by lndconnect.
         '';
       };
@@ -152,10 +152,10 @@ let
     )
 
     ${optionalString isClightning
-      # - Change URL procotcol to c-lightning-rest
+      # - Change URL protocol to c-lightning-rest
       # - Encode macaroon as hex (in uppercase) instead of base 64.
       #   Because `macaroon` is always the last URL fragment, the
-      #   sed replacement below works correctly.
+      #   Bash substitution below works correctly.
       ''
         macaroonHex=$(${getExe pkgs.xxd} -p -u -c 99999 '${authSecretPath}')
         # Bash substitution, not sed: a sed program is an argv element and is
@@ -166,7 +166,7 @@ let
     }
 
     ${optionalString isClnrest
-      # Change URL procotcol to clnrest
+      # Change URL protocol to clnrest
       ''
         rune=$(cat '${authSecretPath}')
         # Bash substitution, not sed; see the clightning-rest branch above.

@@ -1,11 +1,11 @@
 ## Examples
 
-The easiest way to try out nix-bitcoin is to use one of the provided examples.
+The easiest way to try out bitcoinix is to use one of the provided examples.
 
 ### Flakes-based quick start
 
 If you use a Flakes-enabled version of Nix, run the following command to start a minimal
-nix-bitcoin QEMU VM:
+bitcoinix QEMU VM:
 ```bash
 nix run github:bitcoinix/bitcoinix/v<version>
 ```
@@ -25,7 +25,7 @@ cd bitcoinix/examples/
 nix-shell
 ```
 
-The following example scripts set up a nix-bitcoin node according to [`./configuration.nix`](configuration.nix) and then
+The following example scripts set up a bitcoinix node according to [`./configuration.nix`](configuration.nix) and then
 shut down immediately. They leave no traces (outside of `/nix/store`) on the host system.\
 By default, [`./configuration.nix`](configuration.nix) enables `bitcoind` and `clightning`.
 
@@ -37,12 +37,12 @@ By default, [`./configuration.nix`](configuration.nix) enables `bitcoind` and `c
   Requires: [Nix](https://nixos.org/nix/), Linux
 
 - [`./deploy-krops.sh`](deploy-krops.sh) creates a QEMU VM and deploys a
-  nix-bitcoin configuration to it using [krops](https://github.com/krebs/krops).\
+  bitcoinix configuration to it using [krops](https://github.com/krebs/krops).\
   Requires: [Nix](https://nixos.org/nix/), Linux
 
 - [`./deploy-container-minimal.sh`](deploy-container-minimal.sh) creates a
   container defined by [importable-configuration.nix](importable-configuration.nix).\
-  You can copy and import this file to use nix-bitcoin in an existing NixOS configuration.\
+  You can copy and import this file to use bitcoinix in an existing NixOS configuration.\
   The configuration doesn't use the [secure-node.nix](../modules/presets/secure-node.nix) preset.\
   Requires: [Nix](https://nixos.org/), a systemd-based Linux distro and root privileges
 
@@ -53,17 +53,16 @@ the node:
 ```
 
 ### Tests
-The [nix-bitcoin test suite](../test/README.md) is also useful for exploring features.
+The [bitcoinix test suite](../test/README.md) is also useful for exploring features.
 
-### Real-world example
-Check the [server repo](https://github.com/fort-nix/nixbitcoin.org) for https://nixbitcoin.org
-to see the configuration of a Flakes-based nix-bitcoin node that's used in production.
+### Deployment examples
 
-The commands in `shell.nix` allow you to locally run the node in a VM or container.
+See [bitcoinix-examples](https://github.com/bitcoinix/bitcoinix-examples) for
+additional deployment configurations, including Colmena.
 
 ### Flakes
 
-Flakes make it easy to include `nix-bitcoin` in an existing NixOS config.
+Flakes make it easy to include `bitcoinix` in an existing NixOS config.
 The [flakes example](./flakes/flake.nix) shows how to use `nix-bitcoin` as an input to a system flake.
 
 ### Persistent container with Flakes
@@ -72,8 +71,8 @@ The [persistent container](./container) example shows how to run a Flake-based n
 in a container.\
 Requires: A systemd-based Linux distro and root privileges.
 
-### Extending nix-bitcoin with Flakes
+### Extending bitcoinix with Flakes
 
-The [mempool extension flake](https://github.com/fort-nix/nix-bitcoin-mempool) shows how to define new
-pkgs and modules in a Flake.\
-Since mempool is now a core nix-bitcoin module, this Flake just serves as an example.
+The historical [mempool extension flake](https://github.com/fort-nix/nix-bitcoin-mempool)
+illustrates how to define packages and modules in a flake for the predecessor project.
+Mempool is included in bitcoinix itself; enable it with `services.mempool.enable`.

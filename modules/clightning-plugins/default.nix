@@ -3,9 +3,9 @@
 with lib;
 let
   options.services.clightning.plugins = {
-    currencyrate.enable = mkEnableOption "Currencyrate (clightning plugin)";
-    monitor.enable = mkEnableOption "Monitor (clightning plugin)";
-    rebalance.enable = mkEnableOption "Rebalance (clightning plugin)";
+    currencyrate.enable = mkEnableOption "Currencyrate (Core Lightning plugin)";
+    monitor.enable = mkEnableOption "Monitor (Core Lightning plugin)";
+    rebalance.enable = mkEnableOption "Rebalance (Core Lightning plugin)";
   };
 
   cfg = config.services.clightning.plugins;

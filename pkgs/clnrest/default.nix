@@ -39,7 +39,7 @@ rustPlatform.buildRustPackage rec {
   checkFlags = [ "--skip=polls_until_channel_ready" ];
 
   meta = with lib; {
-    description = "REST plugin for clightning";
+    description = "REST plugin for Core Lightning";
     homepage = "https://github.com/ElementsProject/lightning/tree/master/plugins/rest-plugin";
     license = licenses.mit;
     maintainers = with maintainers; [

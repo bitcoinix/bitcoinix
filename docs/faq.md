@@ -1,12 +1,12 @@
 > [!NOTE]
 > This document is inherited from nix-bitcoin, the predecessor project. It is a work in progress and may be outdated.
 
-- **Q:** The clightning service is running but when I try to use it (f.e. by running
+- **Q:** The Core Lightning service is running but when I try to use it (e.g. by running
   `lightning-cli getinfo` as user operator) all I get is `lightning-cli: Connecting
   to 'lightning-rpc': Connection refused`.\
-  **A:** Check your clightning logs with `journalctl -eu clightning`. Do you see
+  **A:** Check your Core Lightning logs with `journalctl -eu clightning`. Do you see
   something like `bitcoin-cli getblock ... false` failed? Are you using pruned mode?
-  That means that clightning hasn't seen all the blocks it needs to and it can't get
+  That means that Core Lightning hasn't seen all the blocks it needs to and it can't get
   that block because your node is pruned. \
   If you're just setting up a new node you can `systemctl stop clightning` and wipe
   your `/var/lib/clightning` directory. Otherwise you need to reindex the Bitcoin

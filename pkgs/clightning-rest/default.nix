@@ -46,7 +46,7 @@ let self = stdenvNoCC.mkDerivation {
   '';
 
   meta = with lib; {
-    description = "REST API for C-Lightning";
+    description = "REST API for Core Lightning";
     homepage = "https://github.com/Ride-The-Lightning/c-lightning-REST";
     license = licenses.mit;
     maintainers = with maintainers; [ nixbitcoin erikarvstedt ];

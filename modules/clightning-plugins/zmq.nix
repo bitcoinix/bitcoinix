@@ -3,7 +3,7 @@
 with lib;
 let
   options.services.clightning.plugins.zmq = {
-    enable = mkEnableOption "ZMQ (clightning plugin)";
+    enable = mkEnableOption "ZMQ (Core Lightning plugin)";
   } // lib.genAttrs endpoints mkEndpointOption;
 
   cfg = config.services.clightning.plugins.zmq;

@@ -206,7 +206,7 @@ ssh root@nix-bitcoin-node 'systemctl stop bitcoind'
 
 # 2. Copy the data to the bitcoinix node
 # Important: Add a trailing slash to the source path
-rsync /path/to/existing/bitcoind-datadir/ root@nix-bitcoin-node:/var/lib/bitcoind
+rsync -a /path/to/existing/bitcoind-datadir/ root@nix-bitcoin-node:/var/lib/bitcoind
 
 # 3. Fix data dir permissions on the bitcoinix node
 ssh root@nix-bitcoin-node 'chown -R bitcoin: /var/lib/bitcoind'
@@ -253,7 +253,7 @@ services.bitcoind = {
   # Search for `whitelistedPort` in this repo to see the affected services.
   # If you're using one of these services, either add a whitelisted p2p port
   # on your remote node via `whitebind` and set it here:
-  whitelistedPort = <remote whitebind RPC port>;
+  whitelistedPort = <remote whitebind P2P port>;
   #
   # Or use the default p2p port and add `whitelist=<address of this node>` to
   # your remote bitcoind config:
@@ -276,7 +276,7 @@ For each service that connects to bitcoind and has option
 `secure-node.nix` or `enable-tor.nix`), you need to
 allow the remote bitcoind connection:
 ```nix
-systemd.services.<service>.serviceConfig.IPAddressAllow = [ ${services.bitcoind.rpc.address} ];
+systemd.services.<service>.serviceConfig.IPAddressAllow = [ config.services.bitcoind.rpc.address ];
 ```
 
 > The above configuration is only required if the remote bitcoind **is

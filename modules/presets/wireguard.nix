@@ -9,7 +9,7 @@
 # for usage instructions.
 
 # This is a rather opinionated implementation that lacks the flexibility offered by
-# other nix-bitcoin modules, so ship this as a `preset`.
+# other bitcoinix modules, so ship this as a `preset`.
 # Some users will prefer to use `lndconnect` with their existing WireGuard or Tailscale setup.
 
 with lib;

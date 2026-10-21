@@ -7,7 +7,7 @@ let
       type = types.bool;
       default = false;
       description = ''
-        Enable feeaduster (clightning plugin).
+        Enable feeadjuster (Core Lightning plugin).
         This plugin auto-updates channel fees to keep channels balanced.
 
         See here for all available options:

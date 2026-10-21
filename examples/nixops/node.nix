@@ -1,4 +1,4 @@
-# This is an example network definition for deploying a nix-bitcoin node via NixOps.
+# This is an example network definition for deploying a bitcoinix node via NixOps.
 # NixOps deployment is currently untested.
 
 {

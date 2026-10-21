@@ -8,7 +8,7 @@
 
     # FIXME: The secure-node preset is an opinionated config to enhance security
     # and privacy.
-    # Among other settings, it routes traffic of all nix-bitcoin services through Tor.
+    # Among other settings, it routes traffic of all bitcoinix services through Tor.
     # Turn it off when not needed.
     <nix-bitcoin/modules/presets/secure-node.nix>
 
@@ -33,7 +33,7 @@
   # Bitcoind is enabled by default via secure-node.nix.
   #
   # Set this option to enable pruning with a specified MiB value.
-  # clightning is compatible with pruning. See
+  # Core Lightning is compatible with pruning. See
   # https://github.com/ElementsProject/lightning/#pruning for more information.
   # LND and electrs are not compatible with pruning.
   # services.bitcoind.prune = 100000;
@@ -47,23 +47,23 @@
   #   maxorphantx=110
   # '';
 
-  ### CLIGHTNING
-  # Enable clightning, a Lightning Network implementation in C.
+  ### CORE LIGHTNING
+  # Enable Core Lightning, a Lightning Network implementation in C.
   services.clightning.enable = true;
   #
-  # Set this to create an onion service by which clightning can accept incoming connections
+  # Set this to create an onion service by which Core Lightning can accept incoming connections
   # via Tor.
   # The onion service is automatically announced to peers.
   # nix-bitcoin.onionServices.clightning.public = true;
   #
   # == Plugins
-  # See ../README.md (Features → clightning) for the list of available plugins.
+  # See ../README.md (Features → Core Lightning) for the list of available plugins.
   # services.clightning.plugins.clboss.enable = true;
   #
   # == REST server
-  # Set this to create a clightning REST onion service.
+  # Set this to create a Core Lightning REST onion service.
   # This also adds binary `lnconnect-clnrest` to the system environment.
-  # This binary creates QR codes or URLs for connecting applications to clightning
+  # This binary creates QR codes or URLs for connecting applications to Core Lightning
   # via the REST onion service.
   # You can also connect via WireGuard instead of Tor.
   # See ../docs/services.md for details.
@@ -80,7 +80,7 @@
   # Set this to enable lnd, a lightning implementation written in Go.
   # services.lnd.enable = true;
   #
-  # NOTE: In order to avoid collisions with clightning you must disable clightning or
+  # NOTE: In order to avoid collisions with Core Lightning you must disable Core Lightning or
   # change the services.clightning.port or services.lnd.port to a port other than
   # 9735.
   #
@@ -115,11 +115,11 @@
   # Alternatively, you can have these files backed up by services.backups below.
 
   ### RIDE THE LIGHTNING
-  # Set this to enable RTL, a web interface for lnd and clightning.
+  # Set this to enable RTL, a web interface for LND and Core Lightning.
   # services.rtl.enable = true;
   #
-  # Set this to add a clightning node interface.
-  # Automatically enables clightning.
+  # Set this to add a Core Lightning node interface.
+  # Automatically enables Core Lightning.
   # services.rtl.nodes.clightning.enable = true;
   #
   # Set this to add a lnd node interface.
@@ -163,19 +163,19 @@
   #
   # services.fulcrum.enable = true;
 
-  ### BTCPayServer
-  # Set this to enable BTCPayServer, a self-hosted, open-source
+  ### BTCPay Server
+  # Set this to enable BTCPay Server, a self-hosted, open-source
   # cryptocurrency payment processor.
   # services.btcpayserver.enable = true;
   #
-  # Privacy Warning: BTCPayServer currently looks up price rates without
+  # Privacy Warning: BTCPay Server currently looks up price rates without
   # proxying them through Tor. This means an outside observer can correlate
-  # your BTCPayServer usage, like invoice creation times, with your IP address.
+  # your BTCPay Server usage, like invoice creation times, with your IP address.
   #
-  # Enable this option to connect BTCPayServer to clightning.
+  # Enable this option to connect BTCPay Server to Core Lightning.
   # services.btcpayserver.lightningBackend = "clightning";
   #
-  # Enable this option to connect BTCPayServert to lnd.
+  # Enable this option to connect BTCPay Server to lnd.
   # services.btcpayserver.lightningBackend = "lnd";
   #
   # The lightning backend service is automatically enabled.
@@ -217,9 +217,11 @@
   # nix-bitcoin.nodeinfo.enable = true;
 
   ### Backups
-  # Set this to enable nix-bitcoin's own backup service. By default, it
-  # uses duplicity to incrementally back up all important files in /var/lib to
-  # /var/lib/localBackups once a day.
+  # Set this to enable bitcoinix's own backup service. By default, it
+  # uses duplicity to incrementally back up selected node data to
+  # /var/lib/localBackups. Backups are not scheduled by default.
+  # Set a frequency for automatic backups, for example:
+  # services.backups.frequency = "daily";
   # services.backups.enable = true;
   #
   # You can pull the localBackups folder with
@@ -229,12 +231,12 @@
   # Supply the sftp password by appending the FTP_PASSWORD environment variable
   # to secrets/backup-encryption-env like so
   # `echo "FTP_PASSWORD=<password>" >> secrets/backup-encryption-env`
-  # You many also need to set a ssh host and publickey with
+  # You may also need to set an SSH host and public key with
   # programs.ssh.knownHosts."host" = {
   #   hostNames = [ "host" ];
   #   publicKey = "<ssh public from `ssh-keyscan`>";
   # };
-  # If you also want to backup bulk data like the Bitcoin blockchain
+  # If you also want to back up bulk data like the Bitcoin blockchain
   # and electrs data directory, enable
   # services.backups.with-bulk-data = true;
 
@@ -280,8 +282,8 @@
   # (e.g. man configuration.nix or on https://nixos.org/nixos/options.html).
   system.stateVersion = "26.05"; # Did you read the comment?
 
-  # The nix-bitcoin release version that your config is compatible with.
-  # When upgrading to a backwards-incompatible release, nix-bitcoin will display an
-  # an error and provide instructions for migrating your config to the new release.
+  # The bitcoinix release version that your config is compatible with.
+  # When upgrading to a backwards-incompatible release, bitcoinix will display an
+  # error and provide instructions for migrating your config to the new release.
   nix-bitcoin.configVersion = "0.1.1";
 }

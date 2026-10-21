@@ -22,7 +22,7 @@ let
       readOnly = true;
       description = ''
         A derivation that runs shellcheck on all bash scripts included
-        in nix-bitcoin services.
+        in bitcoinix services.
       '';
       default = shellcheckServices;
     };

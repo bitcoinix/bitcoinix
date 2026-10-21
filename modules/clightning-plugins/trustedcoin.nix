@@ -4,7 +4,7 @@ with lib;
 let cfg = config.services.clightning.plugins.trustedcoin; in
 {
   options.services.clightning.plugins.trustedcoin = {
-    enable = mkEnableOption "Trustedcoin (clightning plugin)";
+    enable = mkEnableOption "Trustedcoin (Core Lightning plugin)";
 
     package = mkOption {
       type = types.package;

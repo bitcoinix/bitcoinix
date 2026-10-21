@@ -20,10 +20,7 @@
       supportedSystems = [
         "x86_64-linux"
         "aarch64-linux"
-        # TODO: Try to enable these platforms. They were disabled for 32-bit
-        # platforms due to broken `pymemcache` required by joinmarket.
-        # "i686-linux"
-        # "armv7l-linux"
+        # Only these 64-bit Linux platforms are supported and tested.
       ];
 
       test = import ./test/tests.nix nixpkgs.lib self.nixosModules.default;
@@ -59,8 +56,8 @@
               Only relevant if you are using a nixpkgs version for evaluating your system
               that differs from the one that is locked by this flake (via input `nixpkgs`).
               If this is the case, enabling this option may result in a more stable system
-              because the nix-bitcoin services use the exact pkgs versions that are tested
-              by nix-bitcoin.
+              because the bitcoinix services use the exact pkgs versions that are tested
+              by bitcoinix.
               The downsides are increased evaluation times and increased system
               closure size.
 
@@ -116,7 +113,7 @@
         apps = rec {
           default = vm;
 
-          # Run a basic nix-bitcoin node in a VM
+          # Run a basic bitcoinix node in a VM
           vm = {
             type = "app";
             program = toString packages.runVM;

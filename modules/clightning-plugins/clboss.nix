@@ -8,7 +8,7 @@ let cfg = config.services.clightning.plugins.clboss; in
       type = types.bool;
       default = false;
       description = ''
-        Whether to enable CLBOSS (clightning plugin).
+        Whether to enable CLBOSS (Core Lightning plugin).
         See also: https://github.com/ksedgwic/clboss#operating
       '';
     };
@@ -17,7 +17,7 @@ let cfg = config.services.clightning.plugins.clboss; in
       default = 30000;
       description = ''
         Target amount (in satoshi) that CLBOSS will leave on-chain.
-        clboss will only open new channels if the funds in your clightning wallet are
+        clboss will only open new channels if the funds in your Core Lightning wallet are
         larger than this amount.
       '';
     };

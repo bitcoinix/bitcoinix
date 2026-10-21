@@ -7,7 +7,7 @@ let
       type = types.bool;
       default = false;
       description = ''
-        Enable live replication of the clightning database.
+        Enable live replication of the Core Lightning database.
         This prevents losing off-chain funds when the primary wallet file becomes
         inaccessible.
 
@@ -30,11 +30,11 @@ let
           The SSH destination for which a SSHFS will be mounted.
           `directory` is relative to the home of `user`.
 
-          A SSH key is automatically generated and stored in file
-          `$secretsDir/clightning-replication-ssh`.
+          An SSH key is automatically generated and stored in file
+          `$secretsDir/clightning-replication-ssh-key`.
           The SSH server must allow logins via this key.
           I.e., the `authorized_keys` file of `user` must contain
-          `$secretsDir/clightning-replication-ssh.pub`.
+          `$secretsDir/clightning-replication-ssh-key.pub`.
         '';
       };
       port = mkOption {

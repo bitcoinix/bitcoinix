@@ -5,7 +5,7 @@ This directory contains docs and helper scripts for developing and debugging:
 
 - [`dev.sh`](./dev.sh): misc dev helpers
 - [`dev-features.sh`](./dev-features.sh): helpers for developing specific
-  nix-bitcoin features, like services
+  bitcoinix features, like services
 - [`topics`](./topics) features specific topics
 - [`dev-scenarios.nix`](./dev-scenarios.nix): extra test scenarios used in the above scripts
 
@@ -48,11 +48,11 @@ the scripts in dir [`helper`](../helper) added to `PATH`.
 This is an opinionated, [direnv](https://direnv.net/)-based dev env, optimized for developer experience.
 
 [`dev-env/create.sh`](./dev-env/create.sh) creates a git repo with the following contents:
-- Dir `src` which contains the nix-bitcoin repo
+- Dir `src` which contains the bitcoinix repo
 - Dir `bin` for helper scripts
 - File `scenarios.nix` for custom test scenarios
 - File `.envrc` that defines a [direnv](https://direnv.net/) environment,
-  mainly for adding nix-bitcoin and helper scripts to `PATH`
+  mainly for adding bitcoinix and helper scripts to `PATH`
 
 #### Installation
 
@@ -96,7 +96,7 @@ cat .envrc
 # You can use this file to define extra scenarios
 cat scenarios.nix
 
-# Binary `dev-run-tests` runs nix-bitcoin's `run-tests.sh` with extra scenarios from ./scenarios.nix
+# Binary `dev-run-tests` runs bitcoinix's `run-tests.sh` with extra scenarios from ./scenarios.nix
 # Example:
 # Run command `nodeinfo` in `myscenario` (defined in ./scenarios.nix) via a container
 dev-run-tests -s myscenario container --run c nodeinfo

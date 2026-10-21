@@ -33,7 +33,7 @@ let
     dataDir = mkOption {
       type = types.path;
       default = "/var/lib/clightning";
-      description = "The data directory for clightning.";
+      description = "The data directory for Core Lightning.";
     };
     networkDir = mkOption {
       readOnly = true;
@@ -75,18 +75,18 @@ let
     user = mkOption {
       type = types.str;
       default = "clightning";
-      description = "The user as which to run clightning.";
+      description = "The user as which to run Core Lightning.";
     };
     group = mkOption {
       type = types.str;
       default = cfg.user;
-      description = "The group as which to run clightning.";
+      description = "The group as which to run Core Lightning.";
     };
     package = mkOption {
       type = types.package;
       default = nbPkgs.clightning;
       defaultText = "config.nix-bitcoin.pkgs.clightning";
-      description = "The package providing clightning binaries.";
+      description = "The package providing Core Lightning binaries.";
     };
     cli = mkOption {
       readOnly = true;
@@ -94,7 +94,7 @@ let
         ${cfg.package}/bin/lightning-cli --lightning-dir='${cfg.dataDir}' "$@"
       '';
       defaultText = "(See source)";
-      description = "Binary to connect with the clightning instance.";
+      description = "Binary to connect with the Core Lightning instance.";
     };
     getPublicAddressCmd = mkOption {
       type = types.str;

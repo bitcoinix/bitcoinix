@@ -41,7 +41,7 @@ let
       default = "127.0.0.1";
       description = ''
         Address to listen for REST and API documentation connections.
-        The REST API grants full control over clightning, so only expose it
+        The REST API grants full control over Core Lightning, so only expose it
         to networks you trust.
       '';
     };

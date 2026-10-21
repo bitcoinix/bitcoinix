@@ -74,9 +74,7 @@ sudo ./test/run-tests.sh container          # fast container; needs systemd + ro
   into the flake's pinned nixpkgs.
 - `pkgs/pinned.nix` is **generated** by `helper/update-flake.sh` (packages are
   pinned to stable vs. unstable by version comparison) — don't hand-edit it.
-- Only `x86_64-linux` and `aarch64-linux` are supported. 32-bit was dropped for
-  `pymemcache` (a joinmarket dep); joinmarket is now removed, so the rationale in
-  `flake.nix` is stale.
+- Only `x86_64-linux` and `aarch64-linux` are supported and tested.
 - No Nix formatter/linter is set up; `nix flake check` and `./test/shellcheck.sh`
   are the static checks. Shellcheck also covers shebang'd extensionless files.
 

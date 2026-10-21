@@ -3,7 +3,7 @@
 with lib;
 let
   options.services.rtl = {
-    enable = mkEnableOption "Ride The Lightning, a web interface for lnd and clightning";
+    enable = mkEnableOption "Ride The Lightning, a web interface for LND and Core Lightning";
     address = mkOption {
       type = types.str;
       default = "127.0.0.1";
@@ -24,7 +24,7 @@ let
         enable = mkOption {
           type = types.bool;
           default = false;
-          description = "Enable the clightning node interface.";
+          description = "Enable the Core Lightning node interface.";
         };
         extraConfig = mkOption {
           type = with types; attrsOf anything;
@@ -34,7 +34,7 @@ let
             Settings.logLevel = "DEBUG";
           };
           description = ''
-            Extra clightning node configuration.
+            Extra Core Lightning node configuration.
             See here for all available options:
             https://github.com/Ride-The-Lightning/RTL/blob/master/.github/docs/Application_configurations.md
           '';
@@ -65,7 +65,7 @@ let
         default = false;
         description = ''
           Reverse the order of nodes shown in the UI.
-          By default, clightning is shown before lnd.
+          By default, Core Lightning is shown before LND.
         '';
       };
     };

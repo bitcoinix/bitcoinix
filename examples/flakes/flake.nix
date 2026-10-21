@@ -6,7 +6,7 @@
 # Make sure to check and edit all lines marked by 'FIXME:'
 
 {
-  description = "A basic nix-bitcoin node";
+  description = "A basic bitcoinix node";
 
   # Pin the latest release tag listed at https://github.com/bitcoinix/bitcoinix/tags
   inputs.nix-bitcoin.url = "github:bitcoinix/bitcoinix/v0.1.0";
@@ -38,7 +38,7 @@
           services.clightning.enable = true;
 
           # When using nix-bitcoin as part of a larger NixOS configuration, set the following to enable
-          # interactive access to nix-bitcoin features (like bitcoin-cli) for your system's main user
+          # interactive access to bitcoinix features (like bitcoin-cli) for your system's main user
           nix-bitcoin.operator = {
             enable = true;
             # FIXME: Set this to your system's main user
@@ -57,7 +57,7 @@
           # If you use a custom nixpkgs version for evaluating your system
           # (instead of `nix-bitcoin.inputs.nixpkgs` like in this example),
           # consider setting `useVersionLockedPkgs = true` to use the exact pkgs
-          # versions for nix-bitcoin services that are tested by nix-bitcoin.
+          # versions for bitcoinix services that are tested by bitcoinix.
           # The downsides are increased evaluation times and increased system
           # closure size.
           #

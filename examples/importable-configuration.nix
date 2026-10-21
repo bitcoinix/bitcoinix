@@ -25,7 +25,7 @@ in
   services.bitcoind.enable = true;
   services.clightning.enable = true;
 
-  # Enable interactive access to nix-bitcoin features (like bitcoin-cli) for
+  # Enable interactive access to bitcoinix features (like bitcoin-cli) for
   # your system's main user
   nix-bitcoin.operator = {
     enable = true;
@@ -33,6 +33,6 @@ in
     name = "main";
   };
 
-  # Prevent garbage collection of the nix-bitcoin source
+  # Prevent garbage collection of the bitcoinix source
   system.extraDependencies = [ nix-bitcoin ];
 }

@@ -35,9 +35,8 @@ let
             should create a custom nginx config that includes TLS, backend caching, rate limiting
             and performance tuning.
             For this task, reuse the config snippets from option `services.mempool.frontend.nginxConfig`.
-            See also: https://github.com/fort-nix/nixbitcoin.org/blob/master/website/mempool.nix,
-            which contains a mempool nginx config for public hosting (running at
-            https://mempool.nixbitcoin.org).
+            Historical example: https://github.com/fort-nix/nixbitcoin.org/blob/master/website/mempool.nix
+            contains a mempool nginx config for public hosting from the predecessor project.
           '';
         };
         address = mkOption {

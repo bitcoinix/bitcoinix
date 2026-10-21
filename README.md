@@ -79,7 +79,7 @@ the project's direction, supported features, and hardware.
 Get started
 ---
 - See the [examples](examples/README.md) for an overview of all features.
-- To setup a new node from scratch, see the [installation instructions](docs/install.md).
+- To set up a new node from scratch, see the [installation instructions](docs/install.md).
 - To add bitcoinix to an existing NixOS configuration, see [importable-configuration.nix](examples/importable-configuration.nix)
   and the [Flake example](examples/flakes/flake.nix).
 
@@ -101,34 +101,34 @@ A [configuration preset](modules/presets/secure-node.nix) for setting up a secur
 
 NixOS modules ([src](modules/modules.nix))
 * Application services
-  * [bitcoind](https://github.com/bitcoin/bitcoin)
-  * [clightning](https://github.com/ElementsProject/lightning) with support for announcing an onion service
-    and [database replication](docs/services.md#clightning-database-replication).\
+  * [Bitcoin Core](https://github.com/bitcoin/bitcoin) (`services.bitcoind`)
+  * [Core Lightning (CLN)](https://github.com/ElementsProject/lightning) with support for announcing an onion service
+    (`services.clightning`) and [database replication](docs/services.md#core-lightning-database-replication).\
     Available plugins:
-    * [clboss](https://github.com/ksedgwic/clboss): automated C-Lightning Node Manager
-    * [clnrest](https://docs.corelightning.org/docs/rest): REST API and websocket notifications for clightning
+    * [clboss](https://github.com/ksedgwic/clboss): automated Core Lightning node manager
+    * [clnrest](https://docs.corelightning.org/docs/rest): REST API and websocket notifications for Core Lightning
     * [currencyrate](https://github.com/lightningd/plugins/tree/master/currencyrate): currency converter
     * [feeadjuster](https://github.com/lightningd/plugins/tree/master/feeadjuster): automatically adjusts channel fees to keep channels balanced
     * [monitor](https://github.com/lightningd/plugins/tree/master/monitor): helps you analyze the health of your peers and channels
     * [rebalance](https://github.com/lightningd/plugins/tree/master/rebalance): keeps your channels balanced
     * [trustedcoin](https://github.com/nbd-wtf/trustedcoin) ([experimental](docs/services.md#trustedcoin)): replaces bitcoind with trusted public explorers
     * [zmq](https://github.com/lightningd/plugins/tree/master/zmq): publishes notifications via ZeroMQ to configured endpoints
-  * [clightning-rest](https://github.com/Ride-The-Lightning/c-lightning-REST): REST API for clightning
-  * [lnd](https://github.com/lightningnetwork/lnd) with support for announcing an onion service and [static channel backups](https://github.com/lightningnetwork/lnd/blob/master/docs/recovery.md)
+  * [clightning-rest](https://github.com/Ride-The-Lightning/c-lightning-REST): REST API for Core Lightning
+  * [LND](https://github.com/lightningnetwork/lnd) with support for announcing an onion service and [static channel backups](https://github.com/lightningnetwork/lnd/blob/master/docs/recovery.md)
     * [charge-lnd](https://github.com/accumulator/charge-lnd): policy-based channel fee manager
-  * [lndconnect](https://github.com/LN-Zap/lndconnect): connect your wallet to lnd or
-    clightning [via WireGuard](./docs/services.md#use-zeus-mobile-lightning-wallet-via-wireguard) or
+  * [lndconnect](https://github.com/LN-Zap/lndconnect): connect your wallet to LND or
+    Core Lightning [via WireGuard](./docs/services.md#use-zeus-mobile-lightning-wallet-via-wireguard) or
     [Tor](./docs/services.md#use-zeus-mobile-lightning-wallet-via-tor)
-  * [Ride The Lightning](https://github.com/Ride-The-Lightning/RTL): web interface for `lnd` and `clightning`
+  * [Ride The Lightning](https://github.com/Ride-The-Lightning/RTL): web interface for LND and Core Lightning
   * [mempool](https://github.com/mempool/mempool): Bitcoin visualizer, explorer, and API service
   * [electrs](https://github.com/romanz/electrs): Electrum server
   * [fulcrum](https://github.com/cculianu/Fulcrum): Electrum server (see [the module](modules/fulcrum.nix) for a comparison with electrs)
-  * [btcpayserver](https://github.com/btcpayserver/btcpayserver)
+  * [BTCPay Server](https://github.com/btcpayserver/btcpayserver)
   * [bitcoin-core-hwi](https://github.com/bitcoin-core/HWI)
 * Helper
   * [netns-isolation](modules/netns-isolation.nix): isolates applications on the network-level via network namespaces
   * [nodeinfo](modules/nodeinfo.nix): script which prints info about the node's services
-  * [backups](modules/backups.nix): duplicity backups of all your node's important files
+  * [backups](modules/backups.nix): duplicity backups of selected node data, with configurable extra files
   * [operator](modules/operator.nix): configures a non-root user who has access to client tools (e.g. `bitcoin-cli`, `lightning-cli`)
 
 Security
