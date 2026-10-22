@@ -86,6 +86,16 @@ let
         };
       in map (plugin: pluginPkgs.${plugin}.path) enabled;
 
+      # Services that use `nix-bitcoin.lib.defaultHardening`, with their `ReadOnlyPaths`
+      tests.hardening-ro-paths = true;
+      test.data.hardening-ro-paths = let
+        # This syscall blocklist entry is specific to `defaultHardening`
+        marker = builtins.elemAt config.nix-bitcoin.lib.defaultHardening.SystemCallFilter 1;
+        usesDefaultHardening = service:
+          builtins.elem marker (toList (service.serviceConfig.SystemCallFilter or []));
+      in mapAttrs (_: service: toList (service.serviceConfig.ReadOnlyPaths or []))
+        (filterAttrs (_: usesDefaultHardening) config.systemd.services);
+
       tests.clightning-rest = cfg.clightning-rest.enable;
 
       tests.rtl = cfg.rtl.enable;

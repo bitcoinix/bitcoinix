@@ -328,6 +328,24 @@ systemd.services.<service>.wantedBy = mkForce [];
 This way, the systemd service still exists, but is not automatically started.\
 Note: This only works for services that are not required by other active services.
 
+# Write to /run or /dev/shm from a service hook
+
+Most bitcoinix services (those that use `nix-bitcoin.lib.defaultHardening`, like
+`bitcoind`, `clightning` and `lnd`) see `/run` and `/dev` as read-only.
+A custom `preStart`, `postStart` or `ExecStartPost` command in these services that
+writes there fails with `Read-only file system`.
+The service's own `RuntimeDirectory` (e.g. `/run/lnd`) and data dir stay writable,
+and so do device nodes like `/dev/null`.
+
+To allow writing to another path, add it to `ReadWritePaths`. The path must exist
+when the service starts:
+```nix
+systemd.services.lnd.serviceConfig.ReadWritePaths = [ "/run/my-dir" ];
+```
+This adds to the service's own `ReadWritePaths`; it doesn't replace them.\
+Alternatively, prefix a command in `ExecStartPre` or `ExecStartPost` with `+` to run
+it as root outside the sandbox.
+
 # Appendix
 
 ## Secrets dir

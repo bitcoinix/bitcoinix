@@ -713,6 +713,91 @@ def _():
     )
 
 
+# Runs before tests that stop services (backups) so that most services are running
+@test("hardening-ro-paths")
+def _():
+    units = test_data["hardening-ro-paths"]
+    assert "bitcoind" in units, f"defaultHardening services not detected: {units}"
+
+    # Every service keeps /run and /dev read-only, also when it overrides
+    # `defaultHardening` attrs
+    missing = {unit: ro for unit, ro in units.items() if not {"/run", "/dev"} <= set(ro)}
+    if missing:
+        raise Exception(f"ReadOnlyPaths lacks /run or /dev: {missing}")
+
+    # Check the mounts inside each running service. Root ignores file
+    # permissions, so a failed write can only come from a read-only mount.
+    probe = "/run/nb-ro-probe.sh"
+    succeed(f"""cat > {probe} <<'EOF'
+for p in /run /run/keys /dev/shm /dev/mqueue /dev/hugepages; do
+  [ -d $p ] || continue
+  f=$p/.nb-ro-probe
+  if touch $f 2>/dev/null; then rm -f $f; echo "nb-ro-probe: writable $p"
+  elif ! touch $f 2>&1 | grep -q Read-only; then echo "nb-ro-probe: unexpected error $p"; fi
+done
+echo "nb-ro-probe: done"
+EOF""")
+
+    def probe_results(out):
+        if "nb-ro-probe: done" not in out:
+            raise Exception(f"probe didn't finish: {out!r}")
+        return re.findall(r"nb-ro-probe: (?:writable|unexpected error) \S+", out)
+
+    def main_pid(unit):
+        return succeed(f"systemctl show -P MainPID {unit}.service").strip()
+
+    # Daemons: run the probe in the service's mount namespace
+    def probe_daemon(unit, pid):
+        try:
+            return probe_results(succeed(f"nsenter -t {pid} -m -- sh {probe}"))
+        except Exception:
+            # The service may have restarted in between
+            if main_pid(unit) == pid:
+                raise
+            return None
+
+    # Active oneshot services (onion-addresses): restart with the probe as an
+    # extra `ExecStartPost` and read its output from the journal
+    def probe_oneshot(unit):
+        dropin = f"/run/systemd/system/{unit}.service.d/nb-ro-probe.conf"
+        try:
+            succeed(
+                f"mkdir -p {os.path.dirname(dropin)}",
+                f"printf '[Service]\\nExecStartPost=/bin/sh {probe}\\n' > {dropin}",
+                "systemctl daemon-reload",
+                f"systemctl restart {unit}",
+            )
+        finally:
+            succeed(f"rm -f {dropin}", "systemctl daemon-reload")
+        invocation = succeed(f"systemctl show -P InvocationID {unit}.service").strip()
+        journal = f"journalctl -b --output=cat _SYSTEMD_INVOCATION_ID={invocation}"
+        # journald stores the probe output asynchronously
+        machine.wait_until_succeeds(f"{journal} | grep -q 'nb-ro-probe: done'")
+        return probe_results(succeed(journal))
+
+    if "onion-addresses" in units:
+        machine.wait_for_unit("onion-addresses")
+    checked = []
+    for unit in units:
+        pid = main_pid(unit)
+        if pid != "0":
+            writable = probe_daemon(unit, pid)
+        elif (succeed(f"systemctl show -P Type {unit}.service").strip() == "oneshot"
+              and succeed(f"systemctl show -P ActiveState {unit}.service").strip() == "active"):
+            writable = probe_oneshot(unit)
+        else:
+            continue
+        if writable is None:
+            continue
+        if writable:
+            raise Exception(f"{unit}: {writable}")
+        checked.append(unit)
+    succeed(f"rm {probe}")
+    machine.log(f"hardening-ro-paths: checked {checked}")
+    assert "bitcoind" in checked
+    if "onion-addresses" in units:
+        assert "onion-addresses" in checked
+
 # Impure: stops bitcoind (and dependent services)
 @test("backups")
 def _():
