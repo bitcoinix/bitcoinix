@@ -238,6 +238,7 @@ def _():
         "getblockfrompeer": f"getblockfrompeer {'0' * 64} 0",
         "setban": "setban 192.0.2.1 remove",
         "generatetoaddress": "generatetoaddress 1 invalid",
+        "submitpackage": "submitpackage '[]'",
     }
 
     def is_forbidden(user, method):
@@ -263,6 +264,7 @@ def _():
     public_denied = ["scantxoutset", "getblocktemplate", "fundrawtransaction"]
     (public_allowed if data["clightning-bcli"] else public_denied).append("getblockfrompeer")
     (public_allowed if data["mempool"] else public_denied).append("gettxoutsetinfo")
+    (public_allowed if data["barkd"] else public_denied).append("submitpackage")
     assert_rpc_access("public", public_allowed, public_denied)
 
     if data["btcpayserver"]:
@@ -503,6 +505,36 @@ def _():
         # Streaming RPCs wrap their errors in an extra object.
         error = response.get("error", response)
         assert error["message"] == "permission denied", (path, response)
+
+@test("barkd")
+def _():
+    data = test_data["barkd"]
+    user, data_dir = data["user"], data["dataDir"]
+    assert_running("barkd")
+    url = f"http://{ip('barkd')}:{data['port']}"
+    wait_for_open_port(ip("barkd"), data["port"])
+    assert_full_match(f"curl -fsS {url}/ping", "pong")
+    # All other endpoints require the auth token
+    assert_full_match(f"curl -sS -o /dev/null -w '%{{http_code}}' {url}/api/v1/wallet", "401")
+    # bark requires a data dir that is accessible by its owner only
+    assert_full_match(f"stat -c '%a %U' {data_dir}", f"700 {user}\n")
+    # config.toml can hold the bitcoind RPC password
+    assert_full_match(f"stat -c '%a %U' {data_dir}/config.toml", f"600 {user}\n")
+    # The operator can call the API via barkd-cli
+    assert_full_match("runuser -u operator -- barkd-cli wallet", '{"fingerprint":null}')
+
+    if data["chainSource"] == "bitcoind":
+        machine.wait_until_succeeds("bitcoin-cli getindexinfo txindex | jq -e '.txindex.synced'")
+        # Wallet creation passes the checks of the chain source (bitcoind RPC
+        # auth, txindex) and then fails because no Ark server runs in the test VM
+        status, out = machine.execute(
+            "runuser -u operator -- barkd-cli wallet/create"
+            f""" --json '{{"network":"{data["network"]}"}}' 2>&1"""
+        )
+        if status == 0 or "Failed to connect to Ark server" not in out:
+            raise Exception(f"Unexpected wallet creation result: {out}")
+        # The failed creation leaves no wallet files behind
+        machine.fail(f"test -e {data_dir}/mnemonic")
 
 @test("btcpayserver")
 def _():
@@ -825,6 +857,11 @@ def _():
     assert_reachable("bitcoind", ["clightning", "lnd"])
     assert_unreachable("bitcoind", ["btcpayserver", "rtl"])
     assert_unreachable("btcpayserver", ["bitcoind"])
+    if test_data["barkd"]["chainSource"] == "bitcoind":
+        assert_reachable("barkd", ["bitcoind"])
+    else:
+        assert_unreachable("barkd", ["bitcoind"])
+    assert_unreachable("barkd", ["clightning", "lnd", "btcpayserver"])
 
     # The netns firewall rules are IPv4 only, so the veth inside a netns must
     # have no IPv6 address. Otherwise it is reachable over link-local IPv6

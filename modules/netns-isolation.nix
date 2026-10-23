@@ -254,6 +254,10 @@ in {
         id = 31;
         connections = [ "bitcoind" ];
       };
+      barkd = {
+        id = 33;
+        connections = optional (config.services.barkd.chainSource == "bitcoind") "bitcoind";
+      };
       mempool = {
         id = 32;
         connections = [
@@ -295,6 +299,8 @@ in {
     services.rtl.address = netns.rtl.address;
 
     services.mempool.address = netns.mempool.address;
+
+    services.barkd.address = netns.barkd.address;
     services.mempool.frontend.address = netns.nginx.address;
   }
   ]);

@@ -123,6 +123,7 @@ NixOS modules ([src](modules/modules.nix))
   * [electrs](https://github.com/romanz/electrs): Electrum server
   * [fulcrum](https://github.com/cculianu/Fulcrum): Electrum server (see [the module](modules/fulcrum.nix) for a comparison with electrs)
   * [BTCPay Server](https://github.com/btcpayserver/btcpayserver)
+  * [bark](https://gitlab.com/ark-bitcoin/bark): [Ark](https://docs.second.tech) wallet daemon with a REST API (`services.barkd`, [docs](docs/services.md#barkd))
   * [bitcoin-core-hwi](https://github.com/bitcoin-core/HWI)
 * Helper
   * [netns-isolation](modules/netns-isolation.nix): isolates applications on the network-level via network namespaces

@@ -35,6 +35,8 @@ let
         (mkIfTest "lnconnect-clnrest-cert" [ openssl ])
         # Needed to trace the commands run by secret generation
         (mkIfTest "secrets-no-argv" [ strace ])
+        # Needed to call the barkd REST API
+        (mkIfTest "barkd" [ curl ])
       ]);
 
       tests.bitcoind = cfg.bitcoind.enable;
@@ -48,6 +50,7 @@ let
         btcpayserver = cfg.btcpayserver.enable;
         clightning-bcli = cfg.clightning.enable && cfg.clightning.useBcliPlugin;
         mempool = cfg.mempool.enable;
+        barkd = cfg.barkd.enable && cfg.barkd.chainSource == "bitcoind";
       };
 
       tests.bitcoind-rest = cfg.bitcoind.enable;
@@ -242,6 +245,13 @@ let
           inherit (cfg.electrs) user;
           planter = cfg.electrs.user;
         }
+        ++ optional cfg.barkd.enable {
+          unit = "barkd";
+          file = "${cfg.barkd.dataDir}/config.toml";
+          mode = "600";
+          inherit (cfg.barkd) user;
+          planter = cfg.barkd.user;
+        }
         ++ optional cfg.mempool.enable {
           unit = "mempool";
           file = config.systemd.services.mempool.environment.MEMPOOL_CONFIG_FILE;
@@ -251,6 +261,14 @@ let
         };
 
       tests.charge-lnd = cfg.charge-lnd.enable;
+
+      tests.barkd = cfg.barkd.enable;
+      test.data.barkd = {
+        inherit (cfg.barkd) dataDir user port network chainSource;
+      };
+      # There is no Ark server in the test VMs, so wallet creation would fail.
+      # The barkd test creates a wallet via the REST API instead.
+      services.barkd.createWallet = mkDefault false;
 
       tests.electrs = cfg.electrs.enable;
 
@@ -330,6 +348,8 @@ let
       services.electrs.enable = true;
       services.fulcrum.enable = true;
       services.btcpayserver.enable = true;
+      # Uses the default signet Ark server and Esplora instance (unreachable in tests)
+      services.barkd.enable = true;
       services.backups.enable = true;
 
       nix-bitcoin.nodeinfo.enable = true;
@@ -378,6 +398,14 @@ let
       services.electrs.enable = true;
       services.fulcrum.enable = true;
       services.btcpayserver.enable = true;
+      services.barkd = {
+        enable = true;
+        network = "regtest";
+        chainSource = "bitcoind";
+        # Not running. The barkd test checks that wallet creation gets past
+        # the chain source checks and then fails to reach this server.
+        arkServer = "http://127.0.0.1:3535";
+      };
     };
 
     # netns and regtest, without secure-node.nix

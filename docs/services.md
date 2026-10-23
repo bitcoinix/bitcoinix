@@ -534,3 +534,59 @@ To work around this and connect via clearnet instead, set this option:
 ```nix
 services.clightning.plugins.trustedcoin.tor.proxy = false;
 ```
+
+<a id="barkd"></a>
+
+# bark (Ark wallet)
+
+[bark](https://gitlab.com/ark-bitcoin/bark) is a wallet for the
+[Ark protocol](https://docs.second.tech), built by Second. Ark lets you hold and
+send bitcoin off-chain together with an Ark server, while you can always exit
+on-chain on your own. bitcoinix runs `barkd`, bark's REST daemon, via the
+`services.barkd` options and the `barkd` systemd service.
+
+```nix
+services.barkd.enable = true;
+```
+
+By default, the wallet uses signet, Second's public signet Ark server
+(`https://ark.signet.2nd.dev`) and a public Esplora instance.
+To use your local bitcoind as the chain source instead (mainnet or regtest only):
+
+```nix
+services.barkd = {
+  enable = true;
+  network = "mainnet";
+  arkServer = "https://...";
+  chainSource = "bitcoind"; # Also enables bitcoind `txindex`
+};
+```
+
+On first start, barkd creates a wallet with a fresh mnemonic, stored in
+`/var/lib/barkd/mnemonic`. Back up this file, for example via
+`services.backups`, which includes `/var/lib/barkd`.
+
+## Using the REST API
+
+barkd listens on `127.0.0.1:3030`. All endpoints except `/ping` require the
+bearer token in `/var/lib/barkd/auth_token`.
+The operator user can call the API with `barkd-cli`, which adds the token:
+
+```shell
+barkd-cli wallet/balance
+barkd-cli wallet/addresses/next -X POST
+barkd-cli wallet/send -X POST --json '{"destination": "...", "amount_sat": 1000}'
+```
+
+The API reference is available at <https://docs.second.tech>.
+
+## Restore a bark wallet
+
+1. Set `services.barkd.createWallet = false;` and deploy.
+2. Create the wallet from your mnemonic via the API. `echo` is a shell builtin,
+   so the mnemonic doesn't appear in a process command line:
+   ```shell
+   echo '{"network": "signet", "mnemonic": "<your 12 words>"}' \
+     | barkd-cli wallet/create -X POST --json @-
+   ```
+   With `chainSource = "bitcoind"`, also add `"birthday_height": <height>`.

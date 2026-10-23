@@ -21,6 +21,7 @@
     ./electrs.nix
     ./fulcrum.nix
     ./btcpayserver.nix
+    ./barkd.nix
     ./hardware-wallets.nix
 
     # Support features
