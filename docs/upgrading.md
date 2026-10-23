@@ -80,6 +80,16 @@ that must remain writable. See
 for an example. If you have no custom code writing outside the allowed
 directories, no script changes are needed.
 
+mempool 3.3 migrates its MariaDB database from schema version 97 to 106 on the
+first start of the backend. The migration can't be undone: rolling back the
+NixOS generation keeps the migrated database, and mempool 3.2 has no downgrade
+path. The database is not covered by `services.backups`. To keep a way back,
+dump it before deploying:
+```bash
+mysqldump --single-transaction mempool > mempool-3.2.sql
+```
+Run this as root, and replace `mempool` if you set `services.mempool.database.name`.
+
 After migrating your configuration, set `nix-bitcoin.configVersion = "0.1.3";`.
 
 ## Upgrading to config version 0.1.2
