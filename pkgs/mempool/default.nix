@@ -1,7 +1,7 @@
 { lib
 , stdenvNoCC
-, nodejs_22
-, nodejs-slim_22
+, nodejs_26
+, nodejs-slim_26
 , fetchFromGitHub
 , fetchNodeModules
 , runCommand
@@ -16,34 +16,34 @@
 , napi-rs-cli
 }:
 rec {
-  nodejs = nodejs_22;
-  nodejsRuntime = nodejs-slim_22;
+  nodejs = nodejs_26;
+  nodejsRuntime = nodejs-slim_26;
 
-  version = "3.2.1";
+  version = "3.3.2";
 
   src = fetchFromGitHub {
     owner = "mempool";
     repo = "mempool";
     tag = "v${version}";
-    hash = "sha256-O2XPD1/BXQnzuOP/vMVyRfmFZEgjA85r+PShWne0vqU=";
+    hash = "sha256-xMMBr3bSOwVNgpjOPVf7MEcGvhhNneTsE8PH9sLUr30=";
   };
 
   nodeModules = {
     frontend = fetchNodeModules {
       inherit src nodejs;
       sourceRoot = "source/frontend";
-      hash = "sha256-+jfgsAkDdYvgso8uSHaBj/sQL3fC/ABQWzVTXfdZcU0=";
+      hash = "sha256-LRK2W5Ypml5QSTWTHtUpilDXm5gIt13wL0pGBgkhhvk=";
     };
     backend = fetchNodeModules {
       inherit src nodejs;
       sourceRoot = "source/backend";
-      hash = "sha256-y5l2SYZYK9SKSy6g0+mtTWD6JFkkdQHHBboECpEvWZ4=";
+      hash = "sha256-jszxFq1+H9D0p0NNB6q0iFoVy2gLAmdlnzPDK8ywJo0=";
     };
   };
 
   frontendAssets = fetchFiles {
     name = "mempool-frontend-assets";
-    hash = "sha256-r6GfOY8Pdh15o2OQMk8syfvWMV6WMCReToAEkQm7tqQ=";
+    hash = "sha256-TdO7ycxrYKJhoqzjMITNg31u1Ka2zG92rK0UwOQr8gE=";
     fetcher = ./frontend-assets-fetch.sh;
   };
 
