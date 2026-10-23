@@ -10,13 +10,13 @@ rustPlatform.buildRustPackage (finalAttrs: {
   # node for hours and leaks hundreds of GB on any one-block reorg.
   # This rev runs a mainnet node (SCHEMA_VERSION 26). Move to the next tag
   # once it includes that fix.
-  version = "0.8.99-unstable-2026-10-22";
+  version = "0.8.99-unstable-2026-10-23";
 
   src = fetchFromGitHub {
     owner = "reardencode";
     repo = "rbitcoin";
-    rev = "f9fb152d1af8054852940bb03cf795978effe790";
-    hash = "sha256-xVp2bNBVH62Bev0NWfgyTyz01B+QMciQLYpRBRH7moY=";
+    rev = "cc070629f1fc7856c811ae6e0bd0cd43dbcc32ff";
+    hash = "sha256-ddgL11SrlO6lX8YMA15+aEge7+VxVKLDGW3r6h8Ciz0=";
   };
 
   cargoHash = "sha256-em4GOljXerUFnbCisQhF39oNG0nTaOtrIu63VWPI3c8=";
