@@ -157,5 +157,15 @@ in {
       Remove services.rtl.cl-rest. RTL uses services.clightning.plugins.clnrest instead.
       See docs/configuration.md, "Upgrading to config version 0.1.1", for migration steps.
     '')
+  ]
+  ++
+  # 0.1.3
+  [
+    (mkRemovedOptionModule [ "services" "bitcoind" "package" ] ''
+      Bitcoin Knots support and bitcoind package selection have been removed from bitcoinix.
+      Remove services.bitcoind.package from your configuration. The service now uses
+      nix-bitcoin.pkgs.bitcoind (Bitcoin Core) directly.
+      See docs/configuration.md, "Upgrading to config version 0.1.3".
+    '')
   ];
 }
