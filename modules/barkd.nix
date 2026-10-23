@@ -4,7 +4,7 @@ with lib;
 let
   options.services.barkd = {
     enable = mkEnableOption ''
-      barkd, the REST daemon of bark, a wallet for the Ark protocol built by Second.
+      barkd, the REST daemon of Bark, a wallet for the Ark protocol built by Second.
       Ark lets users hold and send bitcoin off-chain in cooperation with an
       Ark server, while keeping the ability to exit on-chain unilaterally
     '';
@@ -12,7 +12,7 @@ let
       type = types.package;
       default = nbPkgs.bark-wallet;
       defaultText = "config.nix-bitcoin.pkgs.bark-wallet";
-      description = "The package providing the bark and barkd binaries.";
+      description = "The package providing the `bark` and `barkd` binaries.";
     };
     network = mkOption {
       type = types.enum [ "mainnet" "signet" "mutinynet" "regtest" ];
@@ -42,7 +42,7 @@ let
 
         - `esplora`: An Esplora HTTP API, set via {option}`esploraUrl`.
         - `bitcoind`: The local {option}`services.bitcoind` instance, via its
-          `public` RPC user. This enables `txindex` in bitcoind, which bark requires,
+          `public` RPC user. This enables `txindex` in bitcoind, which Bark requires,
           and requires {option}`network` to match the bitcoind network.
       '';
     };
@@ -85,7 +85,7 @@ let
         This requires the Ark server and the chain source to be reachable.
 
         Disable this to restore a wallet from an existing mnemonic.
-        See "Restore a bark wallet" in docs/services.md.
+        See "Restore a Bark wallet" in docs/services.md.
       '';
     };
     extraConfig = mkOption {
@@ -95,7 +95,7 @@ let
         vtxo_refresh_expiry_threshold = 288
       '';
       description = ''
-        Extra lines appended to the bark configuration file ({file}`config.toml`).
+        Extra lines appended to the Bark configuration file ({file}`config.toml`).
 
         See the `Config` struct in
         https://gitlab.com/ark-bitcoin/bark/-/blob/master/bark/src/config.rs
@@ -122,7 +122,7 @@ let
       default = pkgs.writers.writeBashBin "barkd-cli" ''
         # Usage: barkd-cli <API path> [curl args...]
         # Example: barkd-cli wallet/balance
-        # Switch user because bark makes the data dir accessible by its owner only.
+        # Switch user because Bark makes the data dir accessible by its owner only.
         set -euo pipefail
         if [[ $# -lt 1 ]]; then
           echo "Usage: barkd-cli <API path below /api/v1/> [curl args...]" >&2
@@ -192,7 +192,7 @@ in {
       { assertion = !useBitcoind || bitcoind.prune == 0;
         message = "barkd requires bitcoind `txindex`, which does not support pruning.";
       }
-      # bark only bypasses its SOCKS proxy for loopback addresses,
+      # Bark only bypasses its SOCKS proxy for loopback addresses,
       # so a non-local bitcoind (e.g. with netns-isolation) is unreachable via Tor.
       { assertion = !(useBitcoind && cfg.tor.proxy) || isLoopback (nbLib.address bitcoind.rpc.address);
         message = ''
@@ -205,7 +205,7 @@ in {
     environment.systemPackages = [ cfg.package (hiPrio cfg.cli) ];
 
     systemd.tmpfiles.rules = [
-      # bark requires the data dir to be accessible by its owner only
+      # Bark requires the data dir to be accessible by its owner only
       "d '${cfg.dataDir}' 0700 ${cfg.user} ${cfg.group} - -"
     ];
 
@@ -227,7 +227,7 @@ in {
 
         ${optionalString cfg.createWallet ''
           if [[ ! -e '${cfg.dataDir}/mnemonic' ]]; then
-            echo "Create bark wallet"
+            echo "Create Bark wallet"
             # Without config flags, `bark create` uses the existing config.toml
             ${cfg.package}/bin/bark --datadir '${cfg.dataDir}' --no-logfile \
               create --${cfg.network}
@@ -269,7 +269,7 @@ in {
     services.bitcoind = {
       enable = true;
       txindex = true;
-      # bark submits exit and CPFP transactions as packages
+      # Bark submits exit and CPFP transactions as packages
       rpc.users.public.rpcwhitelist = [ "submitpackage" ];
     };
 

@@ -537,12 +537,12 @@ services.clightning.plugins.trustedcoin.tor.proxy = false;
 
 <a id="barkd"></a>
 
-# bark (Ark wallet)
+# Bark (Ark wallet)
 
-[bark](https://gitlab.com/ark-bitcoin/bark) is a wallet for the
+[Bark](https://gitlab.com/ark-bitcoin/bark) is a wallet for the
 [Ark protocol](https://docs.second.tech), built by Second. Ark lets you hold and
 send bitcoin off-chain together with an Ark server, while you can always exit
-on-chain on your own. bitcoinix runs `barkd`, bark's REST daemon, via the
+on-chain on your own. bitcoinix runs `barkd`, Bark's REST daemon, via the
 `services.barkd` options and the `barkd` systemd service.
 
 ```nix
@@ -580,7 +580,7 @@ barkd-cli wallet/send -X POST --json '{"destination": "...", "amount_sat": 1000}
 
 The API reference is available at <https://docs.second.tech>.
 
-## Restore a bark wallet
+## Restore a Bark wallet
 
 1. Set `services.barkd.createWallet = false;` and deploy.
 2. Create the wallet from your mnemonic via the API. `echo` is a shell builtin,
