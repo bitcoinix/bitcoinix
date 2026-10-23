@@ -1,6 +1,7 @@
 from collections import OrderedDict
 from urllib.parse import parse_qs, urlparse
 import base64
+import hashlib
 import hmac
 import json
 import os
@@ -1008,7 +1009,21 @@ def _():
 
     if enabled("electrs"):
         machine.wait_until_succeeds(current_run_log_has_string("electrs", "serving Electrum RPC"))
-        assert_full_match(get_block_height(ip('electrs'), 50001), f"{num_blocks}\n")
+        # electrs serves requests while it is still indexing
+        machine.wait_until_succeeds(
+            f"[[ $({get_block_height(ip('electrs'), 50001)}) == {num_blocks} ]]"
+        )
+        # The history of the address that mined the blocks is in the index
+        script = succeed(
+            "bitcoin-cli getblock $(bitcoin-cli getblockhash 1) 2"
+            " | jq -r '.tx[0].vout[0].scriptPubKey.hex'"
+        )
+        scripthash = hashlib.sha256(bytes.fromhex(script.strip())).digest()[::-1].hex()
+        history = succeed(
+            f"""echo '{{"method": "blockchain.scripthash.get_history", "params": ["{scripthash}"], "id": 0}}'"""
+            f" | nc {ip('electrs')} 50001 | head -1 | jq -M '.result | length'"
+        )
+        assert int(history) > 0, f"electrs returned no history for {scripthash}"
 
     if enabled("fulcrum"):
         machine.wait_until_succeeds(current_run_log_has_string("fulcrum", "listening for connections"))

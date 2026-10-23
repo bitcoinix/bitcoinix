@@ -218,6 +218,38 @@ systemd.services.btcpayserver.environment.BTCPAY_SSRFEXCEPTIONS = "127.0.0.1:808
 Entries are exact hostnames, IP addresses or CIDR ranges, optionally with a port,
 separated by `;` or `,`.
 
+electrs 0.12.0 switched to [bindex](https://github.com/romanz/bindex-rs), which uses
+a new index format. electrs must rebuild its index from scratch, and it does not
+convert or delete the old one: with the old index in place, it fails at startup with
+`Unsupported DB format (0 < 1) - please reindex!`. Reindexing takes from a few hours
+to about a day, depending on your hardware. The final index is about 7% of the size
+of bitcoind's `blocks/*.dat` files and can temporarily grow to about 14% during the
+initial sync. electrs, and mempool if it uses electrs as its Electrum server, is
+unavailable until reindexing has finished.
+
+To upgrade, delete the old index before deploying (default data dir shown; for
+regtest, the index is in `regtest` instead of `bitcoin`):
+```bash
+systemctl stop electrs
+rm -r /var/lib/electrs/bitcoin
+```
+Then deploy the new system config to your node and follow the progress with
+`journalctl -u electrs -f`.
+
+electrs 0.12.0 also requires Bitcoin Core 31 or later, so it no longer works with
+`bitcoind-knots`. It reads blocks through bitcoind's REST interface, which bitcoinix
+enables automatically (`services.bitcoind.rest.enable`). REST is served without
+authentication on the RPC address and port: every source allowed by
+`services.bitcoind.rpc.allowip` can read blocks, transactions, the UTXO set and the
+mempool, bypassing RPC users and `rpcwhitelist`. If `services.bitcoind.rpc.allowip`
+contains sources other than localhost and bitcoinix's network namespaces, evaluation
+fails. Remove them, or set `services.bitcoind.rest.allowNonLocal = true` to accept
+unauthenticated REST access for these sources. Evaluation also fails if
+`services.bitcoind.extraConfig` contains `rpcallowip` or `includeconf` directives:
+move RPC sources to `services.bitcoind.rpc.allowip`, or review the raw and included
+settings and set `services.bitcoind.rest.allowUncheckedConfig = true`.
+electrs no longer connects to bitcoind's whitelisted P2P port.
+
 After updating any affected clients and settings, set
 `nix-bitcoin.configVersion = "0.1.2";`.
 
@@ -452,6 +484,11 @@ systemd.services.<service>.serviceConfig.IPAddressAllow = [ config.services.bitc
 
 > The above configuration is only required if the remote bitcoind **is
 > not** accessed via Tor.
+
+electrs reads blocks through bitcoind's REST interface. If you use electrs, set
+`rest=1` on the other node (Bitcoin Core 31 or later). REST is unauthenticated and
+available to every source allowed by the other node's `rpcallowip`, so keep that
+list limited to the hosts that need it.
 
 
 Services that only need the public RPC methods connect as `public`. Do not

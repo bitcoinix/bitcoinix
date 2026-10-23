@@ -54,11 +54,15 @@ in {
       { assertion = bitcoind.prune == 0;
         message = "electrs does not support bitcoind pruning.";
       }
+      { assertion = versionAtLeast config.nix-bitcoin.pkgs.bitcoind.version "31";
+        message = "electrs requires Bitcoin Core 31 or later.";
+      }
     ];
 
     services.bitcoind = {
       enable = true;
-      listenWhitelisted = true;
+      # electrs fetches blocks via REST
+      rest.enable = true;
     };
 
     systemd.tmpfiles.rules = [
@@ -95,7 +99,6 @@ in {
           --electrum-rpc-addr=${cfg.address}:${toString cfg.port} \
           --monitoring-addr=${cfg.address}:${toString cfg.monitoringPort} \
           --daemon-rpc-addr=${nbLib.addressWithPort bitcoind.rpc.address bitcoind.rpc.port} \
-          --daemon-p2p-addr=${nbLib.addressWithPort bitcoind.address bitcoind.whitelistedPort} \
           ${cfg.extraArgs}
         '';
         User = cfg.user;
