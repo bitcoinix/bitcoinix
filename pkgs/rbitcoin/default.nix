@@ -8,18 +8,18 @@ rustPlatform.buildRustPackage (finalAttrs: {
   # Unreleased master: v0.8.0 predates the scripthash reorg fix
   # (reardencode/rbitcoin#1018, fixed in #1021), which on mainnet stalls the
   # node for hours and leaks hundreds of GB on any one-block reorg.
-  # This rev has run a mainnet node since 2026-10-15. Move to the next tag
+  # This rev runs a mainnet node (SCHEMA_VERSION 26). Move to the next tag
   # once it includes that fix.
-  version = "0.8.0-unstable-2026-10-15";
+  version = "0.8.99-unstable-2026-10-22";
 
   src = fetchFromGitHub {
     owner = "reardencode";
     repo = "rbitcoin";
-    rev = "411db7a76bce86b23ced4ead7f38fe67549c4386";
-    hash = "sha256-mPFtoEkA0SeRAeRbLSmAEITxsQqLyy94hYU88eyPhF8=";
+    rev = "f9fb152d1af8054852940bb03cf795978effe790";
+    hash = "sha256-xVp2bNBVH62Bev0NWfgyTyz01B+QMciQLYpRBRH7moY=";
   };
 
-  cargoHash = "sha256-rH2kZlS2YT5QKsq/Abnzfo7qVotO95U2LGtBUul5gks=";
+  cargoHash = "sha256-em4GOljXerUFnbCisQhF39oNG0nTaOtrIu63VWPI3c8=";
 
   cargoBuildFlags = [ "-p" "rbitcoin-node" "-p" "rbitcoin-cli" ];
 

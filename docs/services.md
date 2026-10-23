@@ -565,9 +565,10 @@ Things to know before enabling it:
   `/run/rbitcoin/rpc.cookie`, readable by group `rbitcoinrpc`. The cookie
   changes on every start, so clients should read it from that path (mempool
   does). The operator's `rbitcoin-cli` uses the unix socket in `dataDir`.
-  rbitcoin logs `cookie … mode 640 is group or world accessible` on every
-  start; mode 0640 is what lets group `rbitcoinrpc` read it, so this warning
-  is expected.
+  The cookie is mode 0640 so that group `rbitcoinrpc` can read it. rbitcoin
+  refuses a cookie with group bits unless started with
+  `--rpc-cookie-perms group`, which the module passes. (Earlier rbitcoin
+  versions only logged a warning.)
 - **Tor.** With `services.rbitcoin.tor.proxy` (enabled by `secure-node.nix`),
   all P2P connections, including DNS seed lookups, go through Tor.
 - **Large addresses.** `services.rbitcoin.maxShCreates` (default 10000)
