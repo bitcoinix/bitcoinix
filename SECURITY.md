@@ -45,6 +45,14 @@ including insecure defaults and documentation that suggests insecure practices.
 Vulnerabilities in upstream dependencies (e.g. Bitcoin Core, Core Lightning, LND, nixpkgs)
 should be reported to the respective upstream project first.
 
+## Dependency CVE scan
+
+A weekly CI job scans the runtime closure of a representative node (the secure-node preset
+with all shipped services, defined in `test/ci/scan-node.nix`) for known CVEs with
+[vulnix](https://github.com/nix-community/vulnix). Findings that are not whitelisted in
+`.github/cve-whitelist.toml` are tracked in a public `[cve-scan]` issue, which is closed
+when a scan is clean. These are known issues in upstream packages, not private reports.
+
 ## Release signing
 
 A bitcoinix release is a **signed, annotated git tag** (`v<version>`). There are no release
