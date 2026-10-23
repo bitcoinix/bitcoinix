@@ -226,6 +226,9 @@ let
   ++ optionals cfg.rpc.enable [
     "--rpc-listen=${listenAddress cfg.rpc.address cfg.rpc.port}"
     "--rpc-cookie-file=${cfg.rpc.cookieFile}"
+    # The cookie is 0640 (see ExecStartPre). rbitcoin refuses group bits at
+    # startup unless told to allow them.
+    "--rpc-cookie-perms" "group"
   ]
   ++ optional cfg.electrum.enable "--electrum-listen=${listenAddress cfg.electrum.address cfg.electrum.port}"
   # Seed hostnames go to the proxy too; rbitcoin never resolves them locally
