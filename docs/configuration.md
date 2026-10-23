@@ -220,8 +220,8 @@ separated by `;` or `,`.
 
 electrs 0.12.0 switched to [bindex](https://github.com/romanz/bindex-rs), which uses
 a new index format. electrs must rebuild its index from scratch, and it does not
-convert or delete the old one: with the old index in place, it fails at startup with
-`Unsupported DB format (0 < 1) - please reindex!`. Reindexing takes from a few hours
+convert or delete the old one, so bitcoinix refuses to start electrs while the old
+index is in place. Reindexing takes from a few hours
 to about a day, depending on your hardware. The final index is about 7% of the size
 of bitcoind's `blocks/*.dat` files and can temporarily grow to about 14% during the
 initial sync. electrs, and mempool if it uses electrs as its Electrum server, is

@@ -46,6 +46,13 @@ let
   nbLib = config.nix-bitcoin.lib;
   secretsDir = config.nix-bitcoin.secretsDir;
   bitcoind = config.services.bitcoind;
+
+  # electrs 0.12 keeps its index in the same path as earlier versions but can't
+  # read their format. A marker file next to the index identifies a 0.12 index.
+  dbPath = "${cfg.dataDir}/${bitcoind.makeNetworkName "bitcoin" "regtest"}";
+  bindexMarker = "${dbPath}.bindex";
+  # Exit status for an old index, excluded from restarts
+  oldIndexStatus = 78;
 in {
   inherit options;
 
@@ -90,8 +97,21 @@ in {
       serviceConfig = nbLib.defaultHardening // {
         # electrs only uses the working directory for reading electrs.toml
         WorkingDirectory = cfg.dataDir;
-        ExecStart = ''
-          ${config.nix-bitcoin.pkgs.electrs}/bin/electrs \
+        # Check the index in the main process: a failing ExecStartPre isn't
+        # covered by RestartPreventExitStatus and would restart every 10s.
+        ExecStart = pkgs.writeShellScript "electrs" ''
+          if [[ ! -e '${dbPath}' ]]; then
+            touch '${bindexMarker}'
+          elif [[ ! -e '${bindexMarker}' ]]; then
+            echo "'${dbPath}' contains an index of electrs < 0.12, which electrs 0.12 can't read."
+            echo "Rebuild the index from scratch (this takes hours):"
+            echo "  systemctl stop electrs"
+            echo "  rm -r '${dbPath}'"
+            echo "  systemctl start electrs"
+            echo 'See docs/configuration.md, "Upgrading to config version 0.1.2".'
+            exit ${toString oldIndexStatus}
+          fi
+          exec ${config.nix-bitcoin.pkgs.electrs}/bin/electrs \
           --log-filters=INFO \
           --network=${bitcoind.makeNetworkName "bitcoin" "regtest"} \
           --db-dir='${cfg.dataDir}' \
@@ -105,6 +125,7 @@ in {
         Group = cfg.group;
         Restart = "on-failure";
         RestartSec = "10s";
+        RestartPreventExitStatus = oldIndexStatus;
         ReadWritePaths = [ cfg.dataDir ];
       } // nbLib.allowedIPAddresses cfg.tor.enforce;
     };

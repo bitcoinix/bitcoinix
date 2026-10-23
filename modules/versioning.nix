@@ -331,7 +331,7 @@ let
       in ''
         electrs 0.12.0 uses a new index format and must rebuild its index from scratch.
         It does not convert or delete the old index: until it is removed, electrs
-        fails at startup with "Unsupported DB format (0 < 1) - please reindex!".
+        refuses to start.
         Reindexing takes from a few hours to about a day, depending on your hardware.
         electrs, and mempool if it uses electrs, is unavailable meanwhile.
 

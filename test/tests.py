@@ -282,6 +282,19 @@ def _():
     # A file with laxer permissions (created by earlier versions) is replaced
     succeed(f"chmod 644 {toml} && systemctl restart electrs")
     assert_full_match(f"stat -c '%a %U' {toml}", "600 electrs\n")
+    # An index without the marker (created by electrs < 0.12) stops the unit
+    # without restarts
+    marker = succeed("ls /var/lib/electrs/*.bindex").strip()
+    machine.wait_until_succeeds(f"test -d {marker.removesuffix('.bindex')}")
+    succeed(f"systemctl stop electrs && mv {marker} {marker}.saved")
+    succeed("systemctl start electrs")
+    # `failed`, not `activating` (auto-restart)
+    machine.wait_until_succeeds("[[ $(systemctl show -P ActiveState electrs) == failed ]]")
+    assert_full_match("systemctl show -P ExecMainStatus electrs", "78\n")
+    machine.wait_until_succeeds(log_has_string("electrs", "contains an index of electrs < 0.12"))
+    succeed(f"mv {marker}.saved {marker} && systemctl reset-failed electrs && systemctl start electrs")
+    # Not assert_running: the journal now has the failure from above
+    machine.wait_for_unit("electrs")
     wait_for_open_port(ip("electrs"), 4224)  # prometeus metrics provider
     # Check RPC connection to bitcoind
     if not "regtest" in enabled_tests:
