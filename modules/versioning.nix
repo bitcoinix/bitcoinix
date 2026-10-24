@@ -156,7 +156,7 @@ let
         any Liquid-specific onion service or network namespace settings from your
         configuration. Your Liquid wallets stay in the former data directory
         (default: /var/lib/liquidd), but the backups service no longer includes it.
-        See docs/configuration.md, "Upgrading to config version 0.1.1", for how to keep
+        See docs/upgrading.md, "Upgrading to config version 0.1.1", for how to keep
         backing up and later access your wallets.
       '';
     }
@@ -177,7 +177,7 @@ let
         Lightning Pool support has been removed. Remove `services.lightning-pool`
         and any Pool-specific onion service or network namespace settings from your
         configuration. Manage Pool separately if needed. Existing data is retained;
-        see docs/configuration.md, "Upgrading to config version 0.1.1".
+        see docs/upgrading.md, "Upgrading to config version 0.1.1".
       '';
     }
     {
@@ -194,7 +194,7 @@ let
         Remove `services.lightning-loop`, `services.rtl.nodes.lnd.loop` and any
         Loop-specific onion service or network namespace settings from your
         configuration. Manage Loop separately if needed. Existing data is retained;
-        see docs/configuration.md, "Upgrading to config version 0.1.1".
+        see docs/upgrading.md, "Upgrading to config version 0.1.1".
       '';
     }
     {
@@ -213,7 +213,7 @@ let
           services.bitcoind.rpc.users.btcpayserver.rpcwhitelist = [ "scantxoutset" ];
 
         Otherwise, leave it disabled and acknowledge the change by updating
-        `nix-bitcoin.configVersion`. See docs/configuration.md,
+        `nix-bitcoin.configVersion`. See docs/upgrading.md,
         "Upgrading to config version 0.1.1".
       '';
     }
@@ -225,7 +225,7 @@ let
         It only allows reads and the UpdateChannelPolicy and UpdateChanStatus RPCs.
         Other applications that reused this macaroon need their own macaroon with
         the appropriate permissions. lnd regenerates /run/lnd/charge-lnd.macaroon
-        when it restarts during deployment. See docs/configuration.md,
+        when it restarts during deployment. See docs/upgrading.md,
         "Upgrading to config version 0.1.1".
       '';
     }
@@ -244,7 +244,7 @@ let
 
         Existing data is retained, but the backups service no longer includes the
         former data directory (default: /var/lib/clightning-rest).
-        See docs/configuration.md, "Upgrading to config version 0.1.1", for migration
+        See docs/upgrading.md, "Upgrading to config version 0.1.1", for migration
         and backup instructions.
       '';
     }
@@ -255,7 +255,7 @@ let
       message = ''
         c-lightning-REST has been removed. If you previously ran it, the backups service
         no longer includes its data directory (default: /var/lib/clightning-rest).
-        See docs/configuration.md, "Upgrading to config version 0.1.1".
+        See docs/upgrading.md, "Upgrading to config version 0.1.1".
       '';
     }
     {
@@ -270,7 +270,7 @@ let
 
         Update external RPC clients and scripts that read the old cookie path.
         The bitcoin-cli installed by bitcoinix reads the new path from bitcoin.conf.
-        See docs/configuration.md, "Upgrading to config version 0.1.2".
+        See docs/upgrading.md, "Upgrading to config version 0.1.2".
       '';
     }
     {
@@ -283,7 +283,7 @@ let
         The MariaDB server that mempool enables now listens on 127.0.0.1 by default
         (`services.mysql.settings.mysqld.bind-address`). To keep accessing MariaDB
         over the network, set this option to the desired listen address.
-        See docs/configuration.md, "Upgrading to config version 0.1.2".
+        See docs/upgrading.md, "Upgrading to config version 0.1.2".
       '';
     }
     {
@@ -293,7 +293,7 @@ let
         lnd now restarts automatically after a clean exit, including `lncli stop`.
         To keep lnd stopped, use `systemctl stop lnd` instead. Update maintenance
         scripts that rely on `lncli stop` leaving lnd down.
-        See docs/configuration.md, "Upgrading to config version 0.1.2".
+        See docs/upgrading.md, "Upgrading to config version 0.1.2".
       '';
     }
     {
@@ -307,7 +307,7 @@ let
         `systemd.services.btcpayserver.environment.BTCPAY_SSRFEXCEPTIONS`,
         e.g. to "192.168.1.50:8443;10.8.0.0/24". Keep exceptions narrow and never
         list the ports of node services such as the lnd REST API.
-        See docs/configuration.md, "Upgrading to config version 0.1.2".
+        See docs/upgrading.md, "Upgrading to config version 0.1.2".
       '';
     }
     {
@@ -321,7 +321,7 @@ let
 
         If you used Knots, review any Knots-specific settings in
         `services.bitcoind.extraConfig` before deploying.
-        See docs/configuration.md, "Upgrading to config version 0.1.3".
+        See docs/upgrading.md, "Upgrading to config version 0.1.3".
       '';
     }
     {
@@ -356,7 +356,7 @@ let
         blocks, transactions, the UTXO set and the mempool without authentication.
         `rpcallowip` or `includeconf` in `services.bitcoind.extraConfig` also fail
         evaluation (see `services.bitcoind.rest.allowUncheckedConfig`).
-        See docs/configuration.md, "Upgrading to config version 0.1.3".
+        See docs/upgrading.md, "Upgrading to config version 0.1.3".
       '';
     }
   ];
