@@ -324,7 +324,7 @@ let
       '';
     }
     {
-      version = "0.1.2";
+      version = "0.1.3";
       condition = config.services.electrs.enable;
       message = let
         dbPath = "${config.services.electrs.dataDir}/${config.services.bitcoind.makeNetworkName "bitcoin" "regtest"}";
@@ -345,9 +345,9 @@ let
         also remove the marker file '${dbPath}.bindex'. Otherwise the index check is
         skipped on the next upgrade.
 
-        electrs now requires Bitcoin Core 31 or later (bitcoind-knots is not supported)
-        and reads blocks through bitcoind's REST interface, which is enabled
-        automatically (`services.bitcoind.rest.enable`). REST is served without
+        electrs now requires Bitcoin Core 31 or later and reads blocks through
+        bitcoind's REST interface, which is enabled automatically
+        (`services.bitcoind.rest.enable`). REST is served without
         authentication on the RPC port to every source in `services.bitcoind.rpc.allowip`.
         If that list contains sources other than localhost and bitcoinix's network
         namespaces, evaluation fails. Remove them, or set
@@ -355,7 +355,7 @@ let
         blocks, transactions, the UTXO set and the mempool without authentication.
         `rpcallowip` or `includeconf` in `services.bitcoind.extraConfig` also fail
         evaluation (see `services.bitcoind.rest.allowUncheckedConfig`).
-        See docs/configuration.md, "Upgrading to config version 0.1.2".
+        See docs/configuration.md, "Upgrading to config version 0.1.3".
       '';
     }
   ];

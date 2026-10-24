@@ -218,6 +218,19 @@ systemd.services.btcpayserver.environment.BTCPAY_SSRFEXCEPTIONS = "127.0.0.1:808
 Entries are exact hostnames, IP addresses or CIDR ranges, optionally with a port,
 separated by `;` or `,`.
 
+After updating any affected clients and settings, set
+`nix-bitcoin.configVersion = "0.1.2";`.
+
+### Upgrading to config version 0.1.3
+
+Bitcoin Knots support and the `services.bitcoind.package` option have been removed.
+Remove `services.bitcoind.package` from your configuration, including explicit
+selections of Bitcoin Core. The daemon, `bitcoin-cli` and Core Lightning now use
+`nix-bitcoin.pkgs.bitcoind` (Bitcoin Core) directly. `bitcoind-knots` is no longer
+included in bitcoinix's pinned packages. If you used Knots, review any
+Knots-specific settings in `services.bitcoind.extraConfig` before deploying
+with Bitcoin Core.
+
 electrs 0.12.0 switched to [bindex](https://github.com/romanz/bindex-rs), which uses
 a new index format. electrs must rebuild its index from scratch, and it does not
 convert or delete the old one, so bitcoinix refuses to start electrs while the old
@@ -241,9 +254,9 @@ If you roll back to the previous config after electrs 0.12 has started once, als
 remove the marker file `/var/lib/electrs/bitcoin.bindex`. Otherwise the index check
 is skipped on the next upgrade.
 
-electrs 0.12.0 also requires Bitcoin Core 31 or later, so it no longer works with
-`bitcoind-knots`. It reads blocks through bitcoind's REST interface, which bitcoinix
-enables automatically (`services.bitcoind.rest.enable`). REST is served without
+electrs 0.12.0 also requires Bitcoin Core 31 or later. It reads blocks through
+bitcoind's REST interface, which bitcoinix enables automatically
+(`services.bitcoind.rest.enable`). REST is served without
 authentication on the RPC address and port: every source allowed by
 `services.bitcoind.rpc.allowip` can read blocks, transactions, the UTXO set and the
 mempool, bypassing RPC users and `rpcwhitelist`. If `services.bitcoind.rpc.allowip`
@@ -254,19 +267,6 @@ unauthenticated REST access for these sources. Evaluation also fails if
 move RPC sources to `services.bitcoind.rpc.allowip`, or review the raw and included
 settings and set `services.bitcoind.rest.allowUncheckedConfig = true`.
 electrs no longer connects to bitcoind's whitelisted P2P port.
-
-After updating any affected clients and settings, set
-`nix-bitcoin.configVersion = "0.1.2";`.
-
-### Upgrading to config version 0.1.3
-
-Bitcoin Knots support and the `services.bitcoind.package` option have been removed.
-Remove `services.bitcoind.package` from your configuration, including explicit
-selections of Bitcoin Core. The daemon, `bitcoin-cli` and Core Lightning now use
-`nix-bitcoin.pkgs.bitcoind` (Bitcoin Core) directly. `bitcoind-knots` is no longer
-included in bitcoinix's pinned packages. If you used Knots, review any
-Knots-specific settings in `services.bitcoind.extraConfig` before deploying
-with Bitcoin Core.
 
 After migrating your configuration, set `nix-bitcoin.configVersion = "0.1.3";`.
 
