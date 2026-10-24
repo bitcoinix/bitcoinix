@@ -101,7 +101,7 @@ in {
         # covered by RestartPreventExitStatus and would restart every 10s.
         ExecStart = pkgs.writeShellScript "electrs" ''
           if [[ ! -e '${dbPath}' ]]; then
-            touch '${bindexMarker}'
+            touch '${bindexMarker}' || exit 1
           elif [[ ! -e '${bindexMarker}' ]]; then
             echo "'${dbPath}' contains an index of electrs < 0.12, which electrs 0.12 can't read."
             echo "Rebuild the index from scratch (this takes hours):"
