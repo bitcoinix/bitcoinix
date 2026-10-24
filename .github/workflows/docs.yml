@@ -1,41 +1,94 @@
 name: bitcoinix docs
 
+# The published docs describe the latest release: they are built from the latest
+# release tag, never from master. Changes on master appear with the next release.
+#
+# Job `build` checks that the docs of a PR build.
+# Job `build_release` builds the docs of the latest release tag. On PRs it only checks
+# the build, otherwise it uploads the result as a Pages artifact for job `deploy`.
+#
+# Deployment runs after "Verify release tags" (release.yml) has verified a pushed tag,
+# or manually. `workflow_run` and `workflow_dispatch` use the workflow file from the
+# default branch, so a pushed tag cannot change how it is published.
+
 on:
-  push:
-    branches: [master]
-    paths:
-      - 'docs/**'
-      - 'book.toml'
-      - '.github/workflows/docs.yml'
   pull_request:
     paths:
       - 'docs/**'
       - 'book.toml'
       - '.github/workflows/docs.yml'
+  workflow_run:
+    workflows: ['Verify release tags']
+    types: [completed]
+  workflow_dispatch:
 
 permissions:
   contents: read
 
-# Strategy:
-# Job `build` builds the docs with mdBook on PRs and on `master` and uploads the result
-# as a Pages artifact.
-# Job `deploy` publishes the artifact to GitHub Pages and only runs on `master`:
-# The default `github-pages` environment rejects deployments from non-default branches.
 jobs:
   build:
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: cachix/install-nix-action@448cde739abec1eaf0646249e3d25bb8d9bc7702 # v31.11.2
       - name: Build docs
         run: nix shell --inputs-from . nixpkgs#mdbook -c mdbook build
-      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+
+  build_release:
+    # Deploy only after a tag push has been verified, not after the daily re-check
+    if: >-
+      github.event_name == 'pull_request'
+      || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/master')
+      || (github.event_name == 'workflow_run'
+          && github.event.workflow_run.conclusion == 'success'
+          && github.event.workflow_run.event == 'push')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          path: book
+          fetch-depth: 0
+          fetch-tags: true
+      - uses: cachix/install-nix-action@448cde739abec1eaf0646249e3d25bb8d9bc7702 # v31.11.2
+      - name: Build the docs of the latest verified release tag
+        # An explicit `shell: bash` runs with `-eo pipefail`, the default only has `-e`
+        shell: bash
+        run: |
+          # As in release.yml: the release keys and fetch-release.sh are taken from
+          # master, never from the tag being published
+          git fetch -q --no-tags origin +refs/heads/master:refs/remotes/origin/master
+          trusted=$RUNNER_TEMP/trusted
+          mkdir -p "$trusted"
+          git archive origin/master | tar -x -C "$trusted"
+          echo "Trusted files from master $(git rev-parse origin/master)"
+
+          # Selects the latest vX.Y.Z tag and fails unless it is validly signed
+          release=$(
+            repoUrl="file://$GITHUB_WORKSPACE" \
+                nix shell --inputs-from "path:$trusted" \
+                    nixpkgs#{bash,coreutils,git,gnugrep,gnused,gnutar,openssh} \
+                    -c bash "$trusted/helper/fetch-release.sh"
+          )
+          version=$(sed -nE 's/^# bitcoinix release v([0-9]+\.[0-9]+\.[0-9]+)$/\1/p' <<<"$release")
+          if [[ -z $version ]]; then
+              echo "::error::Could not read the release version from fetch-release.sh"
+              exit 1
+          fi
+          echo "Building the docs of release v$version"
+
+          src=$RUNNER_TEMP/release
+          mkdir -p "$src"
+          git archive "refs/tags/v$version" | tar -x -C "$src"
+          nix shell --inputs-from "path:$trusted" nixpkgs#mdbook -c mdbook build "$src"
+          echo "BOOK_DIR=$src/book" >> "$GITHUB_ENV"
+      - if: github.event_name != 'pull_request'
+        uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        with:
+          path: ${{ env.BOOK_DIR }}
 
   deploy:
-    needs: build
-    if: github.ref == 'refs/heads/master'
+    needs: build_release
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     permissions:
       pages: write
