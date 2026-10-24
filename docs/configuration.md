@@ -221,6 +221,18 @@ separated by `;` or `,`.
 After updating any affected clients and settings, set
 `nix-bitcoin.configVersion = "0.1.2";`.
 
+### Upgrading to config version 0.1.3
+
+Bitcoin Knots support and the `services.bitcoind.package` option have been removed.
+Remove `services.bitcoind.package` from your configuration, including explicit
+selections of Bitcoin Core. The daemon, `bitcoin-cli` and Core Lightning now use
+`nix-bitcoin.pkgs.bitcoind` (Bitcoin Core) directly. `bitcoind-knots` is no longer
+included in bitcoinix's pinned packages. If you used Knots, review any
+Knots-specific settings in `services.bitcoind.extraConfig` before deploying
+with Bitcoin Core.
+
+After migrating your configuration, set `nix-bitcoin.configVersion = "0.1.3";`.
+
 # Customizing your configuration
 
 ## Get started with Nix

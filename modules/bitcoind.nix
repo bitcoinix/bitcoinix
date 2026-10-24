@@ -55,20 +55,6 @@ let
           If left empty, no address is announced.
         '';
       };
-      package = mkOption {
-        type = types.package;
-        default = config.nix-bitcoin.pkgs.bitcoind;
-        defaultText = "config.nix-bitcoin.pkgs.bitcoind";
-        description = ''
-          The package providing bitcoind binaries.
-
-          You can use this option to select other bitcoind-compatible implementations.
-          Example:
-          ```nix
-          services.bitcoind.package = config.nix-bitcoin.pkgs.bitcoind-knots;
-          ```
-        '';
-      };
       extraConfig = mkOption {
         type = types.lines;
         default = "";
@@ -320,7 +306,7 @@ let
         readOnly = true;
         type = types.package;
         default = pkgs.writers.writeBashBin "bitcoin-cli" ''
-          exec ${cfg.package}/bin/bitcoin-cli -datadir='${cfg.dataDir}' "$@"
+          exec ${bitcoind}/bin/bitcoin-cli -datadir='${cfg.dataDir}' "$@"
         '';
         defaultText = "(See source)";
         description = "Binary to connect with the bitcoind instance.";
@@ -330,6 +316,7 @@ let
   };
 
   cfg = config.services.bitcoind;
+  bitcoind = config.nix-bitcoin.pkgs.bitcoind;
   nbLib = config.nix-bitcoin.lib;
   secretsDir = config.nix-bitcoin.secretsDir;
   # The RPC cookie lives outside the data directory. The data directory is
@@ -442,7 +429,7 @@ in {
       }
     ];
 
-    environment.systemPackages = [ cfg.package (hiPrio cfg.cli) ];
+    environment.systemPackages = [ bitcoind (hiPrio cfg.cli) ];
 
     services.bitcoind = mkMerge [
       (mkIf cfg.dataDirReadableByGroup {
@@ -521,7 +508,7 @@ in {
         RuntimeDirectoryMode = "0750";
         TimeoutStartSec = "30min";
         TimeoutStopSec = "30min";
-        ExecStart = "${cfg.package}/bin/bitcoind -datadir='${cfg.dataDir}'";
+        ExecStart = "${bitcoind}/bin/bitcoind -datadir='${cfg.dataDir}'";
         Restart = "on-failure";
         UMask = mkIf cfg.dataDirReadableByGroup "0027";
         ReadWritePaths = [ cfg.dataDir ];
