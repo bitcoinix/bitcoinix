@@ -1,4 +1,4 @@
-{ config, lib, pkgs, ... }:
+{ config, lib, pkgs, utils, ... }:
 
 with lib;
 let
@@ -97,6 +97,11 @@ let
           Clients authenticate with an RPC cookie at `cookieFile`, readable by
           group `rbitcoinrpc`. The unix socket in `dataDir` is always enabled
           for the `rbitcoin-cli` wrapper.
+
+          WARNING: The cookie is an administrative credential. rbitcoin has
+          no restricted or read-only credential, so every method (including
+          `stop` and `invalidateblock`) is available to anyone who can read
+          it. Do not add services you do not trust to group `rbitcoinrpc`.
         '';
       };
       address = mkOption {
@@ -285,13 +290,17 @@ in {
         # `PrivateUsers` would hide group `rbitcoinrpc` from the service.
         ExecStartPre = mkIf cfg.rpc.enable (nbLib.rootScript "rbitcoin-rpc-cookie" ''
           cookie='${cfg.rpc.cookieFile}'
-          tmp=$(mktemp "$cookie.XXXXXX")
-          printf '__cookie__:%s' "$(head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n')" > "$tmp"
-          chown ${cfg.user}:rbitcoinrpc "$tmp"
-          chmod 0640 "$tmp"
-          mv -f "$tmp" "$cookie"
+          # /run/rbitcoin belongs to the service user, who could swap a file
+          # there for a symlink between root's write and its chown/chmod. Build
+          # the cookie in a root-only directory and only rename it into place.
+          dir=$(mktemp -d /run/rbitcoin-cookie.XXXXXX)
+          trap 'rm -rf "$dir"' EXIT
+          printf '__cookie__:%s' "$(head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n')" > "$dir/cookie"
+          chown ${cfg.user}:rbitcoinrpc "$dir/cookie"
+          chmod 0640 "$dir/cookie"
+          mv -fT "$dir/cookie" "$cookie"
         '');
-        ExecStart = "${cfg.package}/bin/rbitcoin-node ${escapeShellArgs args}";
+        ExecStart = "${cfg.package}/bin/rbitcoin-node ${utils.escapeSystemdExecArgs args}";
         User = cfg.user;
         Group = cfg.group;
         RuntimeDirectory = "rbitcoin";
