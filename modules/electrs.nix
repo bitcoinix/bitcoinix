@@ -46,6 +46,13 @@ let
   nbLib = config.nix-bitcoin.lib;
   secretsDir = config.nix-bitcoin.secretsDir;
   bitcoind = config.services.bitcoind;
+
+  # electrs 0.12 keeps its index in the same path as earlier versions but can't
+  # read their format. A marker file next to the index identifies a 0.12 index.
+  dbPath = "${cfg.dataDir}/${bitcoind.makeNetworkName "bitcoin" "regtest"}";
+  bindexMarker = "${dbPath}.bindex";
+  # Exit status for an old index, excluded from restarts
+  oldIndexStatus = 78;
 in {
   inherit options;
 
@@ -54,11 +61,15 @@ in {
       { assertion = bitcoind.prune == 0;
         message = "electrs does not support bitcoind pruning.";
       }
+      { assertion = versionAtLeast config.nix-bitcoin.pkgs.bitcoind.version "31";
+        message = "electrs requires Bitcoin Core 31 or later.";
+      }
     ];
 
     services.bitcoind = {
       enable = true;
-      listenWhitelisted = true;
+      # electrs fetches blocks via REST
+      rest.enable = true;
     };
 
     systemd.tmpfiles.rules = [
@@ -86,8 +97,21 @@ in {
       serviceConfig = nbLib.defaultHardening // {
         # electrs only uses the working directory for reading electrs.toml
         WorkingDirectory = cfg.dataDir;
-        ExecStart = ''
-          ${config.nix-bitcoin.pkgs.electrs}/bin/electrs \
+        # Check the index in the main process: a failing ExecStartPre isn't
+        # covered by RestartPreventExitStatus and would restart every 10s.
+        ExecStart = pkgs.writeShellScript "electrs" ''
+          if [[ ! -e '${dbPath}' ]]; then
+            touch '${bindexMarker}' || exit 1
+          elif [[ ! -e '${bindexMarker}' ]]; then
+            echo "'${dbPath}' contains an index of electrs < 0.12, which electrs 0.12 can't read."
+            echo "Rebuild the index from scratch (this takes hours):"
+            echo "  systemctl stop electrs"
+            echo "  rm -r '${dbPath}'"
+            echo "  systemctl start electrs"
+            echo 'See docs/configuration.md, "Upgrading to config version 0.1.3".'
+            exit ${toString oldIndexStatus}
+          fi
+          exec ${config.nix-bitcoin.pkgs.electrs}/bin/electrs \
           --log-filters=INFO \
           --network=${bitcoind.makeNetworkName "bitcoin" "regtest"} \
           --db-dir='${cfg.dataDir}' \
@@ -95,13 +119,13 @@ in {
           --electrum-rpc-addr=${cfg.address}:${toString cfg.port} \
           --monitoring-addr=${cfg.address}:${toString cfg.monitoringPort} \
           --daemon-rpc-addr=${nbLib.addressWithPort bitcoind.rpc.address bitcoind.rpc.port} \
-          --daemon-p2p-addr=${nbLib.addressWithPort bitcoind.address bitcoind.whitelistedPort} \
           ${cfg.extraArgs}
         '';
         User = cfg.user;
         Group = cfg.group;
         Restart = "on-failure";
         RestartSec = "10s";
+        RestartPreventExitStatus = oldIndexStatus;
         ReadWritePaths = [ cfg.dataDir ];
       } // nbLib.allowedIPAddresses cfg.tor.enforce;
     };

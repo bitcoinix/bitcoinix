@@ -5,14 +5,13 @@ pkgs: pkgsUnstable:
     bitcoin
     bitcoind
     charge-lnd
-    electrs
     lndconnect;
 
   inherit (pkgsUnstable)
-    bitcoind-knots
     btcpayserver
     clboss
     clightning
+    electrs
     extra-container
     fulcrum
     lnd

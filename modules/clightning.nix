@@ -157,7 +157,7 @@ in {
     ];
 
     systemd.services.clightning = {
-      path  = [ bitcoind.package ];
+      path  = [ config.nix-bitcoin.pkgs.bitcoind ];
       # `wantedBy` bitcoind: a deploy that changes the bitcoind unit stops and
       # starts bitcoind. `requires` propagates the stop to this unit, and on
       # production nodes the unit stayed down after such a switch. Being wanted

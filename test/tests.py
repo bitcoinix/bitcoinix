@@ -1,6 +1,7 @@
 from collections import OrderedDict
 from urllib.parse import parse_qs, urlparse
 import base64
+import hashlib
 import hmac
 import json
 import os
@@ -281,6 +282,19 @@ def _():
     # A file with laxer permissions (created by earlier versions) is replaced
     succeed(f"chmod 644 {toml} && systemctl restart electrs")
     assert_full_match(f"stat -c '%a %U' {toml}", "600 electrs\n")
+    # An index without the marker (created by electrs < 0.12) stops the unit
+    # without restarts
+    marker = succeed("ls /var/lib/electrs/*.bindex").strip()
+    machine.wait_until_succeeds(f"test -d {marker.removesuffix('.bindex')}")
+    succeed(f"systemctl stop electrs && mv {marker} {marker}.saved")
+    succeed("systemctl start electrs")
+    # `failed`, not `activating` (auto-restart)
+    machine.wait_until_succeeds("[[ $(systemctl show -P ActiveState electrs) == failed ]]")
+    assert_full_match("systemctl show -P ExecMainStatus electrs", "78\n")
+    machine.wait_until_succeeds(log_has_string("electrs", "contains an index of electrs < 0.12"))
+    succeed(f"mv {marker}.saved {marker} && systemctl reset-failed electrs && systemctl start electrs")
+    # Not assert_running: the journal now has the failure from above
+    machine.wait_for_unit("electrs")
     wait_for_open_port(ip("electrs"), 4224)  # prometeus metrics provider
     # Check RPC connection to bitcoind
     if not "regtest" in enabled_tests:
@@ -1029,7 +1043,21 @@ def _():
 
     if enabled("electrs"):
         machine.wait_until_succeeds(current_run_log_has_string("electrs", "serving Electrum RPC"))
-        assert_full_match(get_block_height(ip('electrs'), 50001), f"{num_blocks}\n")
+        # electrs serves requests while it is still indexing
+        machine.wait_until_succeeds(
+            f"[[ $({get_block_height(ip('electrs'), 50001)}) == {num_blocks} ]]"
+        )
+        # The history of the address that mined the blocks is in the index
+        script = succeed(
+            "bitcoin-cli getblock $(bitcoin-cli getblockhash 1) 2"
+            " | jq -r '.tx[0].vout[0].scriptPubKey.hex'"
+        )
+        scripthash = hashlib.sha256(bytes.fromhex(script.strip())).digest()[::-1].hex()
+        history = succeed(
+            f"""echo '{{"method": "blockchain.scripthash.get_history", "params": ["{scripthash}"], "id": 0}}'"""
+            f" | nc {ip('electrs')} 50001 | head -1 | jq -M '.result | length'"
+        )
+        assert int(history) > 0, f"electrs returned no history for {scripthash}"
 
     if enabled("fulcrum"):
         machine.wait_until_succeeds(current_run_log_has_string("fulcrum", "listening for connections"))
