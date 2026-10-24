@@ -41,9 +41,9 @@ let
         Where barkd gets blockchain data from.
 
         - `esplora`: An Esplora HTTP API, set via {option}`esploraUrl`.
-        - `bitcoind`: The local {option}`services.bitcoind` instance, via its
-          `public` RPC user. This enables `txindex` in bitcoind, which Bark requires,
-          and requires {option}`network` to match the bitcoind network.
+        - `bitcoind`: The local {option}`services.bitcoind` instance, via a
+          dedicated `barkd` RPC user. This enables `txindex` in bitcoind, which Bark
+          requires, and requires {option}`network` to match the bitcoind network.
           Bark never sends bitcoind RPC through a proxy, so with
           {option}`tor.proxy` only the Ark server and Esplora connections use Tor.
       '';
@@ -98,6 +98,7 @@ let
       '';
       description = ''
         Extra lines appended to the Bark configuration file ({file}`config.toml`).
+        Values must be valid TOML, e.g. strings quoted and escaped.
 
         See the `Config` struct in
         https://gitlab.com/ark-bitcoin/bark/-/blob/master/bark/src/config.rs
@@ -166,7 +167,7 @@ let
     ''}
     ${optionalString useBitcoind ''
       bitcoind_address = "http://${nbLib.addressWithPort bitcoind.rpc.address bitcoind.rpc.port}"
-      bitcoind_user = "${bitcoind.rpc.users.public.name}"
+      bitcoind_user = "${bitcoind.rpc.users.barkd.name}"
     ''}
     ${optionalString cfg.tor.proxy ''
       socks5_proxy = "${torProxy}"
@@ -214,7 +215,11 @@ in {
         conf=$(
           cat '${configFile}'
           ${optionalString useBitcoind ''
-            echo "bitcoind_pass = \"$(cat '${secretsDir}/bitcoin-rpcpassword-public')\""
+            # Escape the password for a TOML basic string
+            pass=$(cat '${secretsDir}/bitcoin-rpcpassword-barkd')
+            pass=''${pass//\\/\\\\}
+            pass=''${pass//\"/\\\"}
+            echo "bitcoind_pass = \"$pass\""
           ''}
         )
         install -T -m 600 <(echo "$conf") '${cfg.dataDir}/config.toml'
@@ -261,7 +266,6 @@ in {
     users.users.${cfg.user} = {
       isSystemUser = true;
       group = cfg.group;
-      extraGroups = optional useBitcoind "bitcoinrpc-public";
     };
     users.groups.${cfg.group} = {};
     nix-bitcoin.operator = {
@@ -275,9 +279,24 @@ in {
     services.bitcoind = {
       enable = true;
       txindex = true;
-      # Bark submits exit and CPFP transactions as packages
-      rpc.users.public.rpcwhitelist = [ "submitpackage" ];
+      # A dedicated user, so that the extra grant stays with barkd
+      rpc.users.barkd = {
+        passwordHMACFromFile = true;
+        # Bark submits exit and CPFP transactions as packages
+        rpcwhitelist = bitcoind.rpc.users.public.rpcwhitelist ++ [ "submitpackage" ];
+      };
     };
+
+    nix-bitcoin.secrets = {
+      bitcoin-rpcpassword-barkd = {
+        user = bitcoind.user;
+        group = cfg.group;
+      };
+      bitcoin-HMAC-barkd.user = bitcoind.user;
+    };
+    nix-bitcoin.generateSecretsCmds.barkd = ''
+      makeBitcoinRPCPassword barkd
+    '';
 
     systemd.services.barkd = {
       # See ./electrs.nix for why barkd is wanted by bitcoind

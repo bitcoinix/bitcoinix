@@ -264,8 +264,16 @@ def _():
     public_denied = ["scantxoutset", "getblocktemplate", "fundrawtransaction"]
     (public_allowed if data["clightning-bcli"] else public_denied).append("getblockfrompeer")
     (public_allowed if data["mempool"] else public_denied).append("gettxoutsetinfo")
-    (public_allowed if data["barkd"] else public_denied).append("submitpackage")
+    # Granted to barkd's own RPC user only
+    public_denied.append("submitpackage")
     assert_rpc_access("public", public_allowed, public_denied)
+
+    if data["barkd"]:
+        barkd_allowed = ["getblockcount", "submitpackage"]
+        barkd_denied = [
+            "scantxoutset", "getblocktemplate", "fundrawtransaction", "setban", "generatetoaddress"
+        ]
+        assert_rpc_access("barkd", barkd_allowed, barkd_denied)
 
     if data["btcpayserver"]:
         btcpay_allowed = ["getblockcount", "getblockfrompeer"]
