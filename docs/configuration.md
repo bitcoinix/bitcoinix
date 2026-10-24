@@ -237,6 +237,10 @@ rm -r /var/lib/electrs/bitcoin
 Then deploy the new system config to your node and follow the progress with
 `journalctl -u electrs -f`.
 
+If you roll back to the previous config after electrs 0.12 has started once, also
+remove the marker file `/var/lib/electrs/bitcoin.bindex`. Otherwise the index check
+is skipped on the next upgrade.
+
 electrs 0.12.0 also requires Bitcoin Core 31 or later, so it no longer works with
 `bitcoind-knots`. It reads blocks through bitcoind's REST interface, which bitcoinix
 enables automatically (`services.bitcoind.rest.enable`). REST is served without

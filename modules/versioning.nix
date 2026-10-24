@@ -341,6 +341,9 @@ let
           systemctl stop electrs
           rm -r '${dbPath}'
         Then deploy the new system config to your node.
+        If you roll back to the previous config after electrs 0.12 has started once,
+        also remove the marker file '${dbPath}.bindex'. Otherwise the index check is
+        skipped on the next upgrade.
 
         electrs now requires Bitcoin Core 31 or later (bitcoind-knots is not supported)
         and reads blocks through bitcoind's REST interface, which is enabled
