@@ -1026,6 +1026,24 @@ def _():
 
     if enabled("btcpayserver"):
         machine.wait_until_succeeds(log_has_string("nbxplorer", f"At height: {num_blocks}"))
+        # BTCPay 2.4.5 blocks outbound requests to private addresses by default
+        # and the internal lnd REST API is one. The `btcpayserver` test curls lnd
+        # itself, so only a Greenfield request exercises BTCPay's own HTTP client.
+        api = f"http://{ip('btcpayserver')}:23000/api/v1"
+        user = "admin@example.com"
+        password = "Greenfield-Test-Password-1"
+        # The first user is created without authentication and becomes the admin.
+        # A rerun of this test finds the user in place and skips the request.
+        succeed(
+            f"curl -fsS -u {user}:{password} {api}/users/me >/dev/null || "
+            f"curl -fsS -X POST {api}/users -H 'Content-Type: application/json' "
+            f"""-d '{{"email": "{user}", "password": "{password}", "isAdministrator": true}}'"""
+        )
+        assert_full_match(
+            f"curl -fsS -u {user}:{password} {api}/server/lightning/BTC/info | jq -M .blockHeight",
+            f"{num_blocks}\n",
+        )
+        machine.wait_until_succeeds(f"[[ $(curl -fsS {api}/health | jq -M .synchronized) == true ]]")
 
     if enabled("mempool"):
         assert_running("nginx")
