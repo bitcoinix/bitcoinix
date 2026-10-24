@@ -9,6 +9,7 @@ pkgs: pkgsUnstable:
     lndconnect;
 
   inherit (pkgsUnstable)
+    bark-wallet
     bitcoind-knots
     btcpayserver
     clboss

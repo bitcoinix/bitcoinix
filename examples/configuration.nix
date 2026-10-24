@@ -193,6 +193,13 @@
   # public access to the web interface.
   # nix-bitcoin.onionServices.btcpayserver.enable = true;
 
+  ### Bark
+  # Set this to enable barkd, the REST daemon of Bark, a wallet for the Ark protocol.
+  # By default, it uses signet with Second's public Ark server and Esplora instance.
+  # The wallet mnemonic is created in /var/lib/barkd/mnemonic. Back it up.
+  # See ../docs/services.md#barkd for more info.
+  # services.barkd.enable = true;
+
   ### Hardware wallets
   # Enable the following to allow using hardware wallets.
   # See https://github.com/bitcoin-core/HWI for more information.
