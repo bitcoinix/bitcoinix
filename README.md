@@ -91,6 +91,7 @@ Docs
 * [Hardware requirements](docs/hardware.md)
 * [Installation](docs/install.md)
 * [Configuration and maintenance](docs/configuration.md)
+* [Upgrading](docs/upgrading.md)
 * [Using services](docs/services.md)
 * [FAQ](docs/faq.md)
 
