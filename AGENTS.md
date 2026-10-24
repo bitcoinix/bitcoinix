@@ -120,7 +120,8 @@ For each entry:
 - Set `condition` so only affected users see it, e.g. users who already set the
   new value don't.
 - The `message` says what changed and what to do. Put longer migration steps in
-  `docs/configuration.md` under "Upgrading to config version <version>" and link them.
+  `docs/upgrading.md` under "Upgrading to config version <version>" and refer to
+  that section from the message.
 - Set `nix-bitcoin.configVersion` in `examples/configuration.nix` to that version
   unless it already is.
 
@@ -130,6 +131,21 @@ On every change, re-check whether the docs (`README.md`, `docs/`, `dev/README.md
 `examples/`) are affected. Not every change needs a docs update, but a significant
 new feature or a behaviour change MUST be reflected in the docs, in the same PR.
 Pages under `docs/` must be listed in `docs/SUMMARY.md` to appear in the mdBook build.
+
+- Upgrade notes: every `changes` entry with a non-trivial migration gets text in
+  `docs/upgrading.md`. Each version has one `## Upgrading to config version <version>`
+  section, newest version first, ending with the line that sets `configVersion`.
+  Add to the section of the upcoming release; never edit sections of released versions
+  except to fix errors.
+- Removed or renamed options, commands, paths and services: grep `README.md`, `docs/`
+  and `examples/` and update or remove every mention. Docs must not describe features
+  that no longer exist.
+- Code that points into the docs must stay valid when a page or heading moves:
+  `modules/versioning.nix`, `modules/obsolete-options.nix`, runtime messages (e.g.
+  `modules/electrs.nix`), `helper/makeShell.nix`, `examples/` and `README.md`.
+- Only document what the code does; check option names, defaults, paths and commands
+  against the modules. Keep pages short and task-oriented and link to the module
+  source or the options search for details.
 
 ## NixOS release bumps
 
