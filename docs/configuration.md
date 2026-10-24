@@ -224,8 +224,9 @@ convert or delete the old one, so bitcoinix refuses to start electrs while the o
 index is in place. Reindexing takes from a few hours
 to about a day, depending on your hardware. The final index is about 7% of the size
 of bitcoind's `blocks/*.dat` files and can temporarily grow to about 14% during the
-initial sync. electrs, and mempool if it uses electrs as its Electrum server, is
-unavailable until reindexing has finished.
+initial sync. electrs accepts connections while it indexes but answers with incomplete
+history and balances until indexing has finished. The same applies to mempool if it
+uses electrs as its Electrum server.
 
 To upgrade, delete the old index before deploying (default data dir shown; for
 regtest, the index is in `regtest` instead of `bitcoin`):

@@ -333,7 +333,9 @@ let
         It does not convert or delete the old index: until it is removed, electrs
         refuses to start.
         Reindexing takes from a few hours to about a day, depending on your hardware.
-        electrs, and mempool if it uses electrs, is unavailable meanwhile.
+        electrs accepts connections while it indexes but answers with incomplete history
+        and balances until indexing has finished. The same applies to mempool if it
+        uses electrs.
 
         To upgrade, delete the old index before deploying:
           systemctl stop electrs
