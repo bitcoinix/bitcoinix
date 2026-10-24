@@ -213,10 +213,17 @@ addresses. The Lightning node that bitcoinix configures for BTCPay Server is
 unaffected. To allow specific private destinations, list them in BTCPay's
 `ssrfexceptions` setting:
 ```nix
-systemd.services.btcpayserver.environment.BTCPAY_SSRFEXCEPTIONS = "127.0.0.1:8080;10.8.0.0/24";
+systemd.services.btcpayserver.environment.BTCPAY_SSRFEXCEPTIONS = "192.168.1.50:8443;10.8.0.0/24";
 ```
 Entries are exact hostnames, IP addresses or CIDR ranges, optionally with a port,
 separated by `;` or `,`.
+
+Keep each exception as narrow as possible: one address with its port, or the
+smallest range that covers the destination. Never list the ports of node services
+such as the lnd REST API or the bitcoind RPC. Anyone who can set a webhook, a
+notification URL or a Lightning address in BTCPay can make it send requests to
+every listed destination. A hostname entry trusts every address the hostname
+resolves to, so list only hostnames whose DNS you control.
 
 After updating any affected clients and settings, set
 `nix-bitcoin.configVersion = "0.1.2";`.
