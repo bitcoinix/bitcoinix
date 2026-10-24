@@ -221,6 +221,21 @@ separated by `;` or `,`.
 After updating any affected clients and settings, set
 `nix-bitcoin.configVersion = "0.1.2";`.
 
+### Upgrading to config version 0.1.3
+
+Bitcoin Knots (`bitcoind-knots`) has been removed. bitcoinix supports and tests
+Bitcoin Core only, and `config.nix-bitcoin.pkgs.bitcoind-knots` no longer exists.
+
+If you used Knots, remove your `services.bitcoind.package` setting to switch to the
+default Bitcoin Core package. Also remove any Knots-only options from
+`services.bitcoind.extraConfig`, because Bitcoin Core refuses to start with unknown
+options. Your existing chain data stays usable and needs no reindex.
+
+You can still set `services.bitcoind.package` to a Knots package you maintain
+yourself, but this is unsupported and some services may not work with it.
+
+After migrating your configuration, set `nix-bitcoin.configVersion = "0.1.3";`.
+
 # Customizing your configuration
 
 ## Get started with Nix

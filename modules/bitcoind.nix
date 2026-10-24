@@ -62,11 +62,9 @@ let
         description = ''
           The package providing bitcoind binaries.
 
-          You can use this option to select other bitcoind-compatible implementations.
-          Example:
-          ```nix
-          services.bitcoind.package = config.nix-bitcoin.pkgs.bitcoind-knots;
-          ```
+          bitcoinix supports and tests Bitcoin Core only. Other bitcoind-compatible
+          implementations are untested, and some services rely on Bitcoin
+          Core-specific features.
         '';
       };
       extraConfig = mkOption {

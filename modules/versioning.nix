@@ -309,6 +309,20 @@ let
         See docs/configuration.md, "Upgrading to config version 0.1.2".
       '';
     }
+    {
+      version = "0.1.3";
+      condition = config.services.bitcoind.enable
+        && elem (config.services.bitcoind.package.pname or "") [ "bitcoind-knots" "bitcoin-knots" ];
+      message = ''
+        Bitcoin Knots (`bitcoind-knots`) has been removed. bitcoinix no longer packages
+        or supports it.
+
+        To switch to Bitcoin Core, remove your `services.bitcoind.package` setting and
+        remove Knots-only options from `services.bitcoind.extraConfig`, because Bitcoin
+        Core refuses to start with unknown options. Your existing chain data stays usable.
+        See docs/configuration.md, "Upgrading to config version 0.1.3".
+      '';
+    }
   ];
 
   clightningRestUsed = options.services.clightning-rest.isDefined
