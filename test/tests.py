@@ -325,6 +325,8 @@ def _():
         return
     cookie = "/run/rbitcoin/rpc.cookie"
     assert_full_match(f"stat -c '%a %U %G' {cookie}", "640 rbitcoin rbitcoinrpc\n")
+    # The cookie is built in a root-only temp dir that is removed afterwards
+    assert_full_match("find /run -maxdepth 1 -name 'rbitcoin-cookie.*' | wc -l", "0\n")
     # Only group `rbitcoinrpc` can read the cookie
     machine.fail(f"runuser -u operator -- cat {cookie}")
     # The cookie authenticates Bitcoin Core style HTTP Basic RPC, other credentials don't

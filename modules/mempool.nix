@@ -110,6 +110,12 @@ let
             server. Mempool reads rbitcoin's RPC cookie instead of a password.
             Addresses with more than `services.rbitcoin.maxShCreates`
             outputs cannot be shown.
+
+            WARNING: Mempool joins group `rbitcoinrpc` to read rbitcoin's
+            RPC cookie, which is an administrative credential. With bitcoind,
+            mempool only holds the `public` user, limited by an RPC whitelist.
+            rbitcoin has no such restricted credential, so a compromised
+            mempool backend can stop the node or invalidate blocks.
         '';
       };
       settings = mkOption {

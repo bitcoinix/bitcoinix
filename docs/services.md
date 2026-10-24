@@ -554,6 +554,11 @@ Things to know before enabling it:
   without netns isolation (e.g. with `secure-node.nix`, which enables
   bitcoind), set `services.rbitcoin.port`, `rpc.port` and `electrum.port`
   to free ports; evaluation fails on a collision.
+- **The RPC cookie is an admin credential.** rbitcoin has no restricted or
+  read-only credential: anyone who can read the cookie (group `rbitcoinrpc`,
+  which includes the mempool user) can call every method, including `stop`
+  and `invalidateblock`. With bitcoind, mempool only holds a whitelisted
+  `public` user, so a compromised mempool backend is a bigger risk here.
 - **Own data directory.** rbitcoin keeps its own archive format
   (`services.rbitcoin.dataDir`, default `/var/lib/rbitcoin`) and cannot reuse
   bitcoind's blocks. A mainnet sync downloads and stores the whole chain again.

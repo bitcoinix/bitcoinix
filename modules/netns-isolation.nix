@@ -255,7 +255,7 @@ in {
         connections = [ "bitcoind" ];
       };
       rbitcoin = {
-        id = 33;
+        id = 34;
       };
       mempool = {
         id = 32;
