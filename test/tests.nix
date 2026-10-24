@@ -265,6 +265,7 @@ let
       tests.barkd = cfg.barkd.enable;
       test.data.barkd = {
         inherit (cfg.barkd) dataDir user port network chainSource;
+        torProxy = cfg.barkd.tor.proxy;
       };
       # There is no Ark server in the test VMs, so wallet creation would fail.
       # The barkd test creates a wallet via the REST API instead.
@@ -405,6 +406,9 @@ let
         # Not running. The barkd test checks that wallet creation gets past
         # the chain source checks and then fails to reach this server.
         arkServer = "http://127.0.0.1:3535";
+        # Bark never proxies bitcoind RPC, so this works with netns-isolation.
+        # The Ark server is on localhost, which Bark doesn't proxy either.
+        tor.proxy = true;
       };
     };
 

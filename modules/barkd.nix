@@ -44,6 +44,8 @@ let
         - `bitcoind`: The local {option}`services.bitcoind` instance, via its
           `public` RPC user. This enables `txindex` in bitcoind, which Bark requires,
           and requires {option}`network` to match the bitcoind network.
+          Bark never sends bitcoind RPC through a proxy, so with
+          {option}`tor.proxy` only the Ark server and Esplora connections use Tor.
       '';
     };
     esploraUrl = mkOption {
@@ -155,7 +157,7 @@ let
   bitcoind = config.services.bitcoind;
 
   useBitcoind = cfg.chainSource == "bitcoind";
-  isLoopback = addr: hasPrefix "127." addr || addr == "::1" || addr == "localhost";
+  torProxy = "socks5h://${config.nix-bitcoin.torClientAddressWithPort}";
 
   configFile = pkgs.writeText "barkd-config.toml" ''
     server_address = "${cfg.arkServer}"
@@ -167,7 +169,7 @@ let
       bitcoind_user = "${bitcoind.rpc.users.public.name}"
     ''}
     ${optionalString cfg.tor.proxy ''
-      socks5_proxy = "socks5h://${config.nix-bitcoin.torClientAddressWithPort}"
+      socks5_proxy = "${torProxy}"
     ''}
     ${cfg.extraConfig}
   '';
@@ -191,14 +193,6 @@ in {
       }
       { assertion = !useBitcoind || bitcoind.prune == 0;
         message = "barkd requires bitcoind `txindex`, which does not support pruning.";
-      }
-      # Bark only bypasses its SOCKS proxy for loopback addresses,
-      # so a non-local bitcoind (e.g. with netns-isolation) is unreachable via Tor.
-      { assertion = !(useBitcoind && cfg.tor.proxy) || isLoopback (nbLib.address bitcoind.rpc.address);
-        message = ''
-          services.barkd.tor.proxy can't be combined with chainSource `bitcoind` when bitcoind
-          listens on a non-loopback RPC address (e.g. with netns-isolation).
-        '';
       }
     ];
 
@@ -250,6 +244,18 @@ in {
         TimeoutStartSec = "5min";
         ReadWritePaths = [ cfg.dataDir ];
       } // nbLib.allowedIPAddresses cfg.tor.enforce;
+      # TODO-EXTERNAL:
+      # `socks5_proxy` in config.toml doesn't cover the chain source client that
+      # wallet creation uses (`bark create` and the REST `wallet/create`), so
+      # creation would contact Esplora directly. That client honours the standard
+      # proxy variables, so set them until Bark passes `socks5_proxy` there.
+      # The bitcoind RPC client never uses a proxy (bark/src/chain.rs), so the
+      # local bitcoind stays reachable with netns-isolation. `NO_PROXY` keeps the
+      # local and netns addresses direct in any case.
+      environment = mkIf cfg.tor.proxy {
+        ALL_PROXY = torProxy;
+        NO_PROXY = "localhost,127.0.0.1,::1,169.254.0.0/16";
+      };
     };
 
     users.users.${cfg.user} = {

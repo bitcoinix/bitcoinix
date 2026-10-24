@@ -562,6 +562,11 @@ services.barkd = {
 };
 ```
 
+With `services.barkd.tor.proxy` (enabled by the `secure-node.nix` preset),
+connections to the Ark server and Esplora go through Tor, including the ones
+made during wallet creation. The connection to the local bitcoind never uses
+Tor, so `chainSource = "bitcoind"` works together with netns-isolation.
+
 On first start, barkd creates a wallet with a fresh mnemonic, stored in
 `/var/lib/barkd/mnemonic`. Back up this file, for example via
 `services.backups`, which includes `/var/lib/barkd`.

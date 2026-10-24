@@ -520,6 +520,10 @@ def _():
     assert_full_match(f"stat -c '%a %U' {data_dir}", f"700 {user}\n")
     # config.toml can hold the bitcoind RPC password
     assert_full_match(f"stat -c '%a %U' {data_dir}/config.toml", f"600 {user}\n")
+    # Wallet creation gets the proxy from the environment, see modules/barkd.nix
+    env = succeed("systemctl show -p Environment --value barkd")
+    if data["torProxy"] != ("ALL_PROXY=socks5h://" in env):
+        raise Exception(f"Unexpected barkd environment: {env}")
     # The operator can call the API via barkd-cli
     assert_full_match("runuser -u operator -- barkd-cli wallet", '{"fingerprint":null}')
 

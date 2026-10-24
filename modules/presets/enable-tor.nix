@@ -25,6 +25,7 @@ in {
     # disable Tor enforcement until btcpayserver can fetch rates over Tor
     # btcpayserver = defaultEnableTorProxy;
     mempool = defaultEnableTorProxy;
+    barkd = defaultEnableTorProxy;
 
     # These services don't make outgoing connections but we restrict them to
     # Tor just to be safe.
