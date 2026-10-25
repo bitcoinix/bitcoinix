@@ -1,11 +1,11 @@
 #!/usr/bin/env nix-shell
-#! nix-shell -i bash -p gnupg gnused jq
+#! nix-shell -i bash -p gnupg gnused jq curl
 set -euo pipefail
 
 # Use this to start a debug shell at the location of this statement
 # . "${BASH_SOURCE[0]%/*}/../../helper/start-bash-session.sh"
 
-version=3.2.1
+version=3.3.2
 # You can also specify a rev instead:
 # rev=57eddac7f0b99b4fe84d91c0f4a50a4f7ccfe55f
 owner=mempool
@@ -33,7 +33,21 @@ updateSrc() {
         export GNUPGHOME=$TMPDIR
         # Fetch wiz' key
         gpg --keyserver hkps://keyserver.ubuntu.com --recv-keys 913C5FF1F579B66CA10378DBA394E332255A6173 2> /dev/null
-        git -C "$src" verify-tag $tag
+        # Fetch mononaut's keys. Releases since v3.3.0 are signed by 523B596A78BB8495AA2EC45ABFD16BE592A9CD8D,
+        # which is only published on GitHub.
+        curl -fsS https://github.com/mononaut.gpg | gpg --import 2> /dev/null
+        # Reject bad signatures and signatures by expired or revoked keys.
+        # `git verify-tag` fails on revoked keys but accepts expired keys, so also require GOODSIG.
+        if ! status=$(git -C "$src" verify-tag --raw "$tag" 2>&1) ||
+           ! grep -q '^\[GNUPG:\] GOODSIG ' <<< "$status"; then
+            echo "Tag $tag failed verification:"; echo "$status"; exit 1
+        fi
+        # Only accept signatures by these keys
+        signer=$(sed -nE 's/^\[GNUPG:\] VALIDSIG .* ([0-9A-F]{40})$/\1/p' <<< "$status")
+        case $signer in
+            913C5FF1F579B66CA10378DBA394E332255A6173|523B596A78BB8495AA2EC45ABFD16BE592A9CD8D) ;;
+            *) echo "Tag $tag is not signed by a trusted key (signer: ${signer:-none})"; exit 1 ;;
+        esac
         rev=$tag
     fi
     rm -rf "$src"/.git
