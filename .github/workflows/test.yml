@@ -61,10 +61,13 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: cachix/install-nix-action@448cde739abec1eaf0646249e3d25bb8d9bc7702 # v31.11.2
       - run: nix flake check --all-systems
-      # Build flake-info and push it from master before anything runs it, so that the
-      # key is never present after third-party code ran in this job. Without the cached
-      # build, every run builds flake-info and a patched Nix from source.
-      - run: nix shell --inputs-from . nixpkgs#cachix -c cachix use bitcoinix
+      # Build flake-info and push it from master before running it outside the Nix
+      # build sandbox. Only the upload step receives the signing key.
+      - name: Configure flake-info caches
+        run: |
+          nix shell --inputs-from . nixpkgs#cachix -c cachix use bitcoinix
+          # Upstream caches the patched Nix dependency used by flake-info.
+          nix shell --inputs-from . nixpkgs#cachix -c cachix use nixos-search
       - id: flake_info
         run: echo "path=$(nix build --no-link --print-out-paths ./test/nixos-search#flake-info)" >> "$GITHUB_OUTPUT"
       - if: github.event_name == 'push' && github.ref == 'refs/heads/master'
