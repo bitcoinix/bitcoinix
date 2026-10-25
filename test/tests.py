@@ -1206,8 +1206,8 @@ else:
     def ip(_):
         return "127.0.0.1"
 
-# Runs last: every setup-secrets run makes the secrets dir 0700 until it
-# succeeds, which would break services that are still starting.
+# Runs after service tests: every setup-secrets run makes the secrets dir 0700
+# until it succeeds, which would break services that are still starting.
 @test("setup-secrets")
 def _():
     assert_running("setup-secrets")
@@ -1277,3 +1277,31 @@ def _():
                 "systemctl start nix-bitcoin-secrets.target",
             )
             assert succeed(listing) == before
+
+@test("setup-secrets-supplied")
+def _():
+    # This scenario has generateSecrets = false and supplied secret files.
+    # Losing one must deny access even to the other, otherwise readable secret.
+    assert_full_match("runuser -u nobody -- cat /secrets/first", "first-secret")
+    assert_full_match("runuser -u nobody -- cat /secrets/second", "second-secret")
+    succeed(
+        "mv /secrets/second /root/setup-secrets-supplied-orig",
+        "systemctl reset-failed setup-secrets",
+    )
+    machine.fail("systemctl restart setup-secrets")
+    assert_matches("systemctl show setup-secrets --value -p Result", "^exit-code$")
+    assert_matches("journalctl -b -u setup-secrets", "Secret file 'second' is missing")
+    assert_full_match("stat -c '%U:%G %a' /secrets", "root:root 700\n")
+    assert_full_match("stat -c '%U:%G %a' /secrets/first", "nobody:nogroup 440\n")
+    machine.fail("runuser -u nobody -- cat /secrets/first")
+
+    succeed(
+        "mv /root/setup-secrets-supplied-orig /secrets/second",
+        "systemctl reset-failed setup-secrets",
+        "systemctl restart setup-secrets",
+        "systemctl start nix-bitcoin-secrets.target",
+    )
+    assert_full_match("stat -c '%U:%G %a' /secrets", "root:root 751\n")
+    assert_full_match("stat -c '%U:%G %a' /secrets/second", "nobody:nogroup 440\n")
+    assert_full_match("runuser -u nobody -- cat /secrets/first", "first-secret")
+    assert_full_match("runuser -u nobody -- cat /secrets/second", "second-secret")

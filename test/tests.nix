@@ -322,6 +322,35 @@ let
 
     default = scenarios.secureNode;
 
+    # Supply secrets before setup-secrets, which must not generate them itself.
+    setup-secrets = { config, ... }: {
+      nix-bitcoin = {
+        generateSecrets = mkForce false;
+        setupSecrets = true;
+        secrets = genAttrs [ "first" "second" ] (_: {
+          user = "nobody";
+          group = "nogroup";
+        });
+      };
+      systemd.services.supply-test-secrets = {
+        requiredBy = [ "setup-secrets.service" ];
+        before = [ "setup-secrets.service" ];
+        serviceConfig = {
+          Type = "oneshot";
+          RemainAfterExit = true;
+        };
+        # Provision the fixtures once, so restarts cannot repair missing files.
+        script = ''
+          install -d -m 0700 /secrets
+          cd /secrets
+          ${config.nix-bitcoin.generateSecretsScript}
+          printf first-secret > first
+          printf second-secret > second
+        '';
+      };
+      tests.setup-secrets-supplied = true;
+    };
+
     # All available basic services and tests
     full = {
       tests.security = true;
