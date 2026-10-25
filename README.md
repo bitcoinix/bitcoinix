@@ -123,6 +123,7 @@ NixOS modules ([src](modules/modules.nix))
   * [mempool](https://github.com/mempool/mempool): Bitcoin visualizer, explorer, and API service
   * [electrs](https://github.com/romanz/electrs): Electrum server
   * [fulcrum](https://github.com/cculianu/Fulcrum): Electrum server (see [the module](modules/fulcrum.nix) for a comparison with electrs)
+  * [rbitcoin](https://github.com/reardencode/rbitcoin) ([experimental](docs/services.md#rbitcoin)): Bitcoin full node in Rust with a built-in Electrum server, usable as mempool's node instead of bitcoind
   * [BTCPay Server](https://github.com/btcpayserver/btcpayserver)
   * [bitcoin-core-hwi](https://github.com/bitcoin-core/HWI)
 * Helper

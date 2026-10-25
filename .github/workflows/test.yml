@@ -48,6 +48,7 @@ jobs:
           - netns
           - netnsRegtest
           - wireguard-lndconnect
+          - rbitcoinMempool
     needs: build_test_drivers
     if: needs.build_test_drivers.outputs.run_scenario_tests == 'true'
     steps:

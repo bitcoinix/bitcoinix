@@ -18,6 +18,7 @@ let self = {
     mempool-frontend
     mempool-rust-gbt
     mempool-nginx-conf;
+  rbitcoin = pkgs.callPackage ./rbitcoin { };
   trustedcoin = pkgs.callPackage ./trustedcoin { };
 
   inherit (self.pyPkgs.nbPython3PackagesWithUnlockedEcdsa) hwi;
