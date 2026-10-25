@@ -82,3 +82,23 @@ nix run ..#tests.default.containerLegacy # For NixOS with `system.stateVersion` 
 nix run ..#tests.default.container -- --run c nodeinfo
 nix run ..#tests.default.containerLegacy -- --run c nodeinfo # For NixOS with `system.stateVersion` <22.05
 ```
+
+## nixos-search CI check
+
+The `check_flake` job runs [`nixos-search/ci-test.sh`](./nixos-search/ci-test.sh)
+to check that `flake-info` can extract the repository's packages and NixOS options.
+Both the job and the standalone script configure two binary caches:
+
+- `bitcoinix.cachix.org` provides our `flake-info` build with the offline patches.
+- `nixos-search.cachix.org` provides upstream dependencies, including its patched
+  Nix, so a missing bitcoinix build does not require compiling Nix and running its
+  test suites when those dependencies are cached upstream.
+
+Only pushes to `master` upload the `flake-info` closure to the bitcoinix cache.
+The signing key is available only to the upload step, which runs before
+`ci-test.sh` executes `flake-info`. Pull requests read the caches without uploading.
+
+After changing `nixos-search/flake.lock` or the offline patches, the first run may
+need to build `flake-info`. A successful master upload lets subsequent runs fetch
+that build. To verify the cache after an upload, rerun `check_flake` on a fresh CI
+runner and check that it downloads `flake-info` instead of compiling it.
