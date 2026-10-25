@@ -66,6 +66,20 @@ move RPC sources to `services.bitcoind.rpc.allowip`, or review the raw and inclu
 settings and set `services.bitcoind.rest.allowUncheckedConfig = true`.
 electrs no longer connects to bitcoind's whitelisted P2P port.
 
+Services using `nix-bitcoin.lib.defaultHardening`, including bitcoind, Core
+Lightning and lnd, now see `/run` and `/dev` (including `/dev/shm`) as read-only.
+Before deploying, review custom service hooks (`preStart`, `postStart`,
+`ExecStartPre`, `ExecStartPost`) and plugins that write there: they can now fail
+with `Read-only file system`.
+
+The service's `RuntimeDirectory`, `StateDirectory`, configured data directory
+and existing `ReadWritePaths` remain writable. Move custom writes into those
+directories, or add a narrow `ReadWritePaths` exception for an existing path
+that must remain writable. See
+[Write to /run or /dev/shm from a service hook](./configuration.md#write-to-run-or-devshm-from-a-service-hook)
+for an example. If you have no custom code writing outside the allowed
+directories, no script changes are needed.
+
 After migrating your configuration, set `nix-bitcoin.configVersion = "0.1.3";`.
 
 ## Upgrading to config version 0.1.2
