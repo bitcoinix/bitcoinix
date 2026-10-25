@@ -68,8 +68,11 @@ jobs:
           nix shell --inputs-from . nixpkgs#cachix -c cachix use bitcoinix
           # Upstream caches the patched Nix dependency used by flake-info.
           nix shell --inputs-from . nixpkgs#cachix -c cachix use nixos-search
-      - id: flake_info
-        run: echo "path=$(nix build --no-link --print-out-paths ./test/nixos-search#flake-info)" >> "$GITHUB_OUTPUT"
+      - name: Build flake-info
+        id: flake_info
+        run: |
+          path=$(nix build --no-link --print-out-paths ./test/nixos-search#flake-info)
+          printf 'path=%s\n' "$path" >> "$GITHUB_OUTPUT"
       - if: github.event_name == 'push' && github.ref == 'refs/heads/master'
         env:
           CACHIX_SIGNING_KEY: ${{ secrets.CACHIX_SIGNING_KEY }}
