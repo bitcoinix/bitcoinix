@@ -15,6 +15,12 @@ let
       description = ''
         Set permissions for existing secrets in {option}`nix-bitcoin.secretsDir`
         before services are started.
+
+        The directory is accessible only to root while permissions are set. A
+        failed run leaves it that way until setup succeeds, so services cannot
+        read any of its secrets. Declared secrets must be writable inside the
+        setup-secrets sandbox; symlinks to files outside the secrets directory
+        can cause setup to fail.
       '';
     };
 
@@ -31,7 +37,15 @@ let
       type = types.attrsOf types.lines;
       default = {};
       description = ''
-        Bash expressions for generating secrets.
+        Bash expressions for generating secrets, run in
+        {option}`nix-bitcoin.secretsDir` by the sandboxed setup-secrets service.
+        Commands have no IP network access and can write only to the secrets
+        directory and private temporary directories. Temporary files are not
+        shared with other services. Commands requiring writable executable
+        memory (such as JIT compilation) or setuid/setgid file modes are blocked.
+
+        To generate all secrets separately, supply them before setup-secrets
+        starts and disable {option}`nix-bitcoin.generateSecrets`.
       '';
     };
 
