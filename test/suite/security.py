@@ -542,15 +542,15 @@ def test_setup_secrets():
     succeed("systemctl restart setup-secrets")
 
     for name in unsafe:
-        assert_full_match(f"stat -c '%U:%G %a' /secrets/{name!r}", "root:root 440\n")
-    assert_full_match("stat -c '%U:%G' /secrets/link", "root:root\n")
+        assert_file_metadata(f"/secrets/{name}", owner="root", group="root", mode="440")
+    assert_file_metadata("/secrets/link", owner="root", group="root")
     # The link target is left alone
-    assert_full_match("stat -c '%U:%G %a' /run/setup-secrets-link-target", "nobody:nogroup 644\n")
+    assert_file_metadata("/run/setup-secrets-link-target", owner="nobody", group="nogroup", mode="644")
 
     succeed("rm -f -- /secrets/-x '/secrets/*' /secrets/.dotfile /secrets/link /run/setup-secrets-link-target")
     # Nothing else was changed
     assert succeed(listing) == before
-    assert_full_match("stat -c '%U:%G %a' /secrets", "root:root 751\n")
+    assert_file_metadata("/secrets", owner="root", group="root", mode="751")
 
     # A declared secret that is a symlink to a host file outside the secrets
     # dir must not get its target re-permissioned: the unit has to fail with
@@ -574,7 +574,7 @@ def test_setup_secrets():
             )
             machine.fail("systemctl restart setup-secrets")
             assert_matches("systemctl show setup-secrets --value -p Result", "^exit-code$")
-            assert_full_match(f"stat -c '%U:%G %a' {target}", "nobody:nogroup 644\n")
+            assert_file_metadata(target, owner="nobody", group="nogroup", mode="644")
             succeed(
                 f"rm {secret} {target}",
                 f"mv /root/setup-secrets-declared-orig {secret}",
@@ -597,8 +597,8 @@ def test_setup_secrets_supplied():
     machine.fail("systemctl restart setup-secrets")
     assert_matches("systemctl show setup-secrets --value -p Result", "^exit-code$")
     assert_matches("journalctl -b -u setup-secrets", "Secret file 'second' is missing")
-    assert_full_match("stat -c '%U:%G %a' /secrets", "root:root 700\n")
-    assert_full_match("stat -c '%U:%G %a' /secrets/first", "nobody:nogroup 440\n")
+    assert_file_metadata("/secrets", owner="root", group="root", mode="700")
+    assert_file_metadata("/secrets/first", owner="nobody", group="nogroup", mode="440")
     machine.fail("runuser -u nobody -- cat /secrets/first")
 
     succeed(
@@ -607,7 +607,7 @@ def test_setup_secrets_supplied():
         "systemctl restart setup-secrets",
         "systemctl start nix-bitcoin-secrets.target",
     )
-    assert_full_match("stat -c '%U:%G %a' /secrets", "root:root 751\n")
-    assert_full_match("stat -c '%U:%G %a' /secrets/second", "nobody:nogroup 440\n")
+    assert_file_metadata("/secrets", owner="root", group="root", mode="751")
+    assert_file_metadata("/secrets/second", owner="nobody", group="nogroup", mode="440")
     assert_full_match("runuser -u nobody -- cat /secrets/first", "first-secret")
     assert_full_match("runuser -u nobody -- cat /secrets/second", "second-secret")
