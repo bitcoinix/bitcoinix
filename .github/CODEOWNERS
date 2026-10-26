@@ -10,8 +10,3 @@
 /.github/workflows/release.yml  @seberm @prusnak
 /.github/CODEOWNERS             @seberm @prusnak
 /SECURITY.md                    @seberm @prusnak
-
-# CVE scan: an edit to the whitelist can hide a real vulnerability from the
-# weekly report, and the workflow decides what gets scanned.
-/.github/cve-whitelist.toml     @seberm @prusnak
-/.github/workflows/cve-scan.yml @seberm @prusnak

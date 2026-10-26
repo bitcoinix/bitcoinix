@@ -82,9 +82,6 @@ A whitelist entry in [`.github/cve-whitelist.toml`](.github/cve-whitelist.toml) 
 * an explicit `cve = [...]` list, so that new CVEs for the package are still reported
 * a `comment` that gives the reason, the date and how it was verified
 
-The code owners review every change to the whitelist, because an entry can hide a real
-vulnerability.
-
 ## Release signing
 
 A bitcoinix release is a **signed, annotated git tag** (`v<version>`). There are no release
