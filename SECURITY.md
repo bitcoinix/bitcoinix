@@ -49,9 +49,36 @@ should be reported to the respective upstream project first.
 
 A weekly CI job scans the runtime closure of a representative node (the secure-node preset
 with all shipped services, defined in `test/ci/scan-node.nix`) for known CVEs with
-[vulnix](https://github.com/nix-community/vulnix). Findings that are not whitelisted in
-`.github/cve-whitelist.toml` are tracked in a public `[cve-scan]` issue, which is closed
-when a scan is clean. These are known issues in upstream packages, not private reports.
+[vulnix](https://github.com/nix-community/vulnix). These are known issues in upstream
+packages, not private reports.
+
+Every run writes a summary of the findings that are not whitelisted to the run's step summary,
+and uploads the full report as the `vulnix-report` artifact.
+
+Maintainers can set the repository variable `CVE_SCAN_ISSUE` to the number of a pinned
+tracking issue. The job then writes its report into that issue below a `<!-- cve-scan-report -->`
+line and leaves everything above the line alone, so the description and triage notes can live
+there. The body shows the report of the last run that changed the set of active CVEs. The job
+comments only when that set changes, and the comment lists the new and the resolved CVEs. The
+job never opens or closes issues.
+
+### Triage
+
+When the report changes (in practice, after a nixpkgs pin bump), a maintainer reads each new
+CVE and picks one of these:
+
+* move the nixpkgs pin to a revision with the fix (`helper/update-flake.sh`)
+* override the package in `pkgs/` until nixpkgs has the fix
+* add a whitelist entry, if the CVE does not apply to the package in the closure
+
+A whitelist entry in [`.github/cve-whitelist.toml`](.github/cve-whitelist.toml) needs:
+
+* a `[pname]` section for the package
+* an explicit `cve = [...]` list, so that new CVEs for the package are still reported
+* a `comment` that gives the reason, the date and how it was verified
+
+The code owners review every change to the whitelist, because an entry can hide a real
+vulnerability.
 
 ## Release signing
 
