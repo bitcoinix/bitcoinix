@@ -69,8 +69,9 @@ Versions remain in the report and artifact. The job never opens or closes issues
 
 ### Triage
 
-When the report changes (in practice, after a nixpkgs pin bump), a maintainer reads each new
-CVE and picks one of these:
+Findings can change when package pins or the whitelist change, or when NVD publishes a
+new CVE or corrects an affected-version range. A maintainer reviews each new finding and
+picks one of these:
 
 * move the nixpkgs pin to a revision with the fix (`helper/update-flake.sh`)
 * override the package in `pkgs/` until nixpkgs has the fix
