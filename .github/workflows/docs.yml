@@ -9,7 +9,8 @@ name: bitcoinix docs
 #
 # Deployment runs after "Verify release tags" (release.yml) has verified a pushed tag,
 # or manually. `workflow_run` and `workflow_dispatch` use the workflow file from the
-# default branch, so a pushed tag cannot change how it is published.
+# default branch, so a pushed tag cannot change how it is published. Runs that can
+# deploy run one at a time, so the site never goes back to an older release.
 
 on:
   pull_request:
@@ -25,6 +26,18 @@ on:
 permissions:
   contents: read
 
+# Runs that can deploy share one group, so a run that selected an older tag can't
+# deploy after a newer one. All other runs (PRs, the daily tag re-check) get their
+# own group: a group holds a single pending run, so they would replace a pending deploy.
+concurrency:
+  group: >-
+    ${{ ((github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/master')
+         || (github.event_name == 'workflow_run'
+             && github.event.workflow_run.conclusion == 'success'
+             && github.event.workflow_run.event == 'push'))
+        && 'docs-release' || format('docs-{0}', github.run_id) }}
+  cancel-in-progress: false
+
 jobs:
   build:
     if: github.event_name == 'pull_request'
@@ -36,7 +49,8 @@ jobs:
         run: nix shell --inputs-from . nixpkgs#mdbook -c mdbook build
 
   build_release:
-    # Deploy only after a tag push has been verified, not after the daily re-check
+    # Deploy only after a tag push has been verified, not after the daily re-check.
+    # Keep the deploy conditions in sync with `concurrency` above.
     if: >-
       github.event_name == 'pull_request'
       || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/master')
