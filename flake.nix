@@ -84,6 +84,19 @@
         pkgs = nixpkgs.legacyPackages.${system};
         nbPkgs = self.lib.mkNbPkgs { inherit system pkgs; };
       in rec {
+        checks = {
+          module-config = import ./test/configuration.nix {
+            inherit pkgs;
+            nixBitcoinModule = self.nixosModules.default;
+          };
+          test-runner = pkgs.runCommand "nix-bitcoin-test-runner" {
+            nativeBuildInputs = [ pkgs.python3 ];
+          } ''
+            python ${./test/runner-tests.py} ${pkgs.writeText "test-suite.py" (import ./test/lib/test-script.nix)}
+            touch "$out"
+          '';
+        };
+
         packages = flake-utils.lib.flattenTree (removeAttrs nbPkgs [
           "fetchNodeModules"
           "krops"

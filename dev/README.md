@@ -124,10 +124,14 @@ It's easiest to use an existing service as a template:
 
 For generated configs in writable service directories, use `install -T` with an
 explicit mode to replace the config path, including symlinks to directories.
-The `config-replace` test in [tests.py](../test/tests.py) covers symlinks to files
+The `config-replace` test in [suite/restarts.py](../test/suite/restarts.py) covers symlinks to files
 and directories for bitcoind, clightning, lnd, nbxplorer, electrs, and mempool. It
 checks the config's owner and mode after restart and verifies that the symlink
 targets remain unchanged.
+
+See [the test execution phases](../test/README.md#execution-phases) before adding
+or moving a test. Configuration defaults and invalid option combinations can
+be covered by the [checks without a VM](../test/README.md#checks-without-a-vm).
 
 ## Switching to a new NixOS release
 - Run command `update-flake.sh 26.05`

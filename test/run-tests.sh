@@ -32,7 +32,7 @@
 #   ./run-tests.sh [--scenario <scenario>] debug
 #
 #     This starts the testing VM and drops you into a Python REPL where you can
-#     manually execute the tests from ./tests.py
+#     manually execute the tests from ./suite/ via run_test("name")
 #
 #   Run a test scenario in a container
 #   sudo ./run-tests.sh [--scenario <scenario>] container
