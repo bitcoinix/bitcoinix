@@ -43,8 +43,9 @@ jobs:
           git fetch -q --no-tags origin +refs/heads/master:refs/remotes/origin/master
           trusted=$RUNNER_TEMP/trusted
           mkdir -p "$trusted"
-          git archive origin/master | tar -x -C "$trusted"
-          echo "Trusted files from master $(git rev-parse origin/master)"
+          # Full ref name: a tag named `origin/master` would win over the short name
+          git archive refs/remotes/origin/master | tar -x -C "$trusted"
+          echo "Trusted files from master $(git rev-parse refs/remotes/origin/master)"
 
           # Same tag selection as fetch-release.sh, which fails if there is none
           releases=$(git tag -l 'v*' | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' || true)
