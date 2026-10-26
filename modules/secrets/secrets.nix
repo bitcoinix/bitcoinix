@@ -225,12 +225,6 @@ in {
          # `-`: a missing dir is reported by the script instead of failing
          # the namespace setup.
          ReadWritePaths = [ "-${cfg.secretsDir}" ];
-         # ProtectSystem=strict alone leaves host files writable here, so a
-         # secret symlinked to them would get its target re-permissioned:
-         # /run, when combined with ProtectKernelTunables, ProtectControlGroups,
-         # ProtectProc or ProcSubset (systemd 260), and /dev/{shm,mqueue,hugepages,pts},
-         # which PrivateDevices bind-mounts from the host.
-         ReadOnlyPaths = [ "/run" "/dev" ];
          # `ProtectHome = true` would make a `secretsDir` below /home unreachable,
          # because ReadWritePaths can't be nested in inaccessible paths.
          ProtectHome = "read-only";
