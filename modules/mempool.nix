@@ -287,6 +287,7 @@ in {
       DATABASE = {
         ENABLED = true;
         DATABASE = cfg.database.name;
+        USERNAME = cfg.user;
         SOCKET = "/run/mysqld/mysqld.sock";
         PID_DIR = cacheDir;
       };
