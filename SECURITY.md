@@ -47,10 +47,14 @@ should be reported to the respective upstream project first.
 
 ## Dependency CVE scan
 
-A weekly CI job scans the runtime closure of a representative node (the secure-node preset
-with all shipped services, defined in `test/ci/scan-node.nix`) for known CVEs with
+A CI job runs every Monday and Thursday at 06:00 UTC. It scans the runtime closure of a
+representative node (the secure-node preset with all shipped services, defined in
+`test/ci/scan-node.nix`) for known CVEs with
 [vulnix](https://github.com/nix-community/vulnix). These are known issues in upstream
 packages, not private reports.
+
+Running twice a week keeps the cached NVD data within vulnix's seven-day window for
+incremental updates. A missing cache or a longer gap still requires the yearly feeds.
 
 Every run writes a summary of the findings that are not whitelisted to the run's step summary,
 and uploads the full report as the `vulnix-report` artifact.
