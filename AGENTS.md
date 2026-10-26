@@ -37,9 +37,12 @@ traces outside `/nix/store`.
 
 - Scenarios live in `test/tests.nix` (plus extras from `dev/dev-scenarios.nix`).
   `baseConfig` maps enabled services to `tests.<name> = cfg.<svc>.enable`.
-- Python test bodies are registered with `@test("<name>")` in `test/tests.py` and run
-  in definition order. A `tests.<name>` enabled in Nix without a matching `@test`
-  raises at runtime — keep both sides in sync.
+- Python test bodies are registered with `@test("<name>")` in `test/suite/`.
+  `TEST_PHASES` in `test/tests.py` defines their execution order; add each new
+  built-in test there too. See `test/README.md` for phase contracts. A
+  `tests.<name>` enabled in Nix without a matching `@test` raises before tests run.
+- Fast checks live in `test/configuration.nix` (module evaluation) and
+  `test/runner-tests.py` (runner behavior), exposed via flake `checks`.
 
 ```bash
 ./test/run-tests.sh                        # `basic` = default netns netnsRegtest
@@ -88,14 +91,16 @@ Start from an existing module: `modules/electrs.nix` (basic) →
 - `modules/netns-isolation.nix`: unique netns `id` + `connections` to other services.
 - Secrets: declare in `nix-bitcoin.secrets`, order the unit after `nix-bitcoin-secrets.target`.
 - Tor: `modules/onion-services.nix` / `nix-bitcoin.onionServices`.
-- Tests: `tests.<name>` in `test/tests.nix` + `@test` in `test/tests.py`.
+- Tests: `tests.<name>` in `test/tests.nix` + `@test` in `test/suite/` + a place in
+  `TEST_PHASES` in `test/tests.py`.
 
 ## Removing a service
 
 Delete the module (and its `pkgs/` entries), drop it from `modules/modules.nix`,
 and add a `mkRemovedOptionModule` with the reason to `modules/obsolete-options.nix`
 (the joinmarket entries are the template). Then purge it from `test/tests.nix`,
-`test/tests.py`, `flake.nix`, `examples/`, and `docs/`.
+`test/suite/`, the execution plan in `test/tests.py`, `test/configuration.nix`,
+`flake.nix`, `examples/`, and `docs/`.
 
 ## Breaking changes
 

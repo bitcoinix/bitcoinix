@@ -41,7 +41,7 @@ let
     in
       builtins.concatStringsSep "\n\n" [
         initData
-        (builtins.readFile ./../tests.py)
+        (import ./test-script.nix)
         cfg.test.extraTestScript
         # Don't run tests in interactive mode.
         # is_interactive is set in ./run-vm.sh

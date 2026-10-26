@@ -7,7 +7,7 @@ on:
     types: [opened, synchronize, reopened, ready_for_review]
 
 # The Cachix signing key is passed only to the jobs that push to the cache
-# (build_test_drivers, test_scenario) and to the step of check_flake that pushes
+# (build_test_drivers, test_scenario) and to the step of nixos_search that pushes
 # flake-info. The other jobs and steps run repository scripts too, and must not
 # be able to sign store paths.
 permissions:
@@ -22,6 +22,7 @@ permissions:
 # When job `build_test_drivers` determines that all tests have already been built successfully,
 # job `test_scenario` is skipped via output variable `run_scenario_tests`.
 jobs:
+  # VM integration tests
   build_test_drivers:
     runs-on: ubuntu-latest
     env:
@@ -54,14 +55,32 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: cachix/install-nix-action@448cde739abec1eaf0646249e3d25bb8d9bc7702 # v31.11.2
-      - run: nix shell --inputs-from . nixpkgs#{bash,coreutils,cachix} -c ./test/ci/build.sh ${{ matrix.scenario }}
+      - name: Run VM scenario
+        run: nix shell --inputs-from . nixpkgs#{bash,coreutils,cachix} -c ./test/ci/build.sh ${{ matrix.scenario }}
 
+  # Fast checks
   check_flake:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: cachix/install-nix-action@448cde739abec1eaf0646249e3d25bb8d9bc7702 # v31.11.2
-      - run: nix flake check --all-systems
+      - name: Check flake and run fast tests
+        run: nix flake check --all-systems
+
+  shellcheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: cachix/install-nix-action@448cde739abec1eaf0646249e3d25bb8d9bc7702 # v31.11.2
+      - name: Lint shell scripts
+        run: ./test/shellcheck.sh
+
+  # NixOS package and option extraction
+  nixos_search:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: cachix/install-nix-action@448cde739abec1eaf0646249e3d25bb8d9bc7702 # v31.11.2
       # Build flake-info and push it from master before running it outside the Nix
       # build sandbox. Only the upload step receives the signing key.
       - name: Configure flake-info caches
@@ -74,14 +93,16 @@ jobs:
         run: |
           path=$(nix build --no-link --print-out-paths ./test/nixos-search#flake-info)
           printf 'path=%s\n' "$path" >> "$GITHUB_OUTPUT"
-      - if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+      - name: Cache flake-info on master
+        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
         env:
           CACHIX_SIGNING_KEY: ${{ secrets.CACHIX_SIGNING_KEY }}
           FLAKE_INFO: ${{ steps.flake_info.outputs.path }}
         run: nix shell --inputs-from . nixpkgs#cachix -c cachix push bitcoinix "$FLAKE_INFO"
-      - run: ./test/nixos-search/ci-test.sh
-      - run: ./test/shellcheck.sh
+      - name: Check package and option extraction
+        run: ./test/nixos-search/ci-test.sh
 
+  # Release tooling
   release_tooling:
     runs-on: ubuntu-latest
     steps:
@@ -94,27 +115,43 @@ jobs:
       - name: Test make-release
         run: nix shell --inputs-from . nixpkgs#{git,openssh,gnutar} -c ./test/make-release-test.sh
 
+  # Required CI gate
   # Job `ci_gate` is the status check that the rulesets on master and on release tags
   # require. The matrix jobs report as `test_scenario (<scenario>)` when they run and as
   # `test_scenario` when skipped, so no `test_scenario` check name can be required directly.
   # Add new jobs to its `needs`.
   ci_gate:
-    needs: [build_test_drivers, test_scenario, check_flake, release_tooling]
+    needs:
+      - build_test_drivers
+      - test_scenario
+      - check_flake
+      - shellcheck
+      - nixos_search
+      - release_tooling
     # Run even when a needed job failed, so that this check reports a failure instead of
     # being skipped (a skipped required check counts as passed)
     if: always()
     runs-on: ubuntu-latest
     steps:
-      - env:
+      - name: Require successful checks
+        env:
           BUILD_TEST_DRIVERS: ${{ needs.build_test_drivers.result }}
           TEST_SCENARIO: ${{ needs.test_scenario.result }}
           CHECK_FLAKE: ${{ needs.check_flake.result }}
+          SHELLCHECK: ${{ needs.shellcheck.result }}
+          NIXOS_SEARCH: ${{ needs.nixos_search.result }}
           RELEASE_TOOLING: ${{ needs.release_tooling.result }}
         run: |
           echo "build_test_drivers: $BUILD_TEST_DRIVERS"
           echo "test_scenario: $TEST_SCENARIO"
           echo "check_flake: $CHECK_FLAKE"
+          echo "shellcheck: $SHELLCHECK"
+          echo "nixos_search: $NIXOS_SEARCH"
           echo "release_tooling: $RELEASE_TOOLING"
-          [[ $BUILD_TEST_DRIVERS == success && $CHECK_FLAKE == success && $RELEASE_TOOLING == success ]]
+          [[ $BUILD_TEST_DRIVERS == success &&
+             $CHECK_FLAKE == success &&
+             $SHELLCHECK == success &&
+             $NIXOS_SEARCH == success &&
+             $RELEASE_TOOLING == success ]]
           # `test_scenario` is skipped when all tests have already been built successfully
           [[ $TEST_SCENARIO == success || $TEST_SCENARIO == skipped ]]
