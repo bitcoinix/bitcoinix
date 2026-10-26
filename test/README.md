@@ -70,6 +70,10 @@ a VM to report evaluation failures.
 selection, ordering, registration errors, and interactive dispatch using a
 machine stub. Both checks are exposed for `x86_64-linux` and `aarch64-linux`,
 and the existing CI `check_flake` job runs them through `nix flake check`.
+The `shellcheck` and `nixos_search` jobs run independently, so shell linting and
+fast checks can finish while package and option extraction is still running.
+The required `ci_gate` waits for all jobs and requires them to succeed; only
+`test_scenario` may be skipped when the VM tests are already cached.
 Permissions, secrets, namespace isolation, backups, and service restarts still
 need the VM tests.
 
@@ -147,7 +151,7 @@ nix run ..#tests.default.containerLegacy -- --run c nodeinfo # For NixOS with `s
 
 ## nixos-search CI check
 
-The `check_flake` job runs [`nixos-search/ci-test.sh`](./nixos-search/ci-test.sh)
+The `nixos_search` job runs [`nixos-search/ci-test.sh`](./nixos-search/ci-test.sh)
 to check that `flake-info` can extract the repository's packages and NixOS options.
 Both the job and the standalone script configure two binary caches:
 
@@ -162,5 +166,5 @@ The signing key is available only to the upload step, which runs before
 
 After changing `nixos-search/flake.lock` or the offline patches, the first run may
 need to build `flake-info`. A successful master upload lets subsequent runs fetch
-that build. To verify the cache after an upload, rerun `check_flake` on a fresh CI
+that build. To verify the cache after an upload, rerun `nixos_search` on a fresh CI
 runner and check that it downloads `flake-info` instead of compiling it.
