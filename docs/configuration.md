@@ -330,3 +330,16 @@ following default values:
 - If you're using the krops deployment method: `/var/src/secrets`
 
 - Otherwise: `/etc/nix-bitcoin-secrets`
+
+With `nix-bitcoin.setupSecrets = true`, `setup-secrets` sets the declared secrets'
+owners and permissions and restricts undeclared files to root. It makes the
+directory accessible only to root while it runs; if setup fails, services lose
+access to all secrets there until a successful run restores directory mode `0751`.
+
+`nix-bitcoin.generateSecrets = true` enables setup and generates secrets in the
+same sandbox. Custom `nix-bitcoin.generateSecretsCmds` have no IP network access
+and can write only to the secrets directory and private temporary directories.
+Store final secrets inside the secrets directory, including secrets supplied by
+another tool, rather than linking to external files. See the
+[0.1.3 upgrade instructions](./upgrading.md#upgrading-to-config-version-013)
+for migration and recovery steps.

@@ -90,6 +90,39 @@ mysqldump --single-transaction mempool > mempool-3.2.sql
 ```
 Run this as root, and replace `mempool` if you set `services.mempool.database.name`.
 
+`setup-secrets` now runs in a sandbox whenever `nix-bitcoin.setupSecrets` is
+enabled, including when `nix-bitcoin.generateSecrets` enables it automatically.
+Before deploying:
+
+- Replace declared secret symlinks to files outside `nix-bitcoin.secretsDir`
+  with files inside that directory, preserving their contents. If another tool
+  supplies or rotates these secrets, configure it to install the files there
+  before `setup-secrets` starts. External targets are read-only or hidden inside
+  the sandbox.
+- Review custom `nix-bitcoin.generateSecretsCmds`. They have no IP network access
+  and can write only to the secrets directory and private temporary directories.
+  Put final secret files in the secrets directory. Commands requiring writable
+  executable memory (such as JIT compilation) or setuid/setgid file modes are
+  blocked. If generation needs these facilities, arrange to supply all required
+  secrets before `setup-secrets`, set `nix-bitcoin.generateSecrets = false`, and
+  keep `nix-bitcoin.setupSecrets = true` to set the supplied files' permissions.
+- Remove setuid/setgid bits from any `nix-bitcoin.secrets.<name>.permissions`
+  values; the sandbox rejects those modes when setting permissions too.
+
+The secrets directory is now `root:root 0700` while setup runs even when
+`generateSecrets` is false. If any step fails, every service loses access to
+secrets in that directory until setup succeeds. After fixing the cause reported
+by `journalctl -u setup-secrets`, run as root:
+
+```bash
+systemctl reset-failed setup-secrets
+systemctl restart setup-secrets
+systemctl start nix-bitcoin-secrets.target
+```
+
+Then restart any dependent services that failed. Successful setup restores the
+directory to `0751` and applies each declared secret's configured owner and mode.
+
 After migrating your configuration, set `nix-bitcoin.configVersion = "0.1.3";`.
 
 ## Upgrading to config version 0.1.2

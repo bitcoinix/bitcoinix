@@ -274,6 +274,11 @@ let
 
       tests.backups = cfg.backups.enable;
 
+      tests.setup-secrets = config.nix-bitcoin.setupSecrets;
+      test.data.setup-secrets-declared = let
+        names = builtins.attrNames config.nix-bitcoin.secrets;
+      in if names == [] then null else builtins.head names;
+
       # To test that unused secrets are made inaccessible by 'setup-secrets'
       systemd.services.setup-secrets.preStart = mkIfTest "security" ''
         install -D -o nobody -g nogroup -m777 <(:) /secrets/dummy
@@ -316,6 +321,35 @@ let
     base = baseConfig;
 
     default = scenarios.secureNode;
+
+    # Supply secrets before setup-secrets, which must not generate them itself.
+    setup-secrets = { config, ... }: {
+      nix-bitcoin = {
+        generateSecrets = mkForce false;
+        setupSecrets = true;
+        secrets = genAttrs [ "first" "second" ] (_: {
+          user = "nobody";
+          group = "nogroup";
+        });
+      };
+      systemd.services.supply-test-secrets = {
+        requiredBy = [ "setup-secrets.service" ];
+        before = [ "setup-secrets.service" ];
+        serviceConfig = {
+          Type = "oneshot";
+          RemainAfterExit = true;
+        };
+        # Provision the fixtures once, so restarts cannot repair missing files.
+        script = ''
+          install -d -m 0700 /secrets
+          cd /secrets
+          ${config.nix-bitcoin.generateSecretsScript}
+          printf first-secret > first
+          printf second-secret > second
+        '';
+      };
+      tests.setup-secrets-supplied = true;
+    };
 
     # All available basic services and tests
     full = {
