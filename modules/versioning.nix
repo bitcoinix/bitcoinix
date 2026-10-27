@@ -414,15 +414,23 @@ let
     }
     {
       version = "0.1.3";
-      condition = let cfg = config.services.bitcoind; in cfg.enable
-        && (hasInfix "includeconf" cfg.extraConfig || hasInfix "rest" cfg.extraConfig);
+      # Only configs with a raw `rest`, `norest` or `includeconf` directive are
+      # affected. Comments and other keys that merely contain "rest" are not.
+      condition = let
+        cfg = config.services.bitcoind;
+        setsDirective = key: any (line:
+          builtins.match "[[:space:]]*([^[:space:].=#]+[.])?(no)?${key}[[:space:]]*=.*" line != null
+        ) (splitString "\n" cfg.extraConfig);
+      in cfg.enable && (setsDirective "rest" || setsDirective "includeconf");
       message = ''
         bitcoind refuses raw `rest` and `norest` directives in
         `services.bitcoind.extraConfig`. Use `services.bitcoind.rest.enable` and the
         other `services.bitcoind.rest.*` options instead. An `includeconf` directive
-        together with `services.bitcoind.rpc.allowip` sources outside localhost now
-        needs `services.bitcoind.rest.allowUncheckedConfig = true` even when REST is
-        disabled, because the included file can enable it.
+        together with `services.bitcoind.rpc.allowip` sources outside localhost (and
+        outside `services.bitcoind.rest.localSources`) now needs
+        `services.bitcoind.rest.allowUncheckedConfig = true` or
+        `services.bitcoind.rest.allowNonLocal = true` even when REST is disabled,
+        because the included file can enable it.
         See docs/upgrading.md, "Upgrading to config version 0.1.3".
       '';
     }

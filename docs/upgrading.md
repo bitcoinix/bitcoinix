@@ -70,9 +70,11 @@ Two related checks are new. A raw `rest` or `norest` directive in
 `services.bitcoind.extraConfig` now fails evaluation: it enabled REST while skipping
 the checks above. Use `services.bitcoind.rest.enable` and the other
 `services.bitcoind.rest.*` options instead. An `includeconf` directive together with
-`services.bitcoind.rpc.allowip` sources outside localhost now needs
-`services.bitcoind.rest.allowUncheckedConfig = true` even with REST disabled, because
-the included file can enable it.
+`services.bitcoind.rpc.allowip` sources outside localhost (and outside
+`services.bitcoind.rest.localSources`) now needs
+`services.bitcoind.rest.allowUncheckedConfig = true`, or `allowNonLocal = true` if you
+accept REST on those sources, even with REST disabled, because the included file can
+enable it.
 
 Services using `nix-bitcoin.lib.defaultHardening`, including bitcoind, Core
 Lightning and lnd, now see `/run` and `/dev` (including `/dev/shm`) as read-only.
