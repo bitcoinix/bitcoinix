@@ -77,7 +77,7 @@ or via the `services.backups` module.
    to the `authorized_keys` file of `user` (or use `ssh-copy-id`).
 
 4. You can restrict the bitcoinix node's capabilities on the SSHFS target
-   using OpenSSH's builtin features, as detailed
+   using OpenSSH's built-in features, as detailed
    [here](https://serverfault.com/questions/354615/allow-sftp-but-disallow-ssh).
 
    To implement this on NixOS, add the following to the NixOS configuration of
@@ -136,7 +136,7 @@ can be used to replicate to an external HDD by mounting it at path
 ## Custom remote destination
 
 Follow the steps in section "Local directory target" above and mount a custom remote
-destination (e.g., a NFS or SMB share) to `local.directory`.\
+destination (e.g., an NFS or SMB share) to `local.directory`.\
 You might want to disable `local.setupDirectory` in order to create the mount directory
 yourself with custom permissions.
 
@@ -158,12 +158,12 @@ You can find the `<onion-address>` with command `nodeinfo`.
 The default password location is `$secretsDir/rtl-password`.
 See: [Secrets dir](./configuration.md#secrets-dir)
 
-# Use Zeus (mobile lightning wallet) via Tor
-1. Install [Zeus](https://zeusln.app) (version ≥ 0.9.0)
+# Use ZEUS (mobile Lightning wallet) via Tor
+1. Install [ZEUS](https://zeusln.app) (version ≥ 0.9.0)
 
 2. Edit your `configuration.nix`
 
-   ##### For lnd
+   ##### For LND
 
    Add the following config:
    ```nix
@@ -191,7 +191,7 @@ See: [Secrets dir](./configuration.md#secrets-dir)
 4. Run the following command on your node (as user `operator`) to create a QR code
    with address and authentication information:
 
-   ##### For lnd
+   ##### For LND
    ```
    lndconnect
    ```
@@ -201,7 +201,7 @@ See: [Secrets dir](./configuration.md#secrets-dir)
    lnconnect-clnrest
    ```
 
-5. Configure Zeus
+5. Configure ZEUS
    - Add a new node and scan the QR code
    - Click `Save node config`
    - Start sending and stacking sats privately
@@ -218,16 +218,16 @@ See: [Secrets dir](./configuration.md#secrets-dir)
 
 ### Connecting without Tor or WireGuard
 Enabling `lndconnect` or `lnconnect` does not change the address that the REST server
-listens on. By default, the lnd and clnrest REST servers only listen
+listens on. By default, the LND and clnrest REST servers only listen
 on localhost.
 
-The REST API grants full control over your lightning node, so only expose it to networks
+The REST API grants full control over your Lightning node, so only expose it to networks
 you trust. To reach it directly (e.g. via your local network or your own VPN), opt in
 explicitly. In the examples below, `192.168.1.10` is the address of your node and `eth0`
 is the interface of the trusted network.\
 These examples don't apply when using `netns-isolation`.
 
-##### For lnd
+##### For LND
 ```nix
 services.lnd = {
   restAddress = "0.0.0.0";
@@ -255,19 +255,19 @@ lndconnect --host 192.168.1.10
 lnconnect-clnrest --host 192.168.1.10
 ```
 
-# Use Zeus (mobile lightning wallet) via WireGuard
+# Use ZEUS (mobile Lightning wallet) via WireGuard
 
-Connecting Zeus directly to your node is much faster than using Tor, but a bit more complex to setup.
+Connecting ZEUS directly to your node is much faster than using Tor, but a bit more complex to set up.
 
 There are two ways to establish a secure, direct connection:
 
-- Connecting via TLS. This requires installing your lightning app's
-  TLS Certificate on your mobile device.
+- Connecting via TLS. This requires installing your Lightning app's
+  TLS certificate on your mobile device.
 
 - Connecting via WireGuard. This approach is simpler and more versatile, and is
   described in this guide.
 
-1. Install [Zeus](https://zeusln.app) (version ≥ 0.9.0) and
+1. Install [ZEUS](https://zeusln.app) (version ≥ 0.9.0) and
    [WireGuard](https://www.wireguard.com/install/) on your mobile device.
 
 2. Add the following to your `configuration.nix`:
@@ -278,9 +278,9 @@ There are two ways to establish a secure, direct connection:
 
      # Use this line when using Flakes
      (nix-bitcoin + /modules/presets/wireguard.nix)
-   ]
+   ];
 
-   # For lnd
+   # For LND
    services.lnd.lndconnect.enable = true;
 
    # For Core Lightning
@@ -299,7 +299,7 @@ There are two ways to establish a secure, direct connection:
    - Protocol: UDP
    - Destination: IP of your node
 
-5. Setup WireGuard on your mobile device.
+5. Set up WireGuard on your mobile device.
 
    Run the following command on your node (as user `operator`) to create a QR code
    for WireGuard:
@@ -321,11 +321,11 @@ There are two ways to establish a secure, direct connection:
    - Scan the QR code
    - Add the tunnel
 
-6. Setup Zeus
+6. Set up ZEUS
 
-   Run the following command on your node (as user `operator`) to create a QR code for Zeus:
+   Run the following command on your node (as user `operator`) to create a QR code for ZEUS:
 
-   ##### For lnd
+   ##### For LND
    ```
    lndconnect-wg
    ```
@@ -335,7 +335,7 @@ There are two ways to establish a secure, direct connection:
    lnconnect-clnrest-wg
    ```
 
-   Configure Zeus:
+   Configure ZEUS:
    - Add a new node and scan the QR code
    - Click `Save node config`
    - On the certificate warning screen, click `I understand, save node config`.\
@@ -346,15 +346,19 @@ There are two ways to establish a secure, direct connection:
 Create a plain text URL:
 ```bash
 lndconnect-wg --url
-``````
+```
 
 # Connect to electrs
-### Requirements Android
+<a id="requirements-android"></a>
+
+### Android requirements
 * Android phone
 * [Orbot](https://guardianproject.info/apps/orbot/) installed from [F-Droid](https://guardianproject.info/fdroid) (recommended) or [Google Play](https://play.google.com/store/apps/details?id=org.torproject.android&hl=en)
 * [Electrum mobile app](https://electrum.org/#home) 4.0.1 and newer installed from [direct download](https://electrum.org/#download) or [Google Play](https://play.google.com/store/apps/details?id=org.electrum.electrum)
 
-### Requirements Desktop
+<a id="requirements-desktop"></a>
+
+### Desktop requirements
 * [Tor](https://www.torproject.org/) installed from [source](https://www.torproject.org/docs/tor-doc-unix.html.en) or [repository](https://www.torproject.org/docs/debian.html.en)
 * [Electrum](https://electrum.org/#download) installed
 
@@ -379,9 +383,9 @@ lndconnect-wg --url
 
 4. Connect to electrs
 
-    Make sure Tor is running on Desktop or as Orbot on Android.
+    Make sure Tor is running on your desktop or as Orbot on Android.
 
-    On Desktop
+    On your desktop
     ```
     electrum --oneserver -1 -s "<electrs onion address>:t" -p socks5:127.0.0.1:9050
     ```
@@ -403,13 +407,13 @@ lndconnect-wg --url
     nodeinfo | jq -r .sshd.onion_address | sed 's/:.*//'
     ```
 
-2. Create a SSH key
+2. Create an SSH key
 
     ```
     ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519
     ```
 
-3. Place the ed25519 key's fingerprint in the `configuration.nix` `openssh.authorizedKeys.keys` field like so
+3. Place the Ed25519 public key in the `configuration.nix` `openssh.authorizedKeys.keys` field like so
 
     ```
     # FIXME: Add your SSH pubkey
@@ -425,12 +429,14 @@ lndconnect-wg --url
     ssh -i ~/.ssh/id_ed25519 -L <random port of your choosing>:127.0.0.1:22 root@<SSH onion address>
     ```
 
-5. Edit your deployment tool's configuration and change the node's address to `127.0.0.1` and the ssh port to `<random port of your choosing>`.
+5. Edit your deployment tool's configuration and change the node's address to `127.0.0.1` and the SSH port to `<random port of your choosing>`.
    If you use krops as described in the [installation tutorial](./install.md), set `target = "127.0.0.1:<random port of your choosing>";` in `krops/deploy.nix`.
 
-6. After deploying the new configuration, it will connect through the SSH tunnel you established in step iv. This also allows you to do more complex SSH setups that some deployment tools don't support. An example would be authenticating with [Trezor's SSH agent](https://github.com/romanz/trezor-agent), which provides extra security.
+6. After deploying the new configuration, it will connect through the SSH tunnel you established in step 4. This also allows you to do more complex SSH setups that some deployment tools don't support. An example would be authenticating with [Trezor's SSH agent](https://github.com/romanz/trezor-agent), which provides extra security.
 
-# Initialize a Trezor for Bitcoin Core's Hardware Wallet Interface
+<a id="initialize-a-trezor-for-bitcoin-cores-hardware-wallet-interface"></a>
+
+# Initialize a Trezor for the Bitcoin Hardware Wallet Interface (HWI)
 
 1. Enable Trezor in `configuration.nix`
 

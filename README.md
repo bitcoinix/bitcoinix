@@ -8,7 +8,7 @@
 <p align="center">
     <a href="https://github.com/bitcoinix/bitcoinix/actions" target="_blank">
         <img src="https://github.com/bitcoinix/bitcoinix/actions/workflows/test.yml/badge.svg?branch=master"
-             alt="Github Actions status">
+             alt="GitHub Actions status">
     </a>
     <a href="https://github.com/bitcoinix/bitcoinix/tags" target="_blank">
         <img src="https://img.shields.io/github/v/tag/bitcoinix/bitcoinix?filter=v*&amp;sort=semver" alt="GitHub tag (latest SemVer)">
@@ -120,8 +120,8 @@ NixOS modules ([src](modules/modules.nix))
   * [Core Lightning (CLN)](https://github.com/ElementsProject/lightning) with support for announcing an onion service
     (`services.clightning`) and [database replication](docs/services.md#core-lightning-database-replication).\
     Available plugins:
-    * [clboss](https://github.com/ksedgwic/clboss): automated Core Lightning node manager
-    * [clnrest](https://docs.corelightning.org/docs/rest): REST API and websocket notifications for Core Lightning
+    * [CLBOSS](https://github.com/ksedgwic/clboss): automated Core Lightning node manager
+    * [clnrest](https://docs.corelightning.org/docs/rest): REST API and WebSocket notifications for Core Lightning
     * [currencyrate](https://github.com/lightningd/plugins/tree/master/currencyrate): currency converter
     * [feeadjuster](https://github.com/lightningd/plugins/tree/master/feeadjuster): automatically adjusts channel fees to keep channels balanced
     * [monitor](https://github.com/lightningd/plugins/tree/master/monitor): helps you analyze the health of your peers and channels
@@ -133,14 +133,14 @@ NixOS modules ([src](modules/modules.nix))
   * [lndconnect](https://github.com/LN-Zap/lndconnect): connect your wallet to LND or
     Core Lightning [via WireGuard](./docs/services.md#use-zeus-mobile-lightning-wallet-via-wireguard) or
     [Tor](./docs/services.md#use-zeus-mobile-lightning-wallet-via-tor)
-  * [Ride The Lightning](https://github.com/Ride-The-Lightning/RTL): web interface for LND and Core Lightning
+  * [Ride The Lightning (RTL)](https://github.com/Ride-The-Lightning/RTL): web interface for LND and Core Lightning
   * [mempool](https://github.com/mempool/mempool): Bitcoin visualizer, explorer, and API service
   * [electrs](https://github.com/romanz/electrs): Electrum server
-  * [fulcrum](https://github.com/cculianu/Fulcrum): Electrum server (see [the module](modules/fulcrum.nix) for a comparison with electrs)
+  * [Fulcrum](https://github.com/cculianu/Fulcrum): Electrum server (see [the module](modules/fulcrum.nix) for a comparison with electrs)
   * [BTCPay Server](https://github.com/btcpayserver/btcpayserver)
-  * [bitcoin-core-hwi](https://github.com/bitcoin-core/HWI)
+  * [Bitcoin Hardware Wallet Interface (HWI)](https://github.com/bitcoin-core/HWI)
 * Helper
-  * [netns-isolation](modules/netns-isolation.nix): isolates applications on the network-level via network namespaces
+  * [netns-isolation](modules/netns-isolation.nix): isolates applications at the network level via network namespaces
   * [nodeinfo](modules/nodeinfo.nix): script which prints info about the node's services
   * [backups](modules/backups.nix): duplicity backups of selected node data, with configurable extra files
   * [operator](modules/operator.nix): configures a non-root user who has access to client tools (e.g. `bitcoin-cli`, `lightning-cli`)
@@ -151,8 +151,8 @@ bitcoinix aims to achieve a high degree of security by building on the following
 
 * **Simplicity:** Only services enabled in `configuration.nix` and their dependencies are installed, support for [doas](https://github.com/Duncaen/OpenDoas) ([sudo alternative](https://lobste.rs/s/efsvqu/heap_based_buffer_overflow_sudo_cve_2021#c_c6fcfa)), code is continuously reviewed and refined.
 * **Integrity:** The Nix package manager guarantees that all dependencies are exactly specified, packages can be built from source to reduce reliance on binary caches, release tags are signed with maintainer SSH keys and verified by `helper/fetch-release.sh` (see [SECURITY.md](SECURITY.md)), upstream packages are cryptographically verified where possible, we use this software ourselves.
-* **Principle of Least Privilege:** Services operate with least privileges; they each have their own user and are restricted further with [systemd features](pkgs/lib.nix), [RPC whitelisting](modules/bitcoind-rpc-public-whitelist.nix) and [netns-isolation](modules/netns-isolation.nix). There's a non-root user *operator* to interact with the various services.
-* **Defense-in-depth:** bitcoinix supports a [hardened kernel](https://github.com/NixOS/nixpkgs/blob/master/nixos/modules/profiles/hardened.nix), services are confined through discretionary access control, Linux namespaces, [dbus firewall](modules/security.nix) and seccomp-bpf with continuous improvements.
+* **Principle of Least Privilege:** Services operate with the minimum necessary privileges; they each have their own user and are restricted further with [systemd features](pkgs/lib.nix), [RPC whitelisting](modules/bitcoind-rpc-public-whitelist.nix) and [netns-isolation](modules/netns-isolation.nix). There's a non-root user *operator* to interact with the various services.
+* **Defense-in-depth:** bitcoinix supports a [hardened kernel](https://github.com/NixOS/nixpkgs/blob/master/nixos/modules/profiles/hardened.nix), services are confined through discretionary access control, Linux namespaces, [D-Bus firewall](modules/security.nix) and seccomp-bpf with continuous improvements.
 
 Note that if the machine you're deploying *from* is insecure, there is nothing bitcoinix can do to protect itself.
 

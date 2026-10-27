@@ -9,11 +9,11 @@
   That means that Core Lightning hasn't seen all the blocks it needs to and it can't get
   that block because your node is pruned. \
   If you're just setting up a new node you can `systemctl stop clightning` and wipe
-  your `/var/lib/clightning` directory. Otherwise you need to reindex the Bitcoin
+  your `/var/lib/clightning` directory. Otherwise you need to reindex your Bitcoin Core
   node.
 
-- **Q:** My disk space is getting low due to nix.\
-  **A:** run `nix-collect-garbage -d`
+- **Q:** My disk space is getting low due to Nix.\
+  **A:** Run `nix-collect-garbage -d`
 
 - **Q:** Where is `sudo`?\
   **A:** After [CVE-2021-3156](https://www.openwall.com/lists/oss-security/2021/01/26/3),

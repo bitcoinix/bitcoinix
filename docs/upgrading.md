@@ -66,8 +66,8 @@ move RPC sources to `services.bitcoind.rpc.allowip`, or review the raw and inclu
 settings and set `services.bitcoind.rest.allowUncheckedConfig = true`.
 electrs no longer connects to bitcoind's whitelisted P2P port.
 
-Services using `nix-bitcoin.lib.defaultHardening`, including bitcoind, Core
-Lightning and lnd, now see `/run` and `/dev` (including `/dev/shm`) as read-only.
+Services using `nix-bitcoin.lib.defaultHardening`, including Bitcoin Core, Core
+Lightning and LND, now see `/run` and `/dev` (including `/dev/shm`) as read-only.
 Before deploying, review custom service hooks (`preStart`, `postStart`,
 `ExecStartPre`, `ExecStartPost`) and plugins that write there: they can now fail
 with `Read-only file system`.
@@ -152,14 +152,14 @@ unchanged. If you access the backend API directly from another host, set
 `services.mempool.address` to the node's LAN or VPN address.
 
 The MariaDB server enabled by mempool now listens on `127.0.0.1` by default.
-Mempool itself uses MariaDB's Unix socket and needs no connection changes. If
+mempool itself uses MariaDB's Unix socket and needs no connection changes. If
 other clients access this database server over the network, explicitly set
 `services.mysql.settings.mysqld.bind-address` to the desired listen address.
 Existing explicit values of this option take precedence over the new default.
 
-lnd now restarts automatically after a clean exit, so it can recover after its
+LND now restarts automatically after a clean exit, so it can recover after its
 chain backend health check shuts it down. By default, `lncli stop` also causes
-lnd to restart after 10 seconds. To keep lnd stopped for maintenance, use
+LND to restart after 10 seconds. To keep LND stopped for maintenance, use
 `sudo systemctl stop lnd` and update any scripts that relied on `lncli stop`
 leaving it down. Start it again with `sudo systemctl start lnd` when maintenance
 is complete.
@@ -178,7 +178,7 @@ separated by `;` or `,`.
 
 Keep each exception as narrow as possible: one address with its port, or the
 smallest range that covers the destination. Never list the ports of node services
-such as the lnd REST API or the bitcoind RPC. Anyone who can set a webhook, a
+such as the LND REST API or the bitcoind RPC. Anyone who can set a webhook, a
 notification URL or a Lightning address in BTCPay can make it send requests to
 every listed destination. A hostname entry trusts every address the hostname
 resolves to, so list only hostnames whose DNS you control.
@@ -218,7 +218,7 @@ nixpkgs 26.05, lack the fix for that bug.
 Delete the files above once you no longer need them.
 
 The `netns-exec` wrapper has been removed. Its namespace allowlist had been empty
-since joinmarket was removed, so it rejected every namespace. To run a command in a
+since JoinMarket was removed, so it rejected every namespace. To run a command in a
 service network namespace, use `sudo ip netns exec nb-<service> <command>`.
 If you set `nix-bitcoin.netns-isolation.allowedUser`, remove it from your configuration.
 
@@ -252,7 +252,7 @@ change by updating the config version below.
 
 The charge-lnd macaroon now grants read access and write access only to
 `UpdateChannelPolicy` and `UpdateChanStatus`. The previous broad `offchain:write`
-grant also allowed sending payments and abandoning channels. lnd regenerates
+grant also allowed sending payments and abandoning channels. LND regenerates
 `/run/lnd/charge-lnd.macaroon` with the restricted permissions when it restarts
 during deployment. Regeneration does not revoke old copies: they remain valid
 with their original permissions. Do not reuse them. If another application used

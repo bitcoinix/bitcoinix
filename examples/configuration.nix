@@ -29,8 +29,8 @@
   # FIXME: Enable modules by uncommenting their respective line. Disable
   # modules by commenting out their respective line.
 
-  ### BITCOIND
-  # Bitcoind is enabled by default via secure-node.nix.
+  ### BITCOIN CORE
+  # Bitcoin Core is enabled by default via secure-node.nix.
   #
   # Set this option to enable pruning with a specified MiB value.
   # Core Lightning is compatible with pruning. See
@@ -38,7 +38,7 @@
   # LND and electrs are not compatible with pruning.
   # services.bitcoind.prune = 100000;
   #
-  # Set this to accounce the onion service address to peers.
+  # Set this to announce the onion service address to peers.
   # The onion service allows accepting incoming connections via Tor.
   # nix-bitcoin.onionServices.bitcoind.public = true;
   #
@@ -77,21 +77,21 @@
   # };
 
   ### LND
-  # Set this to enable lnd, a lightning implementation written in Go.
+  # Set this to enable LND, a Lightning Network implementation written in Go.
   # services.lnd.enable = true;
   #
   # NOTE: In order to avoid collisions with Core Lightning you must disable Core Lightning or
   # change the services.clightning.port or services.lnd.port to a port other than
   # 9735.
   #
-  # Set this to create an onion service by which lnd can accept incoming connections
+  # Set this to create an onion service by which LND can accept incoming connections
   # via Tor.
   # The onion service is automatically announced to peers.
   # nix-bitcoin.onionServices.lnd.public = true;
   #
-  # Set this to create a lnd REST onion service.
+  # Set this to create an LND REST onion service.
   # This also adds binary `lndconnect` to the system environment.
-  # This binary generates QR codes or URLs for connecting applications to lnd via the
+  # This binary generates QR codes or URLs for connecting applications to LND via the
   # REST onion service.
   # You can also connect via WireGuard instead of Tor.
   # See ../docs/services.md for details.
@@ -102,13 +102,13 @@
   # };
   #
   ## WARNING
-  # If you use lnd, you should manually backup your wallet mnemonic
+  # If you use LND, you should manually back up your wallet mnemonic
   # seed. This will allow you to recover on-chain funds. You can run the
-  # following commands after the lnd service starts:
+  # following commands after the LND service starts:
   #   mkdir -p ./backups/lnd/
   #   scp bitcoin-node:/var/lib/lnd/lnd-seed-mnemonic ./backups/lnd/
   #
-  # You should also backup your channel state after opening new channels.
+  # You should also back up your channel state after opening new channels.
   # This will allow you to recover off-chain funds, by force-closing channels.
   #   scp bitcoin-node:/var/lib/lnd/chain/bitcoin/mainnet/channel.backup ./backups/lnd/
   #
@@ -122,8 +122,8 @@
   # Automatically enables Core Lightning.
   # services.rtl.nodes.clightning.enable = true;
   #
-  # Set this to add a lnd node interface.
-  # Automatically enables lnd.
+  # Set this to add an LND node interface.
+  # Automatically enables LND.
   # services.rtl.nodes.lnd.enable = true;
   #
   # You can enable both nodes simultaneously.
@@ -139,7 +139,7 @@
   # - electrs (enabled by default):
   #   Small database size, slow when querying new addresses.
   #
-  # - fulcrum:
+  # - Fulcrum:
   #   Large database size, quickly serves arbitrary address queries.
   #   Enable with:
   #     services.mempool.electrumServer = "fulcrum";
@@ -153,12 +153,12 @@
   # services.electrs.enable = true;
 
   ### FULCRUM
-  # Set this to enable fulcrum, an Electrum server implemented in C++.
+  # Set this to enable Fulcrum, an Electrum server implemented in C++.
   #
-  # Compared to electrs, fulcrum has higher storage demands but
+  # Compared to electrs, Fulcrum has higher storage demands but
   # can serve arbitrary address queries instantly.
   #
-  # Before enabling fulcrum, and for more info on storage demands,
+  # Before enabling Fulcrum, and for more info on storage demands,
   # see the description of option `enable` in ../modules/fulcrum.nix
   #
   # services.fulcrum.enable = true;
@@ -175,21 +175,21 @@
   # Enable this option to connect BTCPay Server to Core Lightning.
   # services.btcpayserver.lightningBackend = "clightning";
   #
-  # Enable this option to connect BTCPay Server to lnd.
+  # Enable this option to connect BTCPay Server to LND.
   # services.btcpayserver.lightningBackend = "lnd";
   #
-  # The lightning backend service is automatically enabled.
+  # The Lightning backend service is automatically enabled.
   # Afterwards you need to go into Store > General Settings > Lightning Nodes
   # and select "the internal lightning node of this BTCPay Server".
   #
-  # Set this to let nbxplorer scan the UTXO set, for BTCPayServer's wallet
+  # Set this to let NBXplorer scan the UTXO set, for BTCPay Server's wallet
   # UTXO scan. Each scan takes minutes of CPU on bitcoind, so it is off by
   # default.
   # services.bitcoind.rpc.users.btcpayserver.rpcwhitelist = [ "scantxoutset" ];
   #
-  # Set this to create an onion service to make the btcpayserver web interface
+  # Set this to create an onion service to make the BTCPay Server web interface
   # accessible via Tor.
-  # Security WARNING: Create a btcpayserver administrator account before allowing
+  # Security WARNING: Create a BTCPay Server administrator account before allowing
   # public access to the web interface.
   # nix-bitcoin.onionServices.btcpayserver.enable = true;
 
@@ -197,16 +197,16 @@
   # Enable the following to allow using hardware wallets.
   # See https://github.com/bitcoin-core/HWI for more information.
   #
-  # Ledger must be initialized through the official ledger live app and the Bitcoin app must
+  # Ledger must be initialized through the official Ledger Live app and the Bitcoin app must
   # be installed and running on the device.
   # services.hardware-wallets.ledger = true;
   #
-  # Trezor can be initialized with the trezorctl command in nix-bitcoin. More information in
+  # Trezor can be initialized with the trezorctl command in bitcoinix. More information in
   # `../docs/services.md`.
   # services.hardware-wallets.trezor = true;
 
   ### charge-lnd
-  # Set this to enable charge-lnd, a simple policy based fee manager for
+  # Set this to enable charge-lnd, a simple policy-based fee manager for
   # LND. With this tool you can set fees to autobalance, recover channel open
   # costs, use on-chain fees as reference, or just use static fees. You decide.
   # services.charge-lnd.enable = true;

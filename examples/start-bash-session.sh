@@ -2,7 +2,7 @@
 
 USAGE_INFO='
 Starting shell...
-Run "c COMMAND" to execute a command on the bitcoin node
+Run "c COMMAND" to execute a command on the bitcoinix node
 Run "c" to start a shell session inside the node
 
 Example:

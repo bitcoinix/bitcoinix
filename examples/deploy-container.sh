@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# This script demonstrates how to setup a nix-bitcoin node in a NixOS container.
+# This script demonstrates how to set up a bitcoinix node in a NixOS container.
 # Running this script leaves no traces on your host system.
 
 # This demo is a template for your own experiments.
@@ -41,16 +41,16 @@ done
 # These commands can also be executed interactively in a shell session
 demoCmds='
 echo
-echo "Bitcoind service:"
+echo "Bitcoin Core service:"
 c systemctl status bitcoind
 echo
-echo "Bitcoind network:"
+echo "Bitcoin Core network:"
 c bitcoin-cli getnetworkinfo
 echo
 echo "lightning-cli state:"
 c lightning-cli getinfo
 echo
-echo "Bitcoind data dir:"
+echo "Bitcoin Core data dir:"
 sudo ls -al /var/lib/*containers/demo-node/var/lib/bitcoind
 '
 nodeInfoCmd='

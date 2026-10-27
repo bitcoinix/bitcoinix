@@ -31,7 +31,7 @@ rec {
         disable-dns
       '';
 
-      # Avoid lengthy build of the nixos manual
+      # Avoid lengthy build of the NixOS manual
       documentation.nixos.enable = false;
 
       nixpkgs.pkgs = pkgs;
@@ -40,7 +40,7 @@ rec {
 
       services.getty.helpLine = lib.mkAfter ''
 
-        Welcome to nix-bitcoin!
+        Welcome to bitcoinix!
         To explore running services, try the following commands:
           nodeinfo
           systemctl status bitcoind

@@ -11,8 +11,8 @@ nix run github:bitcoinix/bitcoinix/v<version>
 ```
 Replace `<version>` with the latest release tag listed at
 <https://github.com/bitcoinix/bitcoinix/tags>.\
-The VM (defined in [flake.nix](../flake.nix)) runs in the terminal and has `bitcoind`
-and `clightning` installed.\
+The VM (defined in [flake.nix](../flake.nix)) runs in the terminal and has Bitcoin Core
+and Core Lightning installed.\
 It leaves no traces (outside of `/nix/store`) on the host system.
 
 
@@ -27,7 +27,7 @@ nix-shell
 
 The following example scripts set up a bitcoinix node according to [`./configuration.nix`](configuration.nix) and then
 shut down immediately. They leave no traces (outside of `/nix/store`) on the host system.\
-By default, [`./configuration.nix`](configuration.nix) enables `bitcoind` and `clightning`.
+By default, [`./configuration.nix`](configuration.nix) enables Bitcoin Core and Core Lightning.
 
 - [`./deploy-container.sh`](deploy-container.sh) creates a [NixOS container](https://github.com/extra-container/extra-container).\
   This is the fastest way to set up a node.\
@@ -75,4 +75,4 @@ Requires: A systemd-based Linux distro and root privileges.
 
 The historical [mempool extension flake](https://github.com/fort-nix/nix-bitcoin-mempool)
 illustrates how to define packages and modules in a flake for the predecessor project.
-Mempool is included in bitcoinix itself; enable it with `services.mempool.enable`.
+mempool is included in bitcoinix itself; enable it with `services.mempool.enable`.

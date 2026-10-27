@@ -7,7 +7,7 @@
 # https://search.nixos.org/options?channel=unstable&query=containers.%3Cname%3E
 
 {
-  description = "A basic nix-bitcoin container node";
+  description = "A basic bitcoinix container node";
 
   inputs = {
     # Pin the latest release tag listed at https://github.com/bitcoinix/bitcoinix/tags
@@ -45,7 +45,7 @@
             # Map `/my/host/dir` to `/my/mount` in the container
             # bindMounts."/my/mount" = { hostPath = "/my/host/dir"; isReadOnly = false; };
 
-            # Setup port forwarding
+            # Set up port forwarding
             # forwardPorts = [ { containerPort = 80; hostPort = 8080; protocol = "tcp";} ];
 
             config = { config, pkgs, ... }: {
