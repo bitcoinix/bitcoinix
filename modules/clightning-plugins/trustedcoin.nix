@@ -4,7 +4,16 @@ with lib;
 let cfg = config.services.clightning.plugins.trustedcoin; in
 {
   options.services.clightning.plugins.trustedcoin = {
-    enable = mkEnableOption "Trustedcoin (Core Lightning plugin)";
+    enable = mkOption {
+      type = types.bool;
+      default = false;
+      description = ''
+        Whether to enable Trustedcoin (Core Lightning plugin).
+        Warning: With {option}`tor.proxy` disabled, trustedcoin fetches block data
+        over clearnet, so option {option}`services.clightning.tor.enforce` is
+        automatically disabled for the whole clightning service.
+      '';
+    };
 
     package = mkOption {
       type = types.package;
@@ -16,7 +25,12 @@ let cfg = config.services.clightning.plugins.trustedcoin; in
     tor.proxy = mkOption {
       type = types.bool;
       default = config.services.clightning.tor.proxy;
-      description = "Whether to proxy outgoing connections with Tor.";
+      description = ''
+        Whether to proxy outgoing connections with Tor.
+        Warning: When disabled, option {option}`services.clightning.tor.enforce` is
+        automatically disabled for the whole clightning service, because
+        trustedcoin needs clearnet HTTPS connections to its block explorers.
+      '';
     };
   };
 
@@ -26,6 +40,8 @@ let cfg = config.services.clightning.plugins.trustedcoin; in
       extraConfig = ''
         plugin=${cfg.package}/bin/trustedcoin
       '';
+      # Without the proxy, trustedcoin needs clearnet access. This drops
+      # enforcement for the whole clightning unit, see the option descriptions.
       tor.enforce = mkIf (!cfg.tor.proxy) false;
     };
 
