@@ -219,6 +219,7 @@ let
             It is served on the RPC address and port without authentication. Every
             source allowed by `rpc.allowip` can query blocks, transactions, the UTXO
             set and the mempool, bypassing RPC users and `rpcwhitelist`.
+            Raw `rest` or `norest` directives in `extraConfig` are refused, so use this option.
           '';
         };
         allowNonLocal = mkOption {
@@ -242,6 +243,8 @@ let
             `rpcallowip` or `includeconf` directives. Their effective allowlist
             is not checked, so review all raw and included settings first.
             Unlike `rest.allowNonLocal`, this keeps the check of `rpc.allowip`.
+            Also allows `includeconf` with non-local `rpc.allowip` sources when REST
+            is disabled, because an included file can enable REST.
           '';
         };
         localSources = mkOption {
@@ -404,11 +407,16 @@ in {
         "127.0.0.1" "127.0.0.1/32" "127.0.0.0/8" "::1" "::1/128"
       ] ++ cfg.rest.localSources;
       nonLocalSources = subtractLists localSources cfg.rpc.allowip;
-      # Raw allowlists and included files can add sources outside rpc.allowip.
       # Match section-qualified and negated keys too, but ignore comments.
-      extraConfigSetsAllowlist = any (line:
-        builtins.match "[[:space:]]*([^[:space:].=#]+[.])?(no)?(rpcallowip|includeconf)[[:space:]]*=.*" line != null
+      extraConfigSets = key: any (line:
+        builtins.match "[[:space:]]*([^[:space:].=#]+[.])?(no)?${key}[[:space:]]*=.*" line != null
       ) (splitString "\n" cfg.extraConfig);
+      # Raw allowlists and included files can add sources outside rpc.allowip.
+      extraConfigSetsAllowlist = extraConfigSets "rpcallowip";
+      # Included files can also enable REST, so they are checked even without rest.enable.
+      extraConfigIncludesFile = extraConfigSets "includeconf";
+      # A raw REST directive bypasses all checks that depend on rest.enable.
+      extraConfigSetsRest = extraConfigSets "rest";
     in [
       { assertion = !cfg.rest.enable || cfg.rest.allowNonLocal || nonLocalSources == [];
         message = ''
@@ -418,12 +426,29 @@ in {
         '';
       }
       { assertion = !cfg.rest.enable || cfg.rest.allowNonLocal || cfg.rest.allowUncheckedConfig
-                    || !extraConfigSetsAllowlist;
+                    || !(extraConfigSetsAllowlist || extraConfigIncludesFile);
         message = ''
           The bitcoind REST interface is unauthenticated, and `services.bitcoind.extraConfig`
           contains `rpcallowip` or `includeconf` directives whose effective allowlist
           cannot be checked. Move RPC sources to `services.bitcoind.rpc.allowip` and
           remove the raw directives, or review all raw and included settings and set
+          `services.bitcoind.rest.allowUncheckedConfig = true`.
+        '';
+      }
+      { assertion = !extraConfigSetsRest;
+        message = ''
+          The bitcoind REST interface is unauthenticated, and `services.bitcoind.extraConfig`
+          sets `rest` or `norest` directly, which bypasses the REST checks.
+          Remove the raw directive and use `services.bitcoind.rest.enable` instead.
+        '';
+      }
+      { assertion = !extraConfigIncludesFile || nonLocalSources == []
+                    || cfg.rest.allowNonLocal || cfg.rest.allowUncheckedConfig;
+        message = ''
+          The bitcoind REST interface is unauthenticated, and `services.bitcoind.extraConfig`
+          contains `includeconf` directives whose files can enable it for these
+          `services.bitcoind.rpc.allowip` sources: ${concatStringsSep ", " nonLocalSources}
+          Remove the raw directives, or review all included settings and set
           `services.bitcoind.rest.allowUncheckedConfig = true`.
         '';
       }

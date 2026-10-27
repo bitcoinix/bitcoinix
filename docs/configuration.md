@@ -118,6 +118,9 @@ With REST enabled, raw `rpcallowip` and `includeconf` directives in
 allowlist can't be checked. Use `rpc.allowip` for checked sources, or review all
 raw and included settings and set `services.bitcoind.rest.allowUncheckedConfig = true`.
 This keeps the `rpc.allowip` check, unlike `allowNonLocal`.
+Raw `rest` or `norest` directives in `extraConfig` are always refused, and
+`includeconf` with non-local `rpc.allowip` sources is refused even with REST disabled,
+because an included file can enable REST.
 
 ```nix
 services.bitcoind = {

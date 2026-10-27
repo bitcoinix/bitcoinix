@@ -50,6 +50,25 @@ let
     };
     rawNegated = { args.extraConfig = "norpcallowip=0"; expected = false; };
     rawNegatedInclude = { args.extraConfig = "regtest.noincludeconf=0"; expected = false; };
+    rawRestDirective = { args = { enable = false; extraConfig = "rest=1"; }; expected = false; };
+    rawRestDirectiveLan = { args = lan // { enable = false; extraConfig = "rest=1"; }; expected = false; };
+    rawNorestDirective = { args.extraConfig = "norest=1"; expected = false; };
+    rawRestSectioned = { args.extraConfig = "main.rest=1"; expected = false; };
+    includeconfLanNoRest = {
+      args = lan // { enable = false; extraConfig = "includeconf=/etc/bitcoin-extra.conf"; };
+      expected = false;
+    };
+    includeconfLanUnchecked = {
+      args = lan // {
+        enable = false; extraConfig = "includeconf=/etc/bitcoin-extra.conf"; allowUncheckedConfig = true;
+      };
+      expected = true;
+    };
+    includeconfLocal = {
+      args = { enable = false; extraConfig = "includeconf=/etc/bitcoin-extra.conf"; };
+      expected = true;
+    };
+    restCommentOnly = { args = { enable = false; extraConfig = "# rest=1 is a comment"; }; expected = true; };
   };
 
   bitcoin = evaluate { services.bitcoind.enable = true; };
