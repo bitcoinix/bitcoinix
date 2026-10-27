@@ -83,6 +83,20 @@ Get started
 - To add bitcoinix to an existing NixOS configuration, see [importable-configuration.nix](examples/importable-configuration.nix)
   and the [Flake example](examples/flakes/flake.nix).
 
+Raw service configuration (`extraConfig`)
+---
+Prefer the dedicated NixOS options provided by bitcoinix. User-supplied settings in
+`extraConfig` are **unsupported**, and you take full responsibility for their
+correctness, security and compatibility with bitcoinix. They may override managed
+settings or bypass security checks; successful evaluation does not mean they are safe.
+This also applies to configuration files loaded through raw settings such as
+Bitcoin Core's `includeconf`.
+
+bitcoinix emits an evaluation warning for non-empty `extraConfig` on enabled
+services. Built-in presets and plugins can also populate these options; the
+responsibility notice applies to settings you supply yourself.
+See [customizing your configuration](docs/configuration.md#raw-service-configuration-extraconfig).
+
 Docs
 ---
 <!-- TODO-EXTERNAL: -->

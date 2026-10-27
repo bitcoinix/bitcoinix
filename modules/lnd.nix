@@ -98,6 +98,9 @@ let
       '';
       description = ''
         Extra lines appended to {file}`lnd.conf`.
+
+        ${nbLib.extraConfigDescription}
+
         See here for all available options:
         https://github.com/lightningnetwork/lnd/blob/master/sample-lnd.conf
       '';
@@ -191,6 +194,9 @@ in {
   inherit options;
 
   config = mkIf cfg.enable {
+    warnings = optional (cfg.extraConfig != "")
+      (nbLib.extraConfigWarning "services.lnd.extraConfig");
+
     assertions = [
       { assertion =
           !(config.services ? clightning)

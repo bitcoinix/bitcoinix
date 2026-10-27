@@ -62,7 +62,11 @@ let
           par=16
           logips=1
         '';
-        description = "Extra lines appended to {file}`bitcoin.conf`.";
+        description = ''
+          Extra lines appended to {file}`bitcoin.conf`.
+
+          ${nbLib.extraConfigDescription}
+        '';
       };
       dataDir = mkOption {
         type = types.path;
@@ -399,6 +403,9 @@ in {
   inherit options;
 
   config = mkIf cfg.enable {
+    warnings = optional (cfg.extraConfig != "")
+      (nbLib.extraConfigWarning "services.bitcoind.extraConfig");
+
     assertions = let
       localSources = [
         "127.0.0.1" "127.0.0.1/32" "127.0.0.0/8" "::1" "::1/128"

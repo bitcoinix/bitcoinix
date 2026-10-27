@@ -67,6 +67,8 @@ let
       description = ''
         Extra lines appended to the configuration file.
 
+        ${nbLib.extraConfigDescription}
+
         See all available options at
         https://github.com/ElementsProject/lightning/blob/master/doc/lightningd-config.5.md
         or by running {command}`lightningd --help`.
@@ -140,6 +142,9 @@ in {
   inherit options;
 
   config = mkIf cfg.enable {
+    warnings = optional (cfg.extraConfig != "")
+      (nbLib.extraConfigWarning "services.clightning.extraConfig");
+
     services.bitcoind = {
       enable = true;
       # Increase rpc thread count due to reports that lightning implementations fail

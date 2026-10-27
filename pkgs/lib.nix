@@ -5,6 +5,15 @@ with lib;
 # See `man systemd.exec` and `man systemd.resource-control` for an explanation
 # of the systemd-related options available through this file.
 let self = {
+  extraConfigDescription = ''
+    User-supplied extraConfig options are unsupported by bitcoinix. They may
+    override managed settings or bypass security checks. You take full
+    responsibility for their correctness, security and compatibility with
+    bitcoinix. Prefer dedicated NixOS options when available.
+  '';
+
+  extraConfigWarning = option: "${option} is non-empty. ${self.extraConfigDescription}";
+
   # These settings roughly follow systemd's "strict" security profile
   defaultHardening = {
       PrivateTmp = true;

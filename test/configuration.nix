@@ -95,10 +95,58 @@ let
     config.services.clightning.plugins.clnrest.address
   ];
 
+  extraConfigFixtures = map (service: {
+    name = service;
+    enablePath = [ "services" service "enable" ];
+    optionPath = [ "services" service "extraConfig" ];
+    value = "bitcoinix-test-private-setting=1";
+    empty = "";
+    module = {};
+  }) [ "bitcoind" "clightning" "lnd" "fulcrum" ] ++ map (node: {
+    name = "rtl-${node}";
+    enablePath = [ "services" "rtl" "nodes" node "enable" ];
+    optionPath = [ "services" "rtl" "nodes" node "extraConfig" ];
+    value.Settings.logLevel = "bitcoinix-test-private-setting";
+    empty = {};
+    module.services.rtl.enable = true;
+  }) [ "clightning" "lnd" ];
+  extraConfigTests = lib.listToAttrs (lib.concatMap (fixture:
+    map (case: lib.nameValuePair "testExtraConfig-${fixture.name}-${case.name}" {
+      expr = let
+        config = evaluate {
+          imports = [
+            fixture.module
+            (lib.setAttrByPath fixture.enablePath case.enable)
+            (lib.setAttrByPath fixture.optionPath case.value)
+          ];
+        };
+        warnings = builtins.filter
+          (lib.hasInfix "${lib.concatStringsSep "." fixture.optionPath} is non-empty.")
+          config.warnings;
+      in {
+        count = builtins.length warnings;
+        explainsResponsibility = lib.all (lib.hasInfix "responsibility") warnings;
+        explainsUnsupported = lib.all (lib.hasInfix "unsupported by bitcoinix") warnings;
+        keepsContentsPrivate = lib.all
+          (warning: !(lib.hasInfix "bitcoinix-test-private-setting" warning)) warnings;
+      };
+      expected = {
+        count = case.count;
+        explainsResponsibility = true;
+        explainsUnsupported = true;
+        keepsContentsPrivate = true;
+      };
+    }) [
+      { name = "populated"; enable = true; value = fixture.value; count = 1; }
+      { name = "empty"; enable = true; value = fixture.empty; count = 0; }
+      { name = "disabled"; enable = false; value = fixture.value; count = 0; }
+    ]
+  ) extraConfigFixtures);
+
   tests = lib.mapAttrs' (name: case: lib.nameValuePair "testREST-${name}" {
     expr = restAllowed case.args;
     inherit (case) expected;
-  }) restCases // {
+  }) restCases // extraConfigTests // {
     testBitcoinDefaults = {
       expr = getBitcoinDefaults bitcoin;
       expected = {
