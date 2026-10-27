@@ -85,6 +85,14 @@ let
   customMempoolUser = evaluate {
     services.mempool = { enable = true; user = "mempool-custom"; };
   };
+  customClightningUser = evaluate {
+    services.clightning = {
+      enable = true;
+      user = "cln-custom";
+      dataDir = "/var/lib/cln custom";
+      plugins.feeadjuster = { enable = true; adjustDaily = true; };
+    };
+  };
   getBitcoinDefaults = config: with config.services.bitcoind; {
     inherit network port listen;
     rpc = { inherit (rpc) address port allowip; };
@@ -204,6 +212,13 @@ let
         database = "mempool-custom";
         mysql = [ "mempool-custom" ];
       };
+    };
+    testFeeadjusterFollowsClightningUser = {
+      expr = with customClightningUser.systemd.services.clightning-feeadjuster.serviceConfig; {
+        user = User;
+        quotedDataDir = lib.hasInfix "--lightning-dir '/var/lib/cln custom' feeadjust" ExecStart;
+      };
+      expected = { user = "cln-custom"; quotedDataDir = true; };
     };
   };
   failures = lib.debug.runTests tests;

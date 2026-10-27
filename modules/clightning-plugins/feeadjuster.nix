@@ -64,8 +64,8 @@ in
         after = [ "clightning.service" ];
         serviceConfig = {
           Type = "oneshot";
-          User = "clightning";
-          ExecStart = "${clightning.package}/bin/lightning-cli --lightning-dir ${clightning.dataDir} feeadjust";
+          User = clightning.user;
+          ExecStart = "${clightning.package}/bin/lightning-cli --lightning-dir '${clightning.dataDir}' feeadjust";
         };
         unitConfig.JoinsNamespaceOf = [ "clightning.service" ];
         startAt = [ "daily" ];
