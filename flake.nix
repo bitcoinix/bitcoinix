@@ -95,6 +95,12 @@
             python ${./test/runner-tests.py} ${pkgs.writeText "test-suite.py" (import ./test/lib/test-script.nix)}
             touch "$out"
           '';
+          cve-tools = pkgs.runCommand "nix-bitcoin-cve-tools" {
+            nativeBuildInputs = with pkgs; [ bash coreutils gawk gnugrep jq python3 ];
+          } ''
+            python ${./test/ci/cve-tests.py} ${./test/ci}
+            touch "$out"
+          '';
         };
 
         packages = flake-utils.lib.flattenTree (removeAttrs nbPkgs [

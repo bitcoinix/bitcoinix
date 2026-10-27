@@ -66,6 +66,8 @@ jobs:
       - uses: cachix/install-nix-action@448cde739abec1eaf0646249e3d25bb8d9bc7702 # v31.11.2
       - name: Check flake and run fast tests
         run: nix flake check --all-systems
+      - name: Evaluate the CVE scan target
+        run: nix eval --impure --raw --expr '(import ./test/ci/scan-node.nix).drvPath'
 
   shellcheck:
     runs-on: ubuntu-latest

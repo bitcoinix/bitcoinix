@@ -45,6 +45,44 @@ including insecure defaults and documentation that suggests insecure practices.
 Vulnerabilities in upstream dependencies (e.g. Bitcoin Core, Core Lightning, LND, nixpkgs)
 should be reported to the respective upstream project first.
 
+## Dependency CVE scan
+
+A CI job runs every Monday and Thursday at 06:00 UTC. It scans the runtime closure of a
+representative node (the secure-node preset with all shipped services, defined in
+`test/ci/scan-node.nix`) for known CVEs with
+[vulnix](https://github.com/nix-community/vulnix). These are known issues in upstream
+packages, not private reports.
+
+Running twice a week keeps the cached NVD data within vulnix's seven-day window for
+incremental updates. A missing cache or a longer gap still requires the yearly feeds.
+
+Every run writes a summary of the findings that are not whitelisted to the run's step summary,
+and uploads the full report as the `vulnix-report` artifact.
+
+Maintainers can set the repository variable `CVE_SCAN_ISSUE` to the number of a pinned
+tracking issue. The job then writes its report into that issue below a `<!-- cve-scan-report -->`
+line and leaves everything above the line alone, so the description and triage notes can live
+there. The body shows the report of the last run that changed the set of active package/CVE
+pairs. A package version change alone does not post a comment; a CVE is resolved for a
+package only when no scanned version reports it. Comments list the new and resolved pairs.
+Versions remain in the report and artifact. The job never opens or closes issues.
+
+### Triage
+
+Findings can change when package pins or the whitelist change, or when NVD publishes a
+new CVE or corrects an affected-version range. A maintainer reviews each new finding and
+picks one of these:
+
+* move the nixpkgs pin to a revision with the fix (`helper/update-flake.sh`)
+* override the package in `pkgs/` until nixpkgs has the fix
+* add a whitelist entry, if the CVE does not apply to the package in the closure
+
+A whitelist entry in [`.github/cve-whitelist.toml`](.github/cve-whitelist.toml) needs:
+
+* a `[pname]` section for the package
+* an explicit `cve = [...]` list, so that new CVEs for the package are still reported
+* a `comment` that gives the reason, the date and how it was verified
+
 ## Release signing
 
 A bitcoinix release is a **signed, annotated git tag** (`v<version>`). There are no release
