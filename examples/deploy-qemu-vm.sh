@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# This script demonstrates how to run a nix-bitcoin node in QEMU.
+# This script demonstrates how to run a bitcoinix node in QEMU.
 # Running this script leaves no traces on your host system.
 
 # This demo is a template for your own experiments.
@@ -48,10 +48,10 @@ waitUntil 'systemctl is-active clightning &> /dev/null' 100
 echo
 
 echo
-echo "Bitcoind service:"
+echo "Bitcoin Core service:"
 c systemctl status bitcoind
 echo
-echo "Bitcoind network:"
+echo "Bitcoin Core network:"
 c bitcoin-cli getnetworkinfo
 echo
 echo "lightning-cli state:"

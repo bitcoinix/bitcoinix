@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# This script demonstrates how to setup a nix-bitcoin node with krops.
+# This script demonstrates how to set up a bitcoinix node with krops.
 # The node is deployed to a minimal NixOS QEMU VM.
 # Running this script leaves no traces on your host system.
 
@@ -23,7 +23,7 @@ fi
 source qemu-vm/run-vm.sh
 
 echo "Building the target VM"
-# Build the initial VM to which the nix-bitcoin node is deployed via krops
+# Build the initial VM to which the bitcoinix node is deployed via krops
 nix-build --out-link "$tmpDir/vm" - <<'EOF'
 (import <nixpkgs/nixos> {
   configuration = { config, lib, ... }: {
@@ -83,8 +83,8 @@ krops.pkgs.krops.writeCommand "krops-deploy" {
 }
 EOF
 
-echo "Building the nix-bitcoin node"
-# Pre-build the nix-bitcoin node outside of the VM to save some time
+echo "Building the bitcoinix node"
+# Pre-build the bitcoinix node outside of the VM to save some time
 nix-build --out-link "$tmpDir/store-paths" -E '
 let
   system = (import <nixpkgs/nixos> { configuration = <krops-vm-configuration.nix>; }).system;
@@ -96,7 +96,7 @@ in
 
 vmWaitForSSH
 
-# Add the store paths that include the nix-bitcoin node
+# Add the store paths that include the bitcoinix node
 # to the nix store db in the VM
 c "nix-store --load-db < $(realpath "$tmpDir/store-paths")/registration"
 
@@ -109,10 +109,10 @@ echo "Deploy with krops"
 "$tmpDir/krops-deploy"
 
 echo
-echo "Bitcoind service:"
+echo "Bitcoin Core service:"
 c systemctl status bitcoind
 echo
-echo "Bitcoind network:"
+echo "Bitcoin Core network:"
 c bitcoin-cli getnetworkinfo
 echo
 echo "lightning-cli state:"

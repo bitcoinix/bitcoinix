@@ -1,8 +1,8 @@
-# You can directly copy and import this file to use nix-bitcoin
+# You can directly copy and import this file to use bitcoinix
 # in an existing NixOS configuration.
 # Make sure to check and edit all lines marked by 'FIXME:'
 
-# See ./flakes/flake.nix on how to include nix-bitcoin in a flake-based
+# See ./flakes/flake.nix on how to include bitcoinix in a flake-based
 # system configuration.
 
 let

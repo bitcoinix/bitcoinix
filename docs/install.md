@@ -25,19 +25,19 @@ However, bitcoinix is agnostic to the deployment method and can be used with dif
 
 This is borrowed from the [NixOS manual](https://nixos.org/nixos/manual/index.html#ch-installation). Look there for more information.
 
-1. Obtain latest [NixOS](https://nixos.org/nixos/download.html). For example:
+1. Obtain the latest [NixOS](https://nixos.org/download/). For example:
 
     ```
-    wget https://releases.nixos.org/nixos/24.05/nixos-24.05.3164.63d37ccd2d17/nixos-minimal-24.05.3164.63d37ccd2d17-x86_64-linux.iso
-    # output: 35dd79596f12b159efc533400ba8f730d819eee2d1014683a658020c2b54ae0c
-    sha256sum nixos-minimal-24.05.3164.63d37ccd2d17-x86_64-linux.iso
+    wget https://releases.nixos.org/nixos/26.05/nixos-26.05.12707.718f670e8453/nixos-minimal-26.05.12707.718f670e8453-x86_64-linux.iso
+    # output: 12f093ce7bf7e9747c67730ee3cc7b22713912382e8d3d6f27ef6b19afd8c800
+    sha256sum nixos-minimal-26.05.12707.718f670e8453-x86_64-linux.iso
     ```
     Alternatively you can build NixOS from source by following the instructions at https://nixos.org/nixos/manual/index.html#sec-building-cd.
 
-2. Write NixOS iso to install media (USB/CD). For example:
+2. Write the NixOS ISO to install media (USB/CD). For example:
 
     ```
-    cp nixos-minimal-23.05.3701.e9b4b56e5a20-x86_64-linux.iso /dev/sdX
+    cp nixos-minimal-26.05.12707.718f670e8453-x86_64-linux.iso /dev/sdX
     ```
 
     Replace /dev/sdX with the correct device name. You can find this using `sudo fdisk -l`
@@ -96,7 +96,7 @@ This is borrowed from the [NixOS manual](https://nixos.org/nixos/manual/index.ht
     nano /mnt/etc/nixos/configuration.nix
     ```
 
-    We now need to adjust the configuration to make sure that we can ssh into the system and that it boots correctly. We add some lines to set `services.openssh` such that the configuration looks as follows:
+    We now need to adjust the configuration to make sure that we can SSH into the system and that it boots correctly. We add some lines to set `services.openssh` such that the configuration looks as follows:
 
     ```
     { config, pkgs, ... }:
@@ -112,7 +112,7 @@ This is borrowed from the [NixOS manual](https://nixos.org/nixos/manual/index.ht
         permitRootLogin = "yes";
       };
 
-      # The rest of the file are default options and hints.
+      # The rest of the file contains default options and hints.
     }
     ```
 
@@ -132,11 +132,11 @@ This is borrowed from the [NixOS manual](https://nixos.org/nixos/manual/index.ht
 
       # Add line here as explained below
 
-      # The rest of the file are generated options.
+      # The rest of the file contains generated options.
     }
     ```
 
-    Now add one of the following lines to the location mentioned in above example hardware config.
+    Now add one of the following lines to the location mentioned in the example hardware config above.
 
     **Option 1**: UEFI
 
@@ -150,7 +150,7 @@ This is borrowed from the [NixOS manual](https://nixos.org/nixos/manual/index.ht
       boot.loader.grub.device = "/dev/sda";
     ```
 
-    Lastly, in rare circumstances the hardware configuration does not have a `fileSystems` option. In that case you need to add it with the folllowing line:
+    Lastly, in rare circumstances the hardware configuration does not have a `fileSystems` option. In that case you need to add it with the following line:
 
     ```
       fileSystems."/".device = "/dev/disk/by-label/nixos";
@@ -180,13 +180,13 @@ This is borrowed from the [NixOS manual](https://nixos.org/nixos/manual/index.ht
 The following steps are meant to be run on the machine you deploy from, not the machine you deploy to.
 You can also build Nix from source by following the instructions at https://nixos.org/nix/manual/#ch-installing-source.
 
-1. Install Dependencies (Debian 10 Buster)
+1. Install dependencies (Debian 10 Buster)
 
     ```
     sudo apt-get install curl git gnupg2 dirmngr
     ```
 
-2. Install latest Nix in "multi-user mode" with GPG Verification according to https://nixos.org/nix/download.html
+2. Install the latest Nix in "multi-user mode" with GPG verification according to https://nixos.org/download/
 
     ```
     curl -o install-nix-2.3.10 https://releases.nixos.org/nix/nix-2.3.10/install
@@ -211,9 +211,11 @@ You can also build Nix from source by following the instructions at https://nixo
 3. Optional: Disallow substitutes
 
     You can put `substitute = false` to your `nix.conf` usually found in `/etc/nix/` to build the packages from source.
-    This eliminates an attack vector where nix's build server or binary cache is compromised.
+    This eliminates an attack vector where Nix's build server or binary cache is compromised.
 
-## 3. Setup deployment directory
+<a id="3-setup-deployment-directory"></a>
+
+## 3. Set up deployment directory
 
 1. Clone this project
 
@@ -276,13 +278,13 @@ You can also build Nix from source by following the instructions at https://nixo
 #### Optional: Specify the system of your node
 This enables evaluating your node config on a machine that has a different system platform
 than your node.\
-Examples: Deploying from macOS or deploying from a x86 desktop PC to a Raspberry Pi.
+Examples: Deploying from macOS or deploying from an x86 desktop PC to a Raspberry Pi.
 
 ```bash
-# Run this when your node has a 64-Bit x86 CPU (e.g., an Intel or AMD CPU)
+# Run this when your node has a 64-bit x86 CPU (e.g., an Intel or AMD CPU)
 echo "x86_64-linux" > krops/system
 
-# Run this when your node has a 64-Bit ARM CPU (e.g., Raspberry Pi 4 B, Pine64)
+# Run this when your node has a 64-bit ARM CPU (e.g., Raspberry Pi 4 B, Pine64)
 echo "aarch64-linux" > krops/system
 ```
 Other available systems:
@@ -293,7 +295,7 @@ Other available systems:
 
 ## 4. Deploy with krops
 
-1. Edit your ssh config
+1. Edit your SSH config
 
     ```
     nano ~/.ssh/config
@@ -318,7 +320,7 @@ Other available systems:
     nano krops/deploy.nix
     ```
 
-    Locate the `FIXME` and set the target to the name of the ssh config entry created earlier, i.e. `bitcoin-node`.
+    Locate the `FIXME` and set the target to the name of the SSH config entry created earlier, i.e. `bitcoin-node`.
 
     Note that any file imported by your `configuration.nix` must be copied to the target machine by krops.
     For example, if there is an import of `networking.nix` you must add it to `extraSources` in `krops/deploy.nix` like this:
@@ -355,7 +357,7 @@ Other available systems:
     ```
 
     Pay attention to lines that are preceded by `FIXME` comments. In particular:
-    1. Make sure to set your SSH pubkey. Otherwise, you loose remote access because the config does not enable `permitRootLogin` (unless you add that manually).
+    1. Make sure to set your SSH pubkey. Otherwise, you lose remote access because the config does not enable `permitRootLogin` (unless you add that manually).
     2. Uncomment the line `./hardware-configuration.nix` by removing `#`.
 
 6. Enter the deployment environment
@@ -372,13 +374,13 @@ Other available systems:
 
     This will now create a bitcoinix node on the target machine.
 
-8. You can now access `bitcoin-node` via ssh
+8. You can now access `bitcoin-node` via SSH
 
     ```
     ssh operator@bitcoin-node
     ```
 
-    Note that you're able to log in as the unprivileged `operator` user because bitcoinix automatically authorizes the ssh key added to `root`.
+    Note that you're able to log in as the unprivileged `operator` user because bitcoinix automatically authorizes the SSH key added to `root`.
 
 For security reasons, all normal system management tasks can and should be performed with the `operator` user. Logging in as `root` should be done as rarely as possible.
 

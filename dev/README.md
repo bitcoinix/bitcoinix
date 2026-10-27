@@ -43,7 +43,9 @@ There are two ways to run a dev shell:
 This starts a shell with [`test/run-tests.sh`](../test/run-tests.sh) and
 the scripts in dir [`helper`](../helper) added to `PATH`.
 
-### 2. Setup and start the `direnv` dev env
+<a id="2-setup-and-start-the-direnv-dev-env"></a>
+
+### 2. Set up and start the `direnv` dev env
 
 This is an opinionated, [direnv](https://direnv.net/)-based dev env, optimized for developer experience.
 
@@ -79,7 +81,7 @@ This is an opinionated, [direnv](https://direnv.net/)-based dev env, optimized f
 
 3. Optional: Editor integration
    - Add envrc support to your editor
-   - Setup your editor so you can easily execute lines or paragraphs from a shell script
+   - Set up your editor so you can easily execute lines or paragraphs from a shell script
      file in a shell.\
      This simplifies using dev helper scripts like [`./dev.sh`](./dev.sh).
 
@@ -118,14 +120,14 @@ See also: [test/README.md](../test/README.md)
 It's easiest to use an existing service as a template:
 - [electrs.nix](../modules/electrs.nix): a basic service
 - [clightning.nix](../modules/clightning.nix): simple, but covers a few more features.\
-  (A `cli` binary and a runtime-composed config to include secrets.)
+  (A CLI binary and a runtime-composed config to include secrets.)
 - [rtl.nix](../modules/rtl.nix): includes a custom package, defined in [pkgs/rtl](../pkgs/rtl).\
   Most other services use packages that are already included in nixpkgs.
 
 For generated configs in writable service directories, use `install -T` with an
 explicit mode to replace the config path, including symlinks to directories.
 The `config-replace` test in [suite/restarts.py](../test/suite/restarts.py) covers symlinks to files
-and directories for bitcoind, clightning, lnd, nbxplorer, electrs, and mempool. It
+and directories for Bitcoin Core, Core Lightning, LND, NBXplorer, electrs, and mempool. It
 checks the config's owner and mode after restart and verifies that the symlink
 targets remain unchanged.
 

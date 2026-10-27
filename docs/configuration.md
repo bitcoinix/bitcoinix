@@ -31,7 +31,7 @@ need manual action in each release.
 
 See [Nix - A One Pager](https://github.com/tazjin/nix-1p) for a short guide
 to Nix, the language used in `configuration.nix`.\
-You can follow along this guide by running command `nix repl` which allows you to interactively
+You can follow along with this guide by running command `nix repl` which allows you to interactively
 evaluate Nix expressions.
 
 For a general introduction to the Nix and NixOS ecosystem, see [nix.dev](https://nix.dev/).
@@ -112,7 +112,7 @@ services.bitcoind = {
   tor.proxy = false;
 };
 
-# Open the p2p port in the firewall
+# Open the P2P port in the firewall
 networking.firewall.allowedTCPPorts = [ config.services.bitcoind.port ];
 ```
 
@@ -198,13 +198,13 @@ The default data dir path is `/var/lib/<service>` for all services.
 
 Some services require extra steps:
 
-- lnd
+- LND
 
   Copy your wallet password to `$secretsDir/lnd-wallet-password` (See: [Secrets dir](#secrets-dir)).
 
-- btcpayserver
+- BTCPay Server
 
-  Copy the postgresql database:
+  Copy the PostgreSQL database:
   ```shell
   # Export (on the other node)
   sudo -u postgres pg_dump YOUR_BTCPAYSERVER_DB > export.sql
@@ -226,14 +226,14 @@ services.bitcoind = {
   address = "10.10.0.2";
   rpc.address = "10.10.0.2";
 
-  # Some bitcoinix services require whitelisted bitcoind p2p connections
+  # Some bitcoinix services require whitelisted bitcoind P2P connections
   # to work reliably.
   # Search for `whitelistedPort` in this repo to see the affected services.
-  # If you're using one of these services, either add a whitelisted p2p port
+  # If you're using one of these services, either add a whitelisted P2P port
   # on your remote node via `whitebind` and set it here:
   whitelistedPort = <remote whitebind P2P port>;
   #
-  # Or use the default p2p port and add `whitelist=<address of this node>` to
+  # Or use the default P2P port and add `whitelist=<address of this node>` to
   # your remote bitcoind config:
   whitelistedPort = config.services.bitcoind.port;
 
@@ -245,7 +245,7 @@ services.bitcoind = {
   in {
     privileged.name = privilegedName;
     public.name = publicName;
-    ## Set this if you use btcpayserver. It needs its own restricted RPC user.
+    ## Set this if you use BTCPay Server. It needs its own restricted RPC user.
     # btcpayserver.name = "mybtcpayrpcuser";
   };
 };

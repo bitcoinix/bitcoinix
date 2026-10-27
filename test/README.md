@@ -8,7 +8,7 @@ It leaves no traces (outside of `/nix/store`) on the host system.
 ./run-tests.sh [--scenario|-s <scenario>] [build|vm|debug|container]
 ```
 
-See the top of [run-tests.sh](../test/run-tests.sh) for a complete documentation.\
+See the top of [run-tests.sh](../test/run-tests.sh) for complete documentation.\
 Test scenarios are defined in [tests.nix](./tests.nix). The Python runner and
 execution plan are in [tests.py](./tests.py); test bodies and shared helpers are
 in [suite/](./suite/).
