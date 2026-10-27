@@ -82,6 +82,11 @@ let
     services.electrs.enable = true;
     nix-bitcoin.netns-isolation.enable = true;
   };
+  netnsNftables = evaluate {
+    services.bitcoind.enable = true;
+    nix-bitcoin.netns-isolation.enable = true;
+    networking.nftables.enable = true;
+  };
   customMempoolUser = evaluate {
     services.mempool = { enable = true; user = "mempool-custom"; };
   };
@@ -197,6 +202,10 @@ let
       expected = [ "10.0.0.2" "10.0.0.3" ];
     };
     testNetnsRESTAllowed = { expr = failedAssertions netns; expected = []; };
+    testNetnsRejectsNftables = {
+      expr = map (lib.hasInfix "uses the iptables backend") (failedAssertions netnsNftables);
+      expected = [ true ];
+    };
     testNetnsRESTAddresses = {
       expr = getRestAddresses netns;
       expected = with netns.nix-bitcoin.netns-isolation.netns; [ lnd.address clightning.address ];
