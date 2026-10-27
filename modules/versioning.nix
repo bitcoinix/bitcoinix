@@ -412,6 +412,20 @@ let
         See docs/upgrading.md, "Upgrading to config version 0.1.3".
       '';
     }
+    {
+      version = "0.1.3";
+      condition = let cfg = config.services.bitcoind; in cfg.enable
+        && (hasInfix "includeconf" cfg.extraConfig || hasInfix "rest" cfg.extraConfig);
+      message = ''
+        bitcoind refuses raw `rest` and `norest` directives in
+        `services.bitcoind.extraConfig`. Use `services.bitcoind.rest.enable` and the
+        other `services.bitcoind.rest.*` options instead. An `includeconf` directive
+        together with `services.bitcoind.rpc.allowip` sources outside localhost now
+        needs `services.bitcoind.rest.allowUncheckedConfig = true` even when REST is
+        disabled, because the included file can enable it.
+        See docs/upgrading.md, "Upgrading to config version 0.1.3".
+      '';
+    }
   ];
 
   clightningRestUsed = options.services.clightning-rest.isDefined

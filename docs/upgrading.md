@@ -66,6 +66,14 @@ move RPC sources to `services.bitcoind.rpc.allowip`, or review the raw and inclu
 settings and set `services.bitcoind.rest.allowUncheckedConfig = true`.
 electrs no longer connects to bitcoind's whitelisted P2P port.
 
+Two related checks are new. A raw `rest` or `norest` directive in
+`services.bitcoind.extraConfig` now fails evaluation: it enabled REST while skipping
+the checks above. Use `services.bitcoind.rest.enable` and the other
+`services.bitcoind.rest.*` options instead. An `includeconf` directive together with
+`services.bitcoind.rpc.allowip` sources outside localhost now needs
+`services.bitcoind.rest.allowUncheckedConfig = true` even with REST disabled, because
+the included file can enable it.
+
 Services using `nix-bitcoin.lib.defaultHardening`, including bitcoind, Core
 Lightning and lnd, now see `/run` and `/dev` (including `/dev/shm`) as read-only.
 Before deploying, review custom service hooks (`preStart`, `postStart`,
