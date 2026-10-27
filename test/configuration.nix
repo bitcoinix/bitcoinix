@@ -82,6 +82,9 @@ let
     services.electrs.enable = true;
     nix-bitcoin.netns-isolation.enable = true;
   };
+  customMempoolUser = evaluate {
+    services.mempool = { enable = true; user = "mempool-custom"; };
+  };
   getBitcoinDefaults = config: with config.services.bitcoind; {
     inherit network port listen;
     rpc = { inherit (rpc) address port allowip; };
@@ -141,6 +144,18 @@ let
     testNetnsRESTAddresses = {
       expr = getRestAddresses netns;
       expected = with netns.nix-bitcoin.netns-isolation.netns; [ lnd.address clightning.address ];
+    };
+    testMempoolCustomUser = {
+      expr = with customMempoolUser; {
+        service = systemd.services.mempool.serviceConfig.User;
+        database = services.mempool.settings.DATABASE.USERNAME or null;
+        mysql = map (user: user.name) services.mysql.ensureUsers;
+      };
+      expected = {
+        service = "mempool-custom";
+        database = "mempool-custom";
+        mysql = [ "mempool-custom" ];
+      };
     };
   };
   failures = lib.debug.runTests tests;
