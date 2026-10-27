@@ -93,6 +93,15 @@ in {
 
   # Base infrastructure
   {
+    assertions = [
+      {
+        # The firewall backend decides `networking.firewall.package`. Only the
+        # iptables backend gets a package with `bin/iptables`; without it
+        # `nb-netns-bridge` fails and every netns service stays down.
+        assertion = config.networking.firewall.backend == "iptables";
+        message = "`nix-bitcoin.netns-isolation` runs its iptables rules with `networking.firewall.package`, which has no iptables binary with the nftables or firewalld backend. Disable `networking.nftables` and `services.firewalld` so that the firewall uses the iptables backend.";
+      }
+    ];
     networking.dhcpcd.denyInterfaces = [ "nb-br" "nb-veth*" ];
     services.tor.client.socksListenAddress = {
       addr = bridgeIp;
