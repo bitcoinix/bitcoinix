@@ -35,6 +35,9 @@ let
           };
           description = ''
             Extra Core Lightning node configuration.
+
+            ${nbLib.extraConfigDescription}
+
             See here for all available options:
             https://github.com/Ride-The-Lightning/RTL/blob/master/.github/docs/Application_configurations.md
           '';
@@ -55,6 +58,9 @@ let
           };
           description = ''
             Extra lnd node configuration.
+
+            ${nbLib.extraConfigDescription}
+
             See here for all available options:
             https://github.com/Ride-The-Lightning/RTL/blob/master/.github/docs/Application_configurations.md
           '';
@@ -180,6 +186,12 @@ in {
   inherit options;
 
   config = mkIf cfg.enable {
+    warnings =
+      optional (cfg.nodes.clightning.enable && cfg.nodes.clightning.extraConfig != {})
+        (nbLib.extraConfigWarning "services.rtl.nodes.clightning.extraConfig")
+      ++ optional (cfg.nodes.lnd.enable && cfg.nodes.lnd.extraConfig != {})
+        (nbLib.extraConfigWarning "services.rtl.nodes.lnd.extraConfig");
+
     assertions = [
       { assertion = cfg.nodes.clightning.enable || cfg.nodes.lnd.enable;
         message = ''

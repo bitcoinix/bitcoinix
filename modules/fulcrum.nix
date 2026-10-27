@@ -44,6 +44,8 @@ let
       description = ''
         Extra lines appended to the configuration file.
 
+        ${nbLib.extraConfigDescription}
+
         See all available options at
         https://github.com/cculianu/Fulcrum/blob/master/doc/fulcrum-example-config.conf
       '';
@@ -84,6 +86,9 @@ in {
   inherit options;
 
   config = mkIf cfg.enable {
+    warnings = optional (cfg.extraConfig != "")
+      (nbLib.extraConfigWarning "services.fulcrum.extraConfig");
+
     assertions = [
       { assertion = bitcoind.prune == 0;
         message = "Fulcrum does not support bitcoind pruning.";

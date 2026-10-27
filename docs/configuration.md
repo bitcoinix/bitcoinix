@@ -58,6 +58,23 @@ networking.hostName = "myhost";
 time.timeZone = "UTC";
 ```
 
+## Raw service configuration (`extraConfig`)
+
+Prefer dedicated NixOS options when available. Settings you supply through
+`extraConfig` are unsupported by bitcoinix. You take full responsibility for
+checking their correctness, security and compatibility with the generated
+configuration, including after upgrades. This also covers files loaded through
+raw settings such as Bitcoin Core's `includeconf`.
+
+Raw settings may override managed settings or bypass security checks. For example,
+putting `rest=1` in `services.bitcoind.extraConfig` does not enable the checks
+controlled by `services.bitcoind.rest.enable`. Successful evaluation does not
+validate the resulting service configuration.
+
+Non-empty `extraConfig` on an enabled service produces a NixOS evaluation warning.
+Presets and plugins may populate it too; the responsibility notice applies to
+settings you add yourself. The warning does not print the configuration contents.
+
 ## Debug your configuration
 
 To print the values of specific options of your config, add the following to your `configuration.nix`:
