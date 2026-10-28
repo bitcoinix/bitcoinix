@@ -60,6 +60,8 @@ echo "Updating main flake"
 if [[ $nixosVersion ]]; then
     setVersion 'nixpkgs.url = .*?nixos-' ../flake.nix
     setVersion 'system.stateVersion = "' ../examples/configuration.nix
+    setVersion 'system.stateVersion = "' ../examples/flakes/flake.nix
+    setVersion 'system.stateVersion = "' ../examples/colmena/configs/fullnode/configuration.nix
     setVersion 'update-flake.sh ' ../dev/README.md
     nix flake update nixpkgs --flake ..
 else
