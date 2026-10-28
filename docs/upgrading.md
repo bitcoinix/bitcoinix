@@ -14,7 +14,11 @@ newer than your config version, starting with the oldest. Then set
 `nix-bitcoin.configVersion` to the version named in the error message.
 
 ## Updating bitcoinix
-Run `update-nix-bitcoin` from the [deployment shell](./configuration.md#deployment-shell).\
+With a [flake-based deployment](./install.md#4-deploy-with-a-flake), verify the new release tag as in
+step 3 of the installation, set it in `flake.nix`, run `nix flake lock` and check the locked commit
+as in step 4.2. Then deploy.
+
+With krops, run `update-nix-bitcoin` from the [deployment shell](./configuration.md#deployment-shell).\
 This fetches the latest release, verifies the signature on its release tag and updates `nix-bitcoin-release.nix`.\
 It refuses to switch to a release older than the one currently pinned. To downgrade on purpose,
 run `fetch-release.sh` with `releaseVersion=<version>` and write its output to `nix-bitcoin-release.nix`.

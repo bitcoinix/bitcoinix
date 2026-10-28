@@ -8,7 +8,8 @@
 > bitcoinix yet.
 > Please report problems at <https://github.com/bitcoinix/bitcoinix/issues>.
 
-This tutorial describes how to manage your Bitcoin node comfortably from your personal computer with the deployment tool [krops](https://github.com/krebs/krops).
+This tutorial describes how to manage your Bitcoin node comfortably from your personal computer: you keep the node configuration in a Nix flake and deploy it over SSH with `nixos-rebuild` or [Colmena](https://colmena.cli.rs/).
+The deployment tool [krops](https://github.com/krebs/krops) is described as a legacy alternative.
 However, bitcoinix is agnostic to the deployment method and can be used with different or without such tools (see [examples](https://github.com/bitcoinix/bitcoinix/blob/master/examples/README.md)).
 
 ## 0. Preparation
@@ -215,7 +216,7 @@ You can also build Nix from source by following the instructions at https://nixo
 
 <a id="3-setup-deployment-directory"></a>
 
-## 3. Set up deployment directory
+## 3. Get and verify bitcoinix
 
 1. Clone this project
 
@@ -254,7 +255,101 @@ You can also build Nix from source by following the instructions at https://nixo
     from the previous step. Checking out the tag makes sure that the files used below, including
     `fetch-release.sh` and its key files, are the ones that were signed.
 
-4. Create a new directory for your bitcoinix node config and copy initial files from bitcoinix
+## 4. Deploy with a flake
+
+Your node configuration is a Nix flake that has bitcoinix as an input. You deploy it from your
+computer over SSH with `nixos-rebuild` or [Colmena](https://colmena.cli.rs/). CI builds both
+examples on every change to bitcoinix.
+
+1. Copy an example to a new directory next to the bitcoinix clone
+
+    For `nixos-rebuild`, use [`examples/flakes`](https://github.com/bitcoinix/bitcoinix/blob/master/examples/flakes/flake.nix). For Colmena,
+    use [`examples/colmena`](https://github.com/bitcoinix/bitcoinix/tree/master/examples/colmena), a larger node. Both use the secure-node
+    preset.
+
+    ```
+    cp -r bitcoinix/examples/flakes node-config    # or bitcoinix/examples/colmena
+    cd node-config
+    git init
+    ```
+
+    Flakes only see files that git tracks, so `git add` every file you create.
+
+2. Pin the release that you verified in step 3
+
+    In `flake.nix`, set the `bitcoinix` input to the release tag:
+
+    ```
+    bitcoinix.url = "github:bitcoinix/bitcoinix/v<version>";
+    ```
+
+    Then lock the inputs and check that the locked commit is the one you verified:
+
+    ```
+    nix flake lock
+    nix flake metadata --json | nix run nixpkgs#jq -- -r .locks.nodes.bitcoinix.locked.rev
+    git -C ../bitcoinix rev-parse 'v<version>^{commit}'
+    ```
+
+    Both commands must print the same commit. Commit `flake.lock`, and repeat this step for
+    every update.
+
+3. Adapt the configuration
+
+    Copy `hardware-configuration.nix` from your node and import it in place of the example's
+    placeholders (in the Colmena example, replace `configs/fullnode/hardware-configuration.nix`):
+
+    ```
+    scp root@<node>:/etc/nixos/hardware-configuration.nix .
+    ```
+
+    Edit all lines marked `FIXME`. Above all, add your SSH public key to
+    `users.users.root.openssh.authorizedKeys.keys`: the deployment logs in as root, and without
+    the key you lose remote access to the node.
+
+4. Deploy
+
+    With `nixos-rebuild`:
+
+    ```
+    nix run nixpkgs#nixos-rebuild -- switch --flake .#fullnode --target-host root@<node>
+    ```
+
+    This builds the system on your computer and copies it to the node. To build on the node
+    instead, for example when you deploy from macOS, add `--build-host root@<node>`.
+
+    With Colmena, set `deployment.targetHost` in `flake.nix`, then:
+
+    ```
+    nix develop
+    colmena apply --on fullnode
+    ```
+
+    `switch` (the Colmena default) activates the new system on the running node, which can
+    cause problems. For updates, above all of bitcoinix, prefer `boot` and a reboot: replace
+    `switch` with `boot` in the `nixos-rebuild` command, or run
+    `colmena apply --on fullnode boot`, then `ssh root@<node> reboot`.
+
+5. With the secure-node preset, you can now log in as the unprivileged `operator` user
+
+    ```
+    ssh operator@<node>
+    ```
+
+    bitcoinix authorizes the SSH keys of `root` for `operator`. Use `operator` for normal
+    system management, and log in as `root` as rarely as possible.
+
+## 5. Alternative: deploy with krops (legacy)
+
+> [!NOTE]
+> krops is the deployment tool of nix-bitcoin, the predecessor project. Support for it may be
+> removed in a future release. Prefer a [flake-based deployment](#4-deploy-with-a-flake).
+
+### Set up the deployment directory
+
+These steps continue from step 3 above.
+
+1. Create a new directory for your bitcoinix node config and copy initial files from bitcoinix
 
     ```
     mkdir nix-bitcoin-node
@@ -262,7 +357,7 @@ You can also build Nix from source by following the instructions at https://nixo
     cp -r ../bitcoinix/examples/{configuration.nix,shell.nix,krops,.gitignore} .
     ```
 
-5. Obtain the hash of the latest bitcoinix release
+2. Obtain the hash of the latest bitcoinix release
 
     ```
     ../bitcoinix/helper/fetch-release.sh > nix-bitcoin-release.nix
@@ -293,7 +388,7 @@ Other available systems:
   This platform is untested and has no binary caches.
   [See here](https://nixos.wiki/wiki/NixOS_on_ARM) for details.
 
-## 4. Deploy with krops
+### Deploy with krops
 
 1. Edit your SSH config
 

@@ -57,13 +57,19 @@ The [bitcoinix test suite](../test/README.md) is also useful for exploring featu
 
 ### Deployment examples
 
-See [bitcoinix-examples](https://github.com/bitcoinix/bitcoinix-examples) for
-additional deployment configurations, including Colmena.
+- [`./flakes`](flakes/flake.nix): a node flake with the secure-node preset that you deploy with
+  `nixos-rebuild switch --flake .#fullnode --target-host root@<node>`.
+- [`./colmena`](colmena/README.md): a full node with the secure-node preset, deployed with
+  [Colmena](https://github.com/nix-community/colmena).
+
+CI builds both on every pull request (see
+[deployment-examples.sh](../test/ci/deployment-examples.sh)).
+The [installation guide](../docs/install.md) walks through a deployment.
 
 ### Flakes
 
 Flakes make it easy to include `bitcoinix` in an existing NixOS config.
-The [flakes example](./flakes/flake.nix) shows how to use `nix-bitcoin` as an input to a system flake.
+The [flakes example](./flakes/flake.nix) shows how to use `bitcoinix` as an input to a system flake.
 
 ### Persistent container with Flakes
 
