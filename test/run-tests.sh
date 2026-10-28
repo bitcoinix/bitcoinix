@@ -50,6 +50,11 @@
 #     intermediate Python REPL layer.
 #     Run command 'q' inside the machine for instant poweroff.
 #
+#   Build the deployment examples with their deployment tools
+#   ./run-tests.sh deploymentExamples
+#
+#     To build a single example, run ./ci/deployment-examples.sh <flakes|colmena>
+#
 #   Run tests from a snapshot copy of the source files
 #   ./run-tests.sh --copy-src|-c ...
 #
@@ -322,6 +327,12 @@ examples() {
     persistentContainerExample
 }
 
+# Build the deployment examples (Colmena, nixos-rebuild) against this checkout.
+# These are also run on the CI server.
+deploymentExamples() {
+    "$scriptDir/ci/deployment-examples.sh"
+}
+
 shellcheck() {
     "$scriptDir/shellcheck.sh"
 }
@@ -330,6 +341,7 @@ all() {
     buildable "$@"
     shellcheck
     examples
+    deploymentExamples
     flake
 
     # flake-info at the currently locked rev supplies nixpkgs and flake-schemas

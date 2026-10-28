@@ -1,67 +1,95 @@
-# This is a system configuration template that uses nix-bitcoin.
+# This is a system configuration template that uses bitcoinix.
 #
 # You can adapt this to an existing system flake by copying the parts
-# relevant to nix-bitcoin.
+# relevant to bitcoinix.
 #
 # Make sure to check and edit all lines marked by 'FIXME:'
 
 {
   description = "A basic bitcoinix node";
 
-  # Pin the latest release tag listed at https://github.com/bitcoinix/bitcoinix/tags
-  inputs.nix-bitcoin.url = "github:bitcoinix/bitcoinix/v0.1.0";
+  inputs = {
+    # Pin the latest release tag listed at https://github.com/bitcoinix/bitcoinix/tags
+    bitcoinix.url = "github:bitcoinix/bitcoinix/v0.1.2";
 
-  inputs.nixpkgs.follows = "nix-bitcoin/nixpkgs";
-  inputs.nixpkgs-unstable.follows = "nix-bitcoin/nixpkgs-unstable";
+    nixpkgs.follows = "bitcoinix/nixpkgs";
+    nixpkgs-unstable.follows = "bitcoinix/nixpkgs-unstable";
+  };
 
-  outputs = { self, nixpkgs, nix-bitcoin, ... }: {
+  outputs = { self, nixpkgs, bitcoinix, ... }: {
 
-    nixosConfigurations.mynode = nixpkgs.lib.nixosSystem {
+    nixosConfigurations.fullnode = nixpkgs.lib.nixosSystem {
       system = "x86_64-linux";
       modules = [
-        nix-bitcoin.nixosModules.default
+        bitcoinix.nixosModules.default
 
-        # Optional:
-        # Import the secure-node preset, an opinionated config to enhance security
-        # and privacy.
-        #
-        # (nix-bitcoin + "/modules/presets/secure-node.nix")
+        # The secure-node preset, an opinionated config to enhance security and
+        # privacy: firewall, Tor for the services' outgoing connections, doas
+        # instead of sudo, an `operator` user and an SSH onion service.
+        (bitcoinix + "/modules/presets/secure-node.nix")
 
         {
-          # Automatically generate all secrets required by services.
-          # The secrets are stored in /etc/nix-bitcoin-secrets
-          nix-bitcoin.generateSecrets = true;
+          nix-bitcoin = {
+            # Automatically generate all secrets required by services.
+            # The secrets are stored in /etc/nix-bitcoin-secrets. Back them up
+            # yourself: they are not part of this flake.
+            generateSecrets = true;
 
-          # Enable some services.
-          # See ../configuration.nix for all available features.
-          services.bitcoind.enable = true;
-          services.clightning.enable = true;
+            # The bitcoinix release that your config is written for. After you
+            # update the pinned release, evaluation fails if your config needs
+            # changes and says what to do; then set this to the new release.
+            configVersion = "0.1.2";
 
-          # When using nix-bitcoin as part of a larger NixOS configuration, set the following to enable
-          # interactive access to bitcoinix features (like bitcoin-cli) for your system's main user
-          nix-bitcoin.operator = {
-            enable = true;
-            # FIXME: Set this to your system's main user
-            name = "main";
+            # The preset adds the user `operator` for interactive access to bitcoinix
+            # features (like bitcoin-cli). It has no password and logs in with root's
+            # SSH keys. In a larger NixOS configuration, make your main user the
+            # operator instead:
+            # operator.name = "<your main user>";
+
+            # If you use a custom nixpkgs version for evaluating your system
+            # (instead of `bitcoinix.inputs.nixpkgs` like in this example),
+            # consider setting `useVersionLockedPkgs = true` to use the exact pkgs
+            # versions for bitcoinix services that are tested by bitcoinix.
+            # The downsides are increased evaluation times and increased system
+            # closure size.
+            #
+            # useVersionLockedPkgs = true;
           };
 
-          # The system's main unprivileged user.
-          # In an existing NixOS configuration, this setting is usually already defined.
-          users.users.main = {
-            isNormalUser = true;
-            # FIXME: This is unsafe. Use `hashedpassword` or `passwordFile` instead in a real
-            # deployment: https://search.nixos.org/options?show=users.users.%3Cname%3E.hashedPassword
-            password = "a";
+          services = {
+            # Enable some services.
+            # See ../configuration.nix for all available features.
+            bitcoind.enable = true;
+            clightning.enable = true;
+
+            # Deploying with `nixos-rebuild --target-host root@<node>` logs in as root over SSH.
+            # Keep SSH enabled and your key authorized, or the deployment locks you out.
+            openssh = {
+              enable = true;
+              settings = {
+                PasswordAuthentication = false;
+                KbdInteractiveAuthentication = false;
+              };
+            };
+          };
+          users.users.root.openssh.authorizedKeys.keys = [
+            # FIXME: Add your SSH public key
+            "ssh-ed25519 <your_pubkey>"
+          ];
+
+          # FIXME: Placeholders. This part depends entirely on your node's hardware
+          # (boot loader, disks): replace it by importing the hardware-configuration.nix
+          # that `nixos-generate-config` writes on the node.
+          boot.loader.grub.device = "/dev/sda";
+          fileSystems."/" = {
+            device = "/dev/disk/by-label/nixos";
+            fsType = "ext4";
           };
 
-          # If you use a custom nixpkgs version for evaluating your system
-          # (instead of `nix-bitcoin.inputs.nixpkgs` like in this example),
-          # consider setting `useVersionLockedPkgs = true` to use the exact pkgs
-          # versions for bitcoinix services that are tested by bitcoinix.
-          # The downsides are increased evaluation times and increased system
-          # closure size.
-          #
-          # nix-bitcoin.useVersionLockedPkgs = true;
+          # The NixOS release that your node was installed with.
+          # Read the comment on this option before changing it:
+          # https://search.nixos.org/options?show=system.stateVersion
+          system.stateVersion = "26.05";
         }
       ];
     };
