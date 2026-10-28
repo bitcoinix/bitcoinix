@@ -62,9 +62,10 @@ and uploads the full report as the `vulnix-report` artifact.
 Maintainers can set the repository variable `CVE_SCAN_ISSUE` to the number of a pinned
 tracking issue. The job then writes its report into that issue below a `<!-- cve-scan-report -->`
 line and leaves everything above the line alone, so the description and triage notes can live
-there. The body shows the report of the last run that changed the set of active package/CVE
-pairs. A package version change alone does not post a comment; a CVE is resolved for a
-package only when no scanned version reports it. Comments list the new and resolved pairs.
+there. The body shows the report of the last run. Comments go out only when the set of
+active package/CVE pairs changes, so a package version change alone doesn't post one. A CVE
+is resolved for a package only when no scanned version reports it. Comments list the new and
+resolved pairs.
 Versions remain in the report and artifact. The job never opens or closes issues.
 
 ### Triage
