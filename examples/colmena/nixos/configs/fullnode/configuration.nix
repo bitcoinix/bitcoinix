@@ -7,7 +7,7 @@
     ./hardware-configuration.nix
 
     # Common modules (common.nix included by all hosts in the `flake.nix`)
-    ../vm.nix
+    ../../vm.nix
   ];
 
   networking = {
@@ -20,26 +20,28 @@
       allowedTCPPorts = [
         # nginx reverse proxy
         80
-        443
       ];
     };
   };
 
   ## Services
   services = {
-    # Reverse proxy to services
+    # Reverse proxy that serves mempool on the local network over plain HTTP.
+    # It forwards to the mempool frontend, which listens on localhost only.
+    # Before exposing mempool to the internet, add TLS (`enableACME`,
+    # `forceSSL` and `security.acme`) and rate limiting; see the description of
+    # `services.mempool.frontend.enable`.
     nginx = {
       enable = true;
       recommendedProxySettings = true;
 
-      virtualHosts = {
-        "mempool.example.com" = {
-          enableACME = true;
-          forceSSL = true;
-          locations."/" = {
-            proxyPass = "http://127.0.0.1:${toString config.services.mempool.frontend.port}/";
-            proxyWebsockets = true;
-          };
+      # FIXME: Set your domain. It is also the certificate's domain if you
+      # enable ACME. (`mempool` is taken: the frontend's own virtual host.)
+      virtualHosts."mempool.example.com" = {
+        default = true;
+        locations."/" = {
+          proxyPass = "http://${config.services.mempool.frontend.address}:${toString config.services.mempool.frontend.port}/";
+          proxyWebsockets = true;
         };
       };
     };
@@ -70,7 +72,7 @@
     };
 
     # == CLN REST server
-    clightning-rest.enable = true;
+    clightning.plugins.clnrest.enable = true;
 
     ### RIDE THE LIGHTNING
     rtl.enable = true;
@@ -100,7 +102,7 @@
     # The nix-bitcoin release version that your config is compatible with. When
     # upgrading to a backwards-incompatible release, nix-bitcoin will display an
     # an error and provide hints for migrating your config to the new release.
-    configVersion = "0.0.139";
+    configVersion = "0.1.3";
   };
 
   # This value determines the NixOS release with which your system is to be

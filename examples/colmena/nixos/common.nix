@@ -1,5 +1,4 @@
 {
-  config,
   lib,
   pkgs,
   ...
@@ -68,14 +67,13 @@
       ===============================================
     '';
     users = {
+      # root has no password and logs in with these SSH keys only
       root = {
         openssh.authorizedKeys.keys = [
           # SSH access / backup keys
           "ssh-ed25519 <your_pubkey> backup_key"
           "ssh-ed25519 <your_pubkey> access_key"
         ];
-
-        hashedPasswordFile = config.age.secrets.root_password.path;
       };
     };
   };
