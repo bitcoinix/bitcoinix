@@ -93,6 +93,13 @@ let
     networking.nftables.enable = true;
     networking.firewall.backend = "iptables";
   };
+  netnsNftablesIptablesPackage = evaluate {
+    services.bitcoind.enable = true;
+    nix-bitcoin.netns-isolation.enable = true;
+    networking.nftables.enable = true;
+    networking.firewall.backend = "iptables";
+    networking.firewall.package = pkgs.iptables;
+  };
   customMempoolUser = evaluate {
     services.mempool = { enable = true; user = "mempool-custom"; };
   };
@@ -215,6 +222,10 @@ let
     testNetnsRejectsNftablesWithIptablesBackend = {
       expr = map (lib.hasInfix "uses the iptables backend") (failedAssertions netnsNftablesIptablesBackend);
       expected = [ true ];
+    };
+    testNetnsAllowsNftablesWithIptablesPackage = {
+      expr = failedAssertions netnsNftablesIptablesPackage;
+      expected = [];
     };
     testNetnsRESTAddresses = {
       expr = getRestAddresses netns;
