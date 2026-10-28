@@ -95,11 +95,15 @@ in {
   {
     assertions = [
       {
-        # The firewall backend decides `networking.firewall.package`. Only the
-        # iptables backend gets a package with `bin/iptables`; without it
-        # `nb-netns-bridge` fails and every netns service stays down.
-        assertion = config.networking.firewall.backend == "iptables";
-        message = "`nix-bitcoin.netns-isolation` runs its iptables rules with `networking.firewall.package`, which has no iptables binary when `networking.nftables` is enabled, and firewalld is not supported. Disable `networking.nftables` and `services.firewalld` so that the firewall uses the iptables backend.";
+        # `networking.firewall.package` follows `networking.nftables.enable`, not
+        # the backend: with nftables enabled it is `pkgs.nftables`, which has no
+        # `bin/iptables`, even when `networking.firewall.backend` is set to
+        # "iptables" by hand. Without that binary `nb-netns-bridge` fails and
+        # every netns service stays down, so check both. firewalld is not
+        # supported either.
+        assertion = config.networking.firewall.backend == "iptables"
+          && !config.networking.nftables.enable;
+        message = "`nix-bitcoin.netns-isolation` runs its iptables rules with `networking.firewall.package`, which has no iptables binary when `networking.nftables` is enabled, and firewalld is not supported. Disable `networking.nftables` and `services.firewalld` so that the firewall uses the iptables backend and package.";
       }
     ];
     networking.dhcpcd.denyInterfaces = [ "nb-br" "nb-veth*" ];
