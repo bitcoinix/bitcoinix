@@ -1,5 +1,5 @@
 {
-  description = "Colemna Hive configuration (fullnode)";
+  description = "Colmena hive with a bitcoinix node (fullnode)";
 
   inputs = {
     # Pin the latest release tag listed at https://github.com/bitcoinix/bitcoinix/tags
@@ -42,24 +42,14 @@
           nixpkgs = import inputs.nixpkgs {
             system = "x86_64-linux";
           };
-
-          specialArgs = {
-            system = "x86_64-linux";
-          };
-
-          nodeNixpkgs = {
-            fullnode = import inputs.nixpkgs {
-              system = "x86_64-linux";
-            };
-          };
-
-          nodeSpecialArgs = { };
         };
 
+        # Optional: modules that every node imports. common.nix also gives
+        # root the SSH access that Colmena deploys with; keep that if you
+        # drop it.
         defaults = {
           imports = [
-            # Include the common defaults to all machine configuration
-            ./nixos/common.nix
+            ./common.nix
           ];
         };
 
@@ -73,24 +63,37 @@
           { ... }:
           {
             deployment = {
+              # FIXME: The address that Colmena reaches the node at over SSH
               targetHost = "${name}.example.com";
+              # Colmena logs in as root with your SSH key
               targetUser = "root";
+              # Build on the node, for its own architecture: no cross-building,
+              # and you can deploy from macOS
               buildOnTarget = true;
             };
 
             imports = [
               inputs.bitcoinix.nixosModules.default
+
+              # Secure defaults: firewall, Tor for the services' outgoing
+              # connections, doas instead of sudo, an `operator` user with
+              # root's SSH keys and an SSH onion service
               (inputs.bitcoinix + "/modules/presets/secure-node.nix")
 
               # Load node configuration
-              ./nixos/configs/${name}/configuration.nix
+              ./configs/${name}/configuration.nix
             ];
 
             nix-bitcoin = {
-              # Automatically generate all secrets required by services.
-              # The secrets are stored in /etc/nix-bitcoin-secrets on remote
-              # node and must be backuped.
+              # Generate the secrets that the services need on the node, in
+              # /etc/nix-bitcoin-secrets. Back them up yourself: they are not
+              # part of this flake.
               generateSecrets = true;
+
+              # The bitcoinix release that your config is written for. After you
+              # update the pinned release, evaluation fails if your config needs
+              # changes and says what to do; then set this to the new release.
+              configVersion = "0.1.2";
             };
           };
       };

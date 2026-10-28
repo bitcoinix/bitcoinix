@@ -1,3 +1,6 @@
+# Settings for every node of the hive. The bitcoinix node needs none of them,
+# except SSH access for root, which Colmena deploys with; the rest is an
+# example to adapt or drop.
 {
   lib,
   pkgs,
@@ -35,7 +38,7 @@
   # Set maximum number of NixOS generations
   boot.loader.grub.configurationLimit = lib.mkDefault 5;
 
-  time.timeZone = "Europe/Berlin";
+  time.timeZone = "UTC";
 
   programs = {
     bash.interactiveShellInit = "set -o vi";
@@ -81,7 +84,10 @@
   services = {
     openssh = {
       enable = true;
-      settings.PasswordAuthentication = false;
+      settings = {
+        PasswordAuthentication = false;
+        KbdInteractiveAuthentication = false;
+      };
     };
 
     journald.extraConfig = ''

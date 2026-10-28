@@ -4,18 +4,15 @@
 }:
 {
   imports = [
+    # FIXME: This file depends entirely on your hardware and environment;
+    # replace it with your node's.
     ./hardware-configuration.nix
-
-    # Common modules (common.nix included by all hosts in the `flake.nix`)
-    ../../vm.nix
   ];
 
   networking = {
-    useDHCP = false;
-    interfaces.enp1s0.useDHCP = true;
-
     hostName = "fullnode";
 
+    # FIXME: Set your node's network interface (see `ip link`)
     firewall.interfaces.enp1s0 = {
       allowedTCPPorts = [
         # nginx reverse proxy
@@ -46,6 +43,10 @@
       };
     };
 
+    # This node keeps the bitcoind and fulcrum data on an extra disk (e.g.
+    # 2 TB), mounted at /mnt/data in hardware-configuration.nix. Drop the
+    # `dataDir` lines to use the defaults under /var/lib.
+
     ### BITCOIND
     bitcoind = {
       enable = true;
@@ -61,25 +62,19 @@
         local.directory = "/var/backup/clightning";
       };
 
-      # Ref.:
-      # - https://github.com/ElementsProject/lightning/blob/master/doc/lightningd-config.5.md
-      extraConfig = ''
-        alias=bitcoinix[cln]
-      '';
-
-      #### Plugins
-      plugins = { };
+      plugins = {
+        # CLN REST server
+        clnrest.enable = true;
+      };
     };
 
-    # == CLN REST server
-    clightning.plugins.clnrest.enable = true;
-
     ### RIDE THE LIGHTNING
-    rtl.enable = true;
-
-    # Set this to add a clightning node interface.
-    # Automatically enables clightning.
-    rtl.nodes.clightning.enable = true;
+    rtl = {
+      enable = true;
+      # Set this to add a clightning node interface.
+      # Automatically enables clightning.
+      nodes.clightning.enable = true;
+    };
 
     ### MEMPOOL
     mempool = {
@@ -95,14 +90,6 @@
 
     ### Backups
     backups.enable = true;
-  };
-
-  ## Nix-Bitcoin's specific options
-  nix-bitcoin = {
-    # The nix-bitcoin release version that your config is compatible with. When
-    # upgrading to a backwards-incompatible release, nix-bitcoin will display an
-    # an error and provide hints for migrating your config to the new release.
-    configVersion = "0.1.3";
   };
 
   # This value determines the NixOS release with which your system is to be
