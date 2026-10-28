@@ -79,6 +79,12 @@ and the existing CI `check_flake` job runs them through `nix flake check`.
 scan failures, whitelist filtering, and issue reporting with local command stubs.
 The same CI job evaluates [ci/scan-node.nix](./ci/scan-node.nix) without building
 the node or fetching NVD feeds. The scheduled CVE workflow builds and scans it.
+The `deployment_examples` job runs [ci/deployment-examples.sh](./ci/deployment-examples.sh)
+(also `./run-tests.sh deploymentExamples`). It builds every deployment example in
+[../examples](../examples) with its own tool against the checkout, one step per example:
+`examples/flakes` with `nixos-rebuild build --flake` and `examples/colmena` with
+`colmena build`. The examples pin a release and its `configVersion`; the script locks
+them to the checkout and sets the checkout's latest `configVersion`.
 The `shellcheck` and `nixos_search` jobs run independently, so shell linting and
 fast checks can finish while package and option extraction is still running.
 The required `ci_gate` waits for all jobs and requires them to succeed; only
