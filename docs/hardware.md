@@ -1,22 +1,33 @@
-Hardware requirements
----
+# Hardware requirements
 
-> [!NOTE]
-> This document is inherited from nix-bitcoin, the predecessor project. It is a work in progress and may be outdated.
+## Platforms
+
+bitcoinix supports two platforms:
+
+- `x86_64-linux`: 64-bit Intel and AMD CPUs
+- `aarch64-linux`: 64-bit ARM CPUs
+
+Other platforms are not supported.
+
+## Memory
 
 * RAM: 2 GB. ECC memory is better. Additionally, it's recommended to use DDR4 memory with
   targeted row refresh (TRR) enabled (https://rambleed.com/).
-* Disk space: 1 TB for an unpruned
-  instance of Bitcoin Core.
-  * This can be significantly lowered by enabling pruning.
-    Note: Pruning is not supported by electrs and Fulcrum.
 
-Tested low-end hardware includes:
-- [Raspberry Pi 4](https://www.raspberrypi.org/products/raspberry-pi-4-model-b/)
-- [PC Engines apu2c4](https://pcengines.ch/apu2c4.htm)
-- [Gigabyte GB-BACE-3150](https://www.gigabyte.com/Mini-PcBarebone/GB-BACE-3150-rev-10)
-- [Gigabyte GB-BACE-3160](https://www.gigabyte.com/de/Mini-PcBarebone/GB-BACE-3160-rev-10#ov)
+## Disk space
 
-Some hardware (including Intel NUCs) may not be compatible with the [hardened kernel preset](https://github.com/bitcoinix/bitcoinix/blob/master/modules/presets/hardened.nix)
-(See https://github.com/fort-nix/nix-bitcoin/issues/39#issuecomment-517366093
-for a workaround).
+Use a disk of at least 2 TB, preferably an SSD. An Electrum server (electrs or Fulcrum)
+needs an unpruned Bitcoin Core node and adds its own index on top of it.
+
+### Pruning
+
+[`services.bitcoind.prune`](https://github.com/bitcoinix/bitcoinix/blob/master/modules/bitcoind.nix)
+limits the block files to a target size in MiB and lowers the disk usage. The smallest
+target that Bitcoin Core accepts is 550.
+
+Not every service works on a pruned node:
+
+- electrs and Fulcrum don't support pruning, and evaluation fails.
+- mempool enables `services.bitcoind.txindex`, and Bitcoin Core doesn't start with both
+  pruning and the transaction index.
+- Core Lightning works. Its `bcli` plugin fetches pruned blocks from peers.

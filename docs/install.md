@@ -1,13 +1,5 @@
 # Tutorial: Install and configure NixOS for bitcoinix on a dedicated machine
 
-> [!NOTE]
-> This document is inherited from nix-bitcoin, the predecessor project. It is a work in progress and may be outdated.
-
-> [!WARNING]
-> This documentation may be outdated or contain installation steps that do not work with
-> bitcoinix yet.
-> Please report problems at <https://github.com/bitcoinix/bitcoinix/issues>.
-
 This tutorial describes how to manage your Bitcoin node comfortably from your personal computer: you keep the node configuration in a Nix flake and deploy it over SSH with `nixos-rebuild` or [Colmena](https://colmena.cli.rs/).
 The deployment tool [krops](https://github.com/krebs/krops) is described as a legacy alternative.
 However, bitcoinix is agnostic to the deployment method and can be used with different or without such tools (see [examples](https://github.com/bitcoinix/bitcoinix/blob/master/examples/README.md)).
@@ -24,190 +16,43 @@ However, bitcoinix is agnostic to the deployment method and can be used with dif
 
 ## 1. NixOS installation
 
-This is borrowed from the [NixOS manual](https://nixos.org/nixos/manual/index.html#ch-installation). Look there for more information.
+1. Install NixOS on the node as described in the
+    [NixOS manual](https://nixos.org/manual/nixos/stable/#sec-installation). Use the minimal ISO
+    image for the platform of your node (`x86_64-linux` or `aarch64-linux`) from
+    <https://nixos.org/download/>. To encrypt the disk, see
+    [LUKS-Encrypted File Systems](https://nixos.org/manual/nixos/stable/#sec-luks-file-systems).
 
-1. Obtain the latest [NixOS](https://nixos.org/download/). For example:
+2. Before you run `nixos-install`, enable SSH and add the SSH public key of the computer you
+    deploy from to `/mnt/etc/nixos/configuration.nix`:
 
-    ```
-    wget https://releases.nixos.org/nixos/26.05/nixos-26.05.12707.718f670e8453/nixos-minimal-26.05.12707.718f670e8453-x86_64-linux.iso
-    # output: 12f093ce7bf7e9747c67730ee3cc7b22713912382e8d3d6f27ef6b19afd8c800
-    sha256sum nixos-minimal-26.05.12707.718f670e8453-x86_64-linux.iso
-    ```
-    Alternatively you can build NixOS from source by following the instructions at https://nixos.org/nixos/manual/index.html#sec-building-cd.
-
-2. Write the NixOS ISO to install media (USB/CD). For example:
-
-    ```
-    cp nixos-minimal-26.05.12707.718f670e8453-x86_64-linux.iso /dev/sdX
-    ```
-
-    Replace /dev/sdX with the correct device name. You can find this using `sudo fdisk -l`
-
-3. Boot the system and become root
-
-    ```
-    sudo -i
+    ```nix
+    services.openssh.enable = true;
+    users.users.root.openssh.authorizedKeys.keys = [
+      "ssh-ed25519 AAAA... you@your-computer" # FIXME
+    ];
     ```
 
-    You will have to find out if your hardware uses UEFI or Legacy Boot for the next step. You can do that, for example, by executing
+    The deployment logs in as root with this key. With the default
+    `services.openssh.settings.PermitRootLogin = "prohibit-password"`, root can't log in over
+    SSH with a password.
 
-    ```
-    ls /sys/firmware/efi
-    ```
-
-    If the file exists you should continue the installation for UEFI otherwise for Legacy Boot.
-
-4. Option 1: Partition and format for UEFI
-
-    ```
-    parted /dev/sda -- mklabel gpt
-    parted /dev/sda -- mkpart primary 512MiB -8GiB
-    parted /dev/sda -- mkpart primary linux-swap -8GiB 100%
-    parted /dev/sda -- mkpart ESP fat32 1MiB 512MiB
-    parted /dev/sda -- set 3 boot on
-    mkfs.ext4 -L nixos /dev/sda1
-    mkswap -L swap /dev/sda2
-    mkfs.fat -F 32 -n boot /dev/sda3
-    mount /dev/disk/by-label/nixos /mnt
-    mkdir -p /mnt/boot
-    mount /dev/disk/by-label/boot /mnt/boot
-    swapon /dev/sda2
-    ```
-
-4. Option 2: Partition and format for Legacy Boot (MBR)
-
-    ```
-    parted /dev/sda -- mklabel msdos
-    parted /dev/sda -- mkpart primary 1MiB -8GiB
-    parted /dev/sda -- mkpart primary linux-swap -8GiB 100%
-    mkfs.ext4 -L nixos /dev/sda1
-    mkswap -L swap /dev/sda2
-    mount /dev/disk/by-label/nixos /mnt
-    swapon /dev/sda2
-    ```
-
-4. Option 3: Set up encrypted partitions:
-
-    Follow the guide at https://gist.github.com/martijnvermaat/76f2e24d0239470dd71050358b4d5134.
-
-5. Generate NixOS config
-
-    ```
-    nixos-generate-config --root /mnt
-    nano /mnt/etc/nixos/configuration.nix
-    ```
-
-    We now need to adjust the configuration to make sure that we can SSH into the system and that it boots correctly. We add some lines to set `services.openssh` such that the configuration looks as follows:
-
-    ```
-    { config, pkgs, ... }:
-
-    {
-      imports = [
-        ...
-      ];
-
-      # Enable the OpenSSH server.
-      services.openssh = {
-        enable = true;
-        permitRootLogin = "yes";
-      };
-
-      # The rest of the file contains default options and hints.
-    }
-    ```
-
-    Now we open `hardware-configuration.nix`
-
-    ```
-    nano /mnt/etc/nixos/hardware-configuration.nix
-    ```
-
-    which will look similar to
-
-    ```
-    { config, pkgs, ... }:
-
-    {
-      imports = [ ];
-
-      # Add line here as explained below
-
-      # The rest of the file contains generated options.
-    }
-    ```
-
-    Now add one of the following lines to the location mentioned in the example hardware config above.
-
-    **Option 1**: UEFI
-
-    ```
-      boot.loader.systemd-boot.enable = true;
-    ```
-
-    **Option 2**: Legacy Boot (MBR)
-
-    ```
-      boot.loader.grub.device = "/dev/sda";
-    ```
-
-    Lastly, in rare circumstances the hardware configuration does not have a `fileSystems` option. In that case you need to add it with the following line:
-
-    ```
-      fileSystems."/".device = "/dev/disk/by-label/nixos";
-    ```
-
-6. Do the installation
-
-    ```
-    nixos-install
-    ```
-
-    Set root password
-
-    ```
-    setting root password...
-    Enter new UNIX password:
-    Retype new UNIX password:
-    ```
-
-7. If everything went well
-
-    ```
-    reboot
-    ```
+3. Finish the installation as described in the manual, and reboot.
 
 ## 2. Nix installation
-The following steps are meant to be run on the machine you deploy from, not the machine you deploy to.
-You can also build Nix from source by following the instructions at https://nixos.org/nix/manual/#ch-installing-source.
 
-1. Install dependencies (Debian 10 Buster)
+Run these steps on the computer you deploy from, not on the node.
 
-    ```
-    sudo apt-get install curl git gnupg2 dirmngr
-    ```
+1. Install git, and install Nix in multi-user mode as described at <https://nixos.org/download/>.
+    On NixOS, Nix is already installed.
 
-2. Install the latest Nix in "multi-user mode" with GPG verification according to https://nixos.org/download/
+2. Enable flakes, which the deployment below uses
 
     ```
-    curl -o install-nix-2.3.10 https://releases.nixos.org/nix/nix-2.3.10/install
-    curl -o install-nix-2.3.10.asc https://releases.nixos.org/nix/nix-2.3.10/install.asc
-    gpg2 --recv-keys B541D55301270E0BCF15CA5D8170B4726D7198DE
-    gpg2 --verify ./install-nix-2.3.10.asc
-    sh ./install-nix-2.3.10 --daemon
+    mkdir -p ~/.config/nix
+    echo "experimental-features = nix-command flakes" >> ~/.config/nix/nix.conf
     ```
 
-    Then follow the instructions. Open a new terminal window when you're done.
-
-    If you get an error similar to
-
-    ```
-    error: cloning builder process: Operation not permitted
-    error: unable to start build process
-    /tmp/nix-binary-tarball-unpack.hqawN4uSPr/unpack/nix-2.2.1-x86_64-linux/install: unable to install Nix into your default profile
-    ```
-
-    you're likely not installing as multi-user because you forgot to pass the `--daemon` flag to the install script.
+    On NixOS, set `nix.settings.experimental-features = [ "nix-command" "flakes" ];` instead.
 
 3. Optional: Disallow substitutes
 
@@ -373,20 +218,15 @@ These steps continue from step 3 above.
 #### Optional: Specify the system of your node
 This enables evaluating your node config on a machine that has a different system platform
 than your node.\
-Examples: Deploying from macOS or deploying from an x86 desktop PC to a Raspberry Pi.
+Examples: Deploying from macOS or deploying from an x86 desktop PC to an ARM node.
 
 ```bash
 # Run this when your node has a 64-bit x86 CPU (e.g., an Intel or AMD CPU)
 echo "x86_64-linux" > krops/system
 
-# Run this when your node has a 64-bit ARM CPU (e.g., Raspberry Pi 4 B, Pine64)
+# Run this when your node has a 64-bit ARM CPU
 echo "aarch64-linux" > krops/system
 ```
-Other available systems:
-- `i686-linux` (`x86`)
-- `armv7l-linux` (`ARMv7`)\
-  This platform is untested and has no binary caches.
-  [See here](https://nixos.wiki/wiki/NixOS_on_ARM) for details.
 
 ### Deploy with krops
 
@@ -430,7 +270,7 @@ Other available systems:
 
     If you prefer to build the system from source instead of copying binaries from the Nix cache, add the following line to `configuration.nix`:
     ```
-    nix.extraOptions = "substitute = false";
+    nix.settings.substitute = false;
     ```
 
     If the build process fails for some reason when deploying with `krops-deploy` (see later step), it may be difficult to find the cause due to the missing output.
@@ -452,7 +292,7 @@ Other available systems:
     ```
 
     Pay attention to lines that are preceded by `FIXME` comments. In particular:
-    1. Make sure to set your SSH pubkey. Otherwise, you lose remote access because the config does not enable `permitRootLogin` (unless you add that manually).
+    1. Make sure to set your SSH pubkey. Otherwise, you lose remote access: root can only log in over SSH with a key.
     2. Uncomment the line `./hardware-configuration.nix` by removing `#`.
 
 6. Enter the deployment environment
