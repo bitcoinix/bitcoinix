@@ -8,9 +8,11 @@
 > bitcoinix yet.
 > Please report problems at <https://github.com/bitcoinix/bitcoinix/issues>.
 
-This section applies to users of the deployment method described in the [installation guide](./install.md).
+With a flake-based deployment, you deploy with `nixos-rebuild` or `colmena` as described in the
+[installation guide](./install.md#4-deploy-with-a-flake).
 
 ## Deployment shell
+This section applies to the legacy [krops deployment](./install.md#5-alternative-deploy-with-krops-legacy).
 Run command `nix-shell` in your deployment directory.\
 You now have access to deployment commands:
 

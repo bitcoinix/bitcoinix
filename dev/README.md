@@ -176,6 +176,10 @@ clone verifies the pushed tag and then downloads the archive that Nix users will
 throwaway store and cache so that nothing local can satisfy it. It fails unless the archive
 is exactly the signed tree. For a fork, also set `repoUrl=https://github.com/<owner>/<repo>`.
 
+After the release, open a PR that sets the `bitcoinix` pin and `nix-bitcoin.configVersion`
+of the deployment examples (`examples/flakes/flake.nix`, `examples/colmena/flake.nix`) to
+the new release.
+
 Tag names must match `^v[0-9]+\.[0-9]+\.[0-9]+$`; `helper/fetch-release.sh` ignores anything else.
 Pre-releases such as `0.1.0-rc1` are not supported.
 

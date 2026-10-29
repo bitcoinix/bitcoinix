@@ -79,10 +79,17 @@ and the existing CI `check_flake` job runs them through `nix flake check`.
 scan failures, whitelist filtering, and issue reporting with local command stubs.
 The same CI job evaluates [ci/scan-node.nix](./ci/scan-node.nix) without building
 the node or fetching NVD feeds. The scheduled CVE workflow builds and scans it.
+The `deployment_examples` job runs [ci/deployment-examples.sh](./ci/deployment-examples.sh)
+(also `./run-tests.sh deploymentExamples`). It builds every deployment example in
+[../examples](../examples) with its own tool against the checkout, one step per example:
+`examples/flakes` with `nixos-rebuild build --flake` and `examples/colmena` with
+`colmena build`. The examples pin a release and its `configVersion`; the script locks
+them to the checkout and sets the checkout's latest `configVersion`.
 The `shellcheck` and `nixos_search` jobs run independently, so shell linting and
 fast checks can finish while package and option extraction is still running.
 The required `ci_gate` waits for all jobs and requires them to succeed; only
-`test_scenario` may be skipped when the VM tests are already cached.
+`test_scenario` may be skipped when the VM tests are already cached, and
+`cache_flake_info` is skipped on pull requests.
 Permissions, secrets, namespace isolation, backups, and service restarts still
 need the VM tests.
 
@@ -169,9 +176,12 @@ Both the job and the standalone script configure two binary caches:
   Nix, so a missing bitcoinix build does not require compiling Nix and running its
   test suites when those dependencies are cached upstream.
 
-Only pushes to `master` upload the `flake-info` closure to the bitcoinix cache.
-The signing key is available only to the upload step, which runs before
-`ci-test.sh` executes `flake-info`. Pull requests read the caches without uploading.
+The separate `cache_flake_info` job builds `flake-info` and uploads its closure to
+the bitcoinix cache. It runs only on pushes to `master` and is the only job of the
+two that has the signing key. It never runs `flake-info`: the binary runs outside
+the Nix build sandbox in `nixos_search`, and a secret that any step of a job uses
+stays in the runner process for the whole job, so the two must not share a job.
+Pull requests read the caches without uploading.
 
 After changing `nixos-search/flake.lock` or the offline patches, the first run may
 need to build `flake-info`. A successful master upload lets subsequent runs fetch

@@ -112,7 +112,7 @@
         ]) // {
           inherit (import ./examples/qemu-vm/minimal-vm.nix self pkgs system)
             # A simple demo VM.
-            # See ./examples/flakes/flake.nix on how to use nix-bitcoin with flakes.
+            # See ./examples/flakes/flake.nix on how to use bitcoinix with flakes.
             runVM
             vm;
         };

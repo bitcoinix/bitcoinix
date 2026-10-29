@@ -7,9 +7,10 @@ on:
     types: [opened, synchronize, reopened, ready_for_review]
 
 # The Cachix signing key is passed only to the jobs that push to the cache
-# (build_test_drivers, test_scenario) and to the step of nixos_search that pushes
-# flake-info. The other jobs and steps run repository scripts too, and must not
-# be able to sign store paths.
+# (build_test_drivers, test_scenario, cache_flake_info). A secret that any step of a
+# job references stays in the runner process for the whole job, so step scoping is
+# not a boundary. nixos_search runs flake-info, a third-party binary, outside the
+# Nix build sandbox and therefore gets no key at all.
 permissions:
   contents: read
 
@@ -83,26 +84,35 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: cachix/install-nix-action@448cde739abec1eaf0646249e3d25bb8d9bc7702 # v31.11.2
-      # Build flake-info and push it from master before running it outside the Nix
-      # build sandbox. Only the upload step receives the signing key.
       - name: Configure flake-info caches
         run: |
           nix shell --inputs-from . nixpkgs#cachix -c cachix use bitcoinix
           # Upstream caches the patched Nix dependency used by flake-info.
           nix shell --inputs-from . nixpkgs#cachix -c cachix use nixos-search
-      - name: Build flake-info
-        id: flake_info
-        run: |
-          path=$(nix build --no-link --print-out-paths ./test/nixos-search#flake-info)
-          printf 'path=%s\n' "$path" >> "$GITHUB_OUTPUT"
-      - name: Cache flake-info on master
-        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
-        env:
-          CACHIX_SIGNING_KEY: ${{ secrets.CACHIX_SIGNING_KEY }}
-          FLAKE_INFO: ${{ steps.flake_info.outputs.path }}
-        run: nix shell --inputs-from . nixpkgs#cachix -c cachix push bitcoinix "$FLAKE_INFO"
+      # `ci-test.sh` runs flake-info, a third-party binary, outside the Nix build
+      # sandbox. This job has no signing key, so that binary cannot sign store paths.
       - name: Check package and option extraction
         run: ./test/nixos-search/ci-test.sh
+
+  # Caches the flake-info build so that later runs of `nixos_search` fetch it instead
+  # of compiling it. Runs only on master, builds inside the Nix sandbox and never runs
+  # flake-info.
+  cache_flake_info:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    runs-on: ubuntu-latest
+    env:
+      CACHIX_SIGNING_KEY: ${{ secrets.CACHIX_SIGNING_KEY }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: cachix/install-nix-action@448cde739abec1eaf0646249e3d25bb8d9bc7702 # v31.11.2
+      - name: Configure flake-info caches
+        run: |
+          nix shell --inputs-from . nixpkgs#cachix -c cachix use bitcoinix
+          nix shell --inputs-from . nixpkgs#cachix -c cachix use nixos-search
+      - name: Build and cache flake-info
+        run: |
+          path=$(nix build --no-link --print-out-paths ./test/nixos-search#flake-info)
+          nix shell --inputs-from . nixpkgs#cachix -c cachix push bitcoinix "$path"
 
   # Release tooling
   release_tooling:
@@ -117,6 +127,24 @@ jobs:
       - name: Test make-release
         run: nix shell --inputs-from . nixpkgs#{git,openssh,gnutar} -c ./test/make-release-test.sh
 
+  # Deployment examples
+  # Builds every deployment example in examples/ with its deployment tool, against this
+  # checkout, one step per example. A new deployment example must be added to
+  # test/ci/deployment-examples.sh and get a step here.
+  deployment_examples:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: cachix/install-nix-action@448cde739abec1eaf0646249e3d25bb8d9bc7702 # v31.11.2
+      - name: Use the bitcoinix binary cache
+        run: nix shell --inputs-from . nixpkgs#cachix -c cachix use bitcoinix
+      - name: Build examples/flakes (nixos-rebuild)
+        run: ./test/ci/deployment-examples.sh flakes
+      # Also run when the previous example failed, to report every broken example
+      - name: Build examples/colmena (Colmena)
+        if: ${{ !cancelled() }}
+        run: ./test/ci/deployment-examples.sh colmena
+
   # Required CI gate
   # Job `ci_gate` is the status check that the rulesets on master and on release tags
   # require. The matrix jobs report as `test_scenario (<scenario>)` when they run and as
@@ -129,7 +157,9 @@ jobs:
       - check_flake
       - shellcheck
       - nixos_search
+      - cache_flake_info
       - release_tooling
+      - deployment_examples
     # Run even when a needed job failed, so that this check reports a failure instead of
     # being skipped (a skipped required check counts as passed)
     if: always()
@@ -142,18 +172,25 @@ jobs:
           CHECK_FLAKE: ${{ needs.check_flake.result }}
           SHELLCHECK: ${{ needs.shellcheck.result }}
           NIXOS_SEARCH: ${{ needs.nixos_search.result }}
+          CACHE_FLAKE_INFO: ${{ needs.cache_flake_info.result }}
           RELEASE_TOOLING: ${{ needs.release_tooling.result }}
+          DEPLOYMENT_EXAMPLES: ${{ needs.deployment_examples.result }}
         run: |
           echo "build_test_drivers: $BUILD_TEST_DRIVERS"
           echo "test_scenario: $TEST_SCENARIO"
           echo "check_flake: $CHECK_FLAKE"
           echo "shellcheck: $SHELLCHECK"
           echo "nixos_search: $NIXOS_SEARCH"
+          echo "cache_flake_info: $CACHE_FLAKE_INFO"
           echo "release_tooling: $RELEASE_TOOLING"
+          echo "deployment_examples: $DEPLOYMENT_EXAMPLES"
           [[ $BUILD_TEST_DRIVERS == success &&
              $CHECK_FLAKE == success &&
              $SHELLCHECK == success &&
              $NIXOS_SEARCH == success &&
-             $RELEASE_TOOLING == success ]]
+             $RELEASE_TOOLING == success &&
+             $DEPLOYMENT_EXAMPLES == success ]]
           # `test_scenario` is skipped when all tests have already been built successfully
           [[ $TEST_SCENARIO == success || $TEST_SCENARIO == skipped ]]
+          # `cache_flake_info` runs only on pushes to master
+          [[ $CACHE_FLAKE_INFO == success || $CACHE_FLAKE_INFO == skipped ]]

@@ -56,12 +56,17 @@ sudo ./test/run-tests.sh container          # fast container; needs systemd + ro
 ```
 
 - No scenario + explicit command ⇒ `default`; no args at all ⇒ the `basic` set.
-- `run-tests.sh` targets: `build vm debug container eval shellcheck flake examples all`.
+- `run-tests.sh` targets: `build vm debug container eval shellcheck flake examples
+  deploymentExamples all`.
 - `--copy-src` snapshots the source so edits during a run don't affect it.
 - CI (`.github/workflows/test.yml`, PRs + pushes to `master`) runs the `basic`
-  scenarios, `nix flake check --all-systems`, `test/nixos-search/ci-test.sh`, and
-  shellcheck. Builds are cached in the `bitcoinix` Cachix cache. The rulesets on `master`
+  scenarios, `nix flake check --all-systems`, `test/nixos-search/ci-test.sh`,
+  `test/ci/deployment-examples.sh`, and shellcheck. Builds are cached in the `bitcoinix` Cachix cache. The rulesets on `master`
   and release tags require the `ci_gate` job; add any new CI job to its `needs`.
+- Docs (`.github/workflows/docs.yml`) are only build-checked on PRs. https://docs.bitcoinix.net
+  is published from the latest verified release tag, after "Verify release tags"
+  succeeds for a pushed tag (or manually), never from `master`. Docs changes on `master`
+  go live with the next release, so `docs/` must describe the upcoming release.
 - `dev/` holds debugging helpers (`dev.sh`, `dev-features.sh`, `topics/`); see `dev/README.md`.
 
 ## Architecture
@@ -80,6 +85,19 @@ sudo ./test/run-tests.sh container          # fast container; needs systemd + ro
 - Only `x86_64-linux` and `aarch64-linux` are supported and tested.
 - No Nix formatter/linter is set up; `nix flake check` and `./test/shellcheck.sh`
   are the static checks. Shellcheck also covers shebang'd extensionless files.
+
+## Deployment examples
+
+`examples/flakes` (`nixos-rebuild --flake`) and `examples/colmena` are the supported
+deployment examples; krops (`examples/krops`) is legacy. The CI job `deployment_examples`
+builds each of them with its own tool against the checkout on every PR, via
+`test/ci/deployment-examples.sh` (locally: `./test/run-tests.sh deploymentExamples`).
+The other examples (`examples/deploy-*.sh`, `examples/container`) run only with
+`./test/run-tests.sh examples`, not in CI.
+A new deployment example must be added to that script and get its own step in the
+`deployment_examples` job, so that CI tests it from the start. Example flakes name the
+main input `bitcoinix`, pin a release tag, set that release's `configVersion` and
+commit no `flake.lock`; the script overrides the `bitcoinix` input and `configVersion`.
 
 ## Adding a service module
 
@@ -128,7 +146,10 @@ For each entry:
   `docs/upgrading.md` under "Upgrading to config version <version>" and refer to
   that section from the message.
 - Set `nix-bitcoin.configVersion` in `examples/configuration.nix` to that version
-  unless it already is.
+  unless it already is. Leave the deployment examples alone: each one sets the
+  `configVersion` of the release it pins, CI builds them with the latest one, and a
+  release bumps their pin and `configVersion` together (see "Cutting a release" in
+  `dev/README.md`).
 
 ## Documentation
 
