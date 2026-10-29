@@ -149,21 +149,21 @@ You might want to disable `local.setupDirectory` in order to create the mount di
 yourself with custom permissions.
 
 # Connect to RTL
-Normally you would connect to RTL via SSH tunneling with a command like this
+RTL listens on localhost by default. Connect to it through an SSH tunnel, then open
+`http://localhost:3000` in your browser:
 
 ```
-ssh -L 3000:127.0.0.1:3000 root@bitcoin-node
+ssh -L 3000:127.0.0.1:3000 operator@bitcoin-node
 ```
 
-Or like this, if you are using `netns-isolation`
+With `netns-isolation`, RTL listens in its own network namespace. Use the address from
+`nodeinfo | jq -r .rtl.local_address` instead, e.g. `169.254.1.29:3000`.
 
-```
-ssh -L 3000:169.254.1.29:3000 root@bitcoin-node
-```
+With the `secure-node.nix` or `enable-tor.nix` preset, RTL also has an onion service.
+Open `http://<onion address>` in Tor Browser, using the address from
+`nodeinfo | jq -r .rtl.onion_address`.
 
-Otherwise, you can access it via Tor Browser at `http://<onion-address>`.
-You can find the `<onion-address>` with command `nodeinfo`.
-The default password location is `$secretsDir/rtl-password`.
+The password is in `$secretsDir/rtl-password`.
 See: [Secrets dir](./configuration.md#secrets-dir)
 
 # Use ZEUS (mobile Lightning wallet) via Tor
