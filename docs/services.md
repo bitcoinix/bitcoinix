@@ -167,7 +167,7 @@ The password is in `$secretsDir/rtl-password`.
 See: [Secrets dir](./configuration.md#secrets-dir)
 
 # Use ZEUS (mobile Lightning wallet) via Tor
-1. Install [ZEUS](https://zeusln.app) (version ≥ 0.9.0)
+1. Install [ZEUS](https://zeusln.app)
 
 2. Edit your `configuration.nix`
 
@@ -209,20 +209,12 @@ See: [Secrets dir](./configuration.md#secrets-dir)
    lnconnect-clnrest
    ```
 
-5. Configure ZEUS
-   - Add a new node and scan the QR code
-   - Click `Save node config`
-   - Start sending and stacking sats privately
+5. In ZEUS, add a new node and scan the QR code.
 
 ### Additional lndconnect features
-- Create a plain text URL:
-  ```bash
-  lndconnect --url
-  ```
-- Set a custom host. By default, `lndconnect` detects the system's external IP and uses it as the host.
-  ```bash
-  lndconnect --host myhost
-  ```
+To print the connection URL as text instead of a QR code, run `lndconnect --url` or
+`lnconnect-clnrest --url`. The URL contains the credentials for your node, so keep it
+secret.
 
 ### Connecting without Tor or WireGuard
 Enabling `lndconnect` or `lnconnect` does not change the address that the REST server
@@ -232,8 +224,12 @@ on localhost.
 The REST API grants full control over your Lightning node, so only expose it to networks
 you trust. To reach it directly (e.g. via your local network or your own VPN), opt in
 explicitly. In the examples below, `192.168.1.10` is the address of your node and `eth0`
-is the interface of the trusted network.\
+is the interface of the trusted network. The snippets use `config`, so the module that
+contains them must take it as an argument (`{ config, ... }: { ... }`).\
 These examples don't apply when using `netns-isolation`.
+
+`tor.enforce = false` lifts the Tor-only network restriction for the whole service, not
+just the REST server. With `tor.proxy`, outgoing connections still use Tor.
 
 ##### For LND
 ```nix
@@ -262,6 +258,8 @@ Then create the QR code with your node address as the host:
 lndconnect --host 192.168.1.10
 lnconnect-clnrest --host 192.168.1.10
 ```
+Always pass `--host` here. Without it (and without `onion`), the commands detect your
+external IP by querying public IP lookup services over clearnet.
 
 # Use ZEUS (mobile Lightning wallet) via WireGuard
 
