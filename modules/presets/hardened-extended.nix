@@ -80,16 +80,9 @@
     # preventing those exploits
     "oops=panic"
 
-    # Only allow kernel modules that have been signed with a valid key to be
-    # loaded, which increases security by making it much harder to load a
-    # malicious kernel module
-    "module.sig_enforce=1"
-
-    # The kernel lockdown LSM can eliminate many methods that user space code
-    # could abuse to escalate to kernel privileges and extract sensitive
-    # information. This LSM is necessary to implement a clear security boundary
-    # between user space and the kernel
-    "lockdown=confidentiality"
+    # `module.sig_enforce=1` and `lockdown=confidentiality` are not set: the
+    # stock NixOS kernel is built without module signing and without the
+    # lockdown LSM, so both would be ignored.
 
     # These parameters prevent information leaks during boot and must be used
     # in combination with the kernel.printk
