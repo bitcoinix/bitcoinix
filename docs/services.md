@@ -52,18 +52,25 @@ systemctl show bitcoind
 
 # Core Lightning database replication
 
-The Core Lightning database can be replicated to a local path
-or to a remote SSH target.\
-When remote replication is enabled, bitcoinix mounts an SSHFS to a local path.\
-Optionally, backups can be encrypted via `gocryptfs`.
+Core Lightning can write a live copy of its database to a local path
+or to a remote SSH target (mounted via SSHFS).
+Optionally, the copy can be encrypted with `gocryptfs`.
+See the [module](https://github.com/bitcoinix/bitcoinix/blob/master/modules/clightning-replication.nix)
+for all options.
 
-Note: You should also back up the static file `hsm_secret` (located at
-`/var/lib/clightning/bitcoin/hsm_secret` by default), either manually
-or via the `services.backups` module.
+`clightning` requires the replication target: it doesn't start while the target is
+unavailable, e.g. when the SSHFS mount fails.
+
+Also back up:
+- the static file `hsm_secret` (`/var/lib/clightning/bitcoin/hsm_secret` by default).
+  The `services.backups` module includes it.
+- with `encrypt`, the password `$secretsDir/clightning-replication-password`. Without it,
+  the copy can't be decrypted. `services.backups` includes the secrets dir only
+  with `nix-bitcoin.generateSecrets`.
 
 ## Remote target via SSHFS
 
-1. Add this to your `configuration.nix`:
+1. Add this to your configuration:
    ```nix
    services.clightning.replication = {
      enable = true;
@@ -76,18 +83,21 @@ or via the `services.backups` module.
 
    Leave out the `encrypt` line if you want to store data on your destination
    in plaintext.\
-   Adjust `user`, `hostname` and `directory` as necessary.
+   Adjust `user`, `hostname` and `directory` as necessary. `directory` is relative to
+   the home of `user`. If the target's SSH server doesn't listen on port 22, set
+   `sshfs.port` and use `"[hostname]:<port>"` as the `knownHosts` name.
 
-2. Deploy
+2. Deploy. With `nix-bitcoin.generateSecrets`, this creates the SSH key
+   `$secretsDir/clightning-replication-ssh-key`.
+   `clightning` starts only once the target accepts this key (step 3).
 
 3. To allow SSH access from the bitcoinix node to the target node, either
    use the remote node config below, or copy the contents of `$secretsDir/clightning-replication-ssh-key.pub`
    to the `authorized_keys` file of `user` (or use `ssh-copy-id`).
+   Then run `systemctl restart clightning` as root.
 
 4. You can restrict the bitcoinix node's capabilities on the SSHFS target
-   using OpenSSH's built-in features, as detailed
-   [here](https://serverfault.com/questions/354615/allow-sftp-but-disallow-ssh).
-
+   to SFTP access in a chroot.
    To implement this on NixOS, add the following to the NixOS configuration of
    the SSHFS target node:
    ```nix
@@ -123,7 +133,7 @@ or via the `services.backups` module.
 
 ## Local directory target
 
-1. Add this to your `configuration.nix`
+1. Add this to your configuration:
    ```nix
    services.clightning.replication = {
      enable = true;
