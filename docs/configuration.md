@@ -17,9 +17,19 @@ Run command `nix-shell` in your deployment directory.\
 You now have access to deployment commands:
 
 - `deploy`\
-  Deploy the current configuration to your node.
+  Run `krops-deploy` and `eval-config` in parallel. If evaluation fails, the
+  deployment is stopped.
+- `krops-deploy`\
+  Run `generate-secrets` and deploy your node with krops.
 - `eval-config`\
   Locally evaluate the configuration. This is useful to check for configuration errors.
+- `build-config`\
+  Build your node system on your local machine.
+- `generate-secrets`\
+  Create the secrets required by your configuration in `./secrets/`.
+- `update-nix-bitcoin`\
+  Fetch and verify the latest signed bitcoinix release and pin it in
+  `nix-bitcoin-release.nix`. See [Upgrading](./upgrading.md).
 - `h`, `help`\
   Show help
 
