@@ -134,12 +134,13 @@ services.bitcoind = {
   # Listen to connections on all interfaces
   address = "0.0.0.0";
 
-  # Set this to also add IPv6 connectivity.
+  # Set this to also add IPv6 connectivity. This raw setting causes an evaluation
+  # warning, see "Raw service configuration" above.
   extraConfig = ''
     bind=::
   '';
 
-  # If you're using the `secure-node.nix` template, set this to allow non-Tor connections
+  # With the secure-node preset or `enable-tor.nix`, set this to allow non-Tor connections
   # to bitcoind
   tor.enforce = false;
   # Also set this if bitcoind should not use Tor for outgoing peer connections
@@ -181,7 +182,7 @@ services.bitcoind = {
     "10.50.0.3" # Allow a specific address
   ];
 
-  # Set this if you're using the `secure-node.nix` template
+  # Set this with the secure-node preset or `enable-tor.nix`
   tor.enforce = false;
 };
 
@@ -197,7 +198,7 @@ services.electrs = {
   # Listen to connections on all interfaces
   address = "0.0.0.0";
 
-  # Set this if you're using the `secure-node.nix` template
+  # Set this with the secure-node preset or `enable-tor.nix`
   tor.enforce = false;
 };
 
