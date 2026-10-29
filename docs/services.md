@@ -1,7 +1,15 @@
 > [!NOTE]
 > This document is inherited from nix-bitcoin, the predecessor project. It is a work in progress and may be outdated.
 
-# Nodeinfo
+# Using services
+
+How to reach and run the services on your node. Most sections assume the
+`secure-node.nix` preset, which adds Tor onion services, `nodeinfo` and the `operator`
+user.
+
+## Node administration
+
+### Nodeinfo
 Run `nodeinfo` as user `operator` (or root) to see onion addresses and local addresses
 for enabled services, and the node IDs of LND and Core Lightning. It prints JSON:
 ```shell
@@ -23,7 +31,7 @@ and contain a single v3 onion address, with at most one trailing newline. Once t
 Tor-generated hostname file and its permissions are correct, run
 `systemctl restart onion-addresses` as root, then retry `nodeinfo`.
 
-# Managing services
+### Managing services
 
 NixOS uses the [systemd](https://wiki.archlinux.org/title/systemd) service manager.
 
@@ -48,117 +56,83 @@ systemctl cat bitcoind
 systemctl show bitcoind
 ```
 
-<a id="clightning-database-replication"></a>
+### Connect to bitcoinix node through the SSH onion service
+The `secure-node.nix` preset adds an onion service for SSH. It lets you reach and deploy
+to your node through Tor, e.g. when it's behind NAT. It uses the SSH keys that you
+already deploy with.
 
-# Core Lightning database replication
+1. Get the SSH onion address (excluding the port suffix)
 
-Core Lightning can write a live copy of its database to a local path
-or to a remote SSH target (mounted via SSHFS).
-Optionally, the copy can be encrypted with `gocryptfs`.
-See the [module](https://github.com/bitcoinix/bitcoinix/blob/master/modules/clightning-replication.nix)
-for all options.
+    ```
+    ssh operator@bitcoin-node
+    nodeinfo | jq -r .sshd.onion_address | sed 's/:.*//'
+    ```
 
-`clightning` requires the replication target: it doesn't start while the target is
-unavailable, e.g. when the SSHFS mount fails.
+2. On your local machine, run Tor (listening on its default SOCKS port 9050) and
+   install an OpenBSD-style `nc`, e.g. `netcat` from nixpkgs or `netcat-openbsd` on
+   Debian. Add a host alias to `~/.ssh/config`:
 
-Also back up:
-- the static file `hsm_secret` (`/var/lib/clightning/bitcoin/hsm_secret` by default).
-  The `services.backups` module includes it.
-- with `encrypt`, the password `$secretsDir/clightning-replication-password`. Without it,
-  the copy can't be decrypted. `services.backups` includes the secrets dir only
-  with `nix-bitcoin.generateSecrets`.
+    ```
+    Host bitcoin-node-onion
+      HostName <SSH onion address>
+      User root
+      ProxyCommand nc -X 5 -x 127.0.0.1:9050 %h %p
+    ```
 
-## Remote target via SSHFS
+3. Connect with `ssh bitcoin-node-onion`.
 
-1. Add this to your configuration:
-   ```nix
-   services.clightning.replication = {
-     enable = true;
-     sshfs.destination = "user@hostname:directory";
-     # This is optional
-     encrypt = true;
-   };
-   programs.ssh.knownHosts."hostname".publicKey = "<ssh public key from running `ssh-keyscan` on the host>";
-   ```
+4. To deploy through Tor, use `bitcoin-node-onion` as the node's address in your
+   deployment tool, e.g. `nixos-rebuild --target-host bitcoin-node-onion`, Colmena's
+   `deployment.targetHost` or krops' `target`. All of them connect through `ssh`, so
+   they use the alias.
 
-   Leave out the `encrypt` line if you want to store data on your destination
-   in plaintext.\
-   Adjust `user`, `hostname` and `directory` as necessary. `directory` is relative to
-   the home of `user`. If the target's SSH server doesn't listen on port 22, set
-   `sshfs.port` and use `"[hostname]:<port>"` as the `knownHosts` name.
+## Wallets and apps
 
-2. Deploy. With `nix-bitcoin.generateSecrets`, this creates the SSH key
-   `$secretsDir/clightning-replication-ssh-key`.
-   `clightning` starts only once the target accepts this key (step 3).
+### Connect to electrs
+Electrum wallets can connect to your electrs (or Fulcrum) server through its onion
+service, which the `secure-node.nix` and `enable-tor.nix` presets create.
 
-3. To allow SSH access from the bitcoinix node to the target node, either
-   use the remote node config below, or copy the contents of `$secretsDir/clightning-replication-ssh-key.pub`
-   to the `authorized_keys` file of `user` (or use `ssh-copy-id`).
-   Then run `systemctl restart clightning` as root.
+<a id="requirements-android"></a>
 
-4. You can restrict the bitcoinix node's capabilities on the SSHFS target
-   to SFTP access in a chroot.
-   To implement this on NixOS, add the following to the NixOS configuration of
-   the SSHFS target node:
-   ```nix
-   systemd.tmpfiles.rules = [
-     # Because this directory is chrooted by sshd, it must only be writable by user/group root
-     "d /var/backup/nb-replication 0755 root root - -"
-     "d /var/backup/nb-replication/writable 0700 nb-replication - - -"
-   ];
+#### Android requirements
+* [Orbot](https://guardianproject.info/apps/org.torproject.android/) from F-Droid or [Google Play](https://play.google.com/store/apps/details?id=org.torproject.android)
+* [Electrum](https://electrum.org/#download) from the direct download or [Google Play](https://play.google.com/store/apps/details?id=org.electrum.electrum)
 
-   services.openssh = {
-     extraConfig = ''
-       Match user nb-replication
-         ChrootDirectory /var/backup/nb-replication
-         AllowTcpForwarding no
-         AllowAgentForwarding no
-         ForceCommand internal-sftp
-         PasswordAuthentication no
-         X11Forwarding no
-     '';
-   };
+<a id="requirements-desktop"></a>
 
-   users.users.nb-replication = {
-     isSystemUser = true;
-     group = "nb-replication";
-     shell = "${pkgs.coreutils}/bin/false";
-     openssh.authorizedKeys.keys = [ "<contents of $secretsDir/clightning-replication-ssh-key.pub>" ];
-   };
-   users.groups.nb-replication = {};
-   ```
+#### Desktop requirements
+* [Tor](https://support.torproject.org/little-t-tor/), listening on its default SOCKS port 9050
+* [Electrum](https://electrum.org/#download)
 
-   With this setup, the corresponding `sshfs.destination` on the bitcoinix
-   node is `"nb-replication@hostname:writable"`.
+1. Enable electrs in your configuration:
+    ```nix
+    services.electrs.enable = true;
+    ```
+    For Fulcrum, set `services.fulcrum.enable = true` and use `.fulcrum` instead of
+    `.electrs` below.
 
-## Local directory target
+2. Deploy your configuration.
 
-1. Add this to your configuration:
-   ```nix
-   services.clightning.replication = {
-     enable = true;
-     local.directory = "/var/backup/clightning";
-     encrypt = true;
-   };
-   ```
+3. Get the electrs onion address, in the format `<onion-address>:<port>`:
+    ```
+    nodeinfo | jq -r .electrs.onion_address
+    ```
 
-   Leave out the `encrypt` line if you want to store data in
-   `local.directory` in plaintext.
+4. Connect to electrs
 
-2. Deploy
+    Make sure Tor is running on your desktop or as Orbot on Android.
 
-Core Lightning will now replicate database files to `local.directory`. This
-can be used to replicate to an external HDD by mounting it at path
-`local.directory`.
+    On your desktop
+    ```
+    electrum --oneserver -s "<electrs onion address>:t" -p socks5:127.0.0.1:9050
+    ```
 
-## Custom remote destination
+    On Android, open the network settings and set:
+    - Proxy: SOCKS5, host `127.0.0.1`, port `9050`
+    - Auto-connect: off, one-server mode: on
+    - Server: `<electrs onion address>:t`
 
-Follow the steps in section "Local directory target" above and mount a custom remote
-destination (e.g., an NFS or SMB share) to `local.directory`.\
-You might want to disable `local.setupDirectory` in order to create the mount directory
-yourself with custom permissions.
-
-# Connect to RTL
+### Connect to RTL
 RTL listens on localhost by default. Connect to it through an SSH tunnel, then open
 `http://localhost:3000` in your browser:
 
@@ -176,7 +150,7 @@ Open `http://<onion address>` in Tor Browser, using the address from
 The password is in `$secretsDir/rtl-password`.
 See: [Secrets dir](./configuration.md#secrets-dir)
 
-# Use ZEUS (mobile Lightning wallet) via Tor
+### Use ZEUS (mobile Lightning wallet) via Tor
 1. Install [ZEUS](https://zeusln.app)
 
 2. Edit your `configuration.nix`
@@ -221,12 +195,12 @@ See: [Secrets dir](./configuration.md#secrets-dir)
 
 5. In ZEUS, add a new node and scan the QR code.
 
-### Additional lndconnect features
+#### Additional lndconnect features
 To print the connection URL as text instead of a QR code, run `lndconnect --url` or
 `lnconnect-clnrest --url`. The URL contains the credentials for your node, so keep it
 secret.
 
-### Connecting without Tor or WireGuard
+#### Connecting without Tor or WireGuard
 Enabling `lndconnect` or `lnconnect` does not change the address that the REST server
 listens on. By default, the LND and clnrest REST servers only listen
 on localhost.
@@ -271,7 +245,7 @@ lnconnect-clnrest --host 192.168.1.10
 Always pass `--host` here. Without it (and without `onion`), the commands detect your
 external IP by querying public IP lookup services over clearnet.
 
-# Use ZEUS (mobile Lightning wallet) via WireGuard
+### Use ZEUS (mobile Lightning wallet) via WireGuard
 
 Connecting ZEUS through a WireGuard tunnel is much faster than using Tor. The
 `wireguard.nix` preset sets up a WireGuard server on your node with a single peer, your
@@ -360,83 +334,9 @@ for the service whose connection helper you enable (see
 To print the connection URL as text instead, run `lndconnect-wg --url` or
 `lnconnect-clnrest-wg --url`.
 
-# Connect to electrs
-Electrum wallets can connect to your electrs (or Fulcrum) server through its onion
-service, which the `secure-node.nix` and `enable-tor.nix` presets create.
-
-<a id="requirements-android"></a>
-
-### Android requirements
-* [Orbot](https://guardianproject.info/apps/org.torproject.android/) from F-Droid or [Google Play](https://play.google.com/store/apps/details?id=org.torproject.android)
-* [Electrum](https://electrum.org/#download) from the direct download or [Google Play](https://play.google.com/store/apps/details?id=org.electrum.electrum)
-
-<a id="requirements-desktop"></a>
-
-### Desktop requirements
-* [Tor](https://support.torproject.org/little-t-tor/), listening on its default SOCKS port 9050
-* [Electrum](https://electrum.org/#download)
-
-1. Enable electrs in your configuration:
-    ```nix
-    services.electrs.enable = true;
-    ```
-    For Fulcrum, set `services.fulcrum.enable = true` and use `.fulcrum` instead of
-    `.electrs` below.
-
-2. Deploy your configuration.
-
-3. Get the electrs onion address, in the format `<onion-address>:<port>`:
-    ```
-    nodeinfo | jq -r .electrs.onion_address
-    ```
-
-4. Connect to electrs
-
-    Make sure Tor is running on your desktop or as Orbot on Android.
-
-    On your desktop
-    ```
-    electrum --oneserver -s "<electrs onion address>:t" -p socks5:127.0.0.1:9050
-    ```
-
-    On Android, open the network settings and set:
-    - Proxy: SOCKS5, host `127.0.0.1`, port `9050`
-    - Auto-connect: off, one-server mode: on
-    - Server: `<electrs onion address>:t`
-
-# Connect to bitcoinix node through the SSH onion service
-The `secure-node.nix` preset adds an onion service for SSH. It lets you reach and deploy
-to your node through Tor, e.g. when it's behind NAT. It uses the SSH keys that you
-already deploy with.
-
-1. Get the SSH onion address (excluding the port suffix)
-
-    ```
-    ssh operator@bitcoin-node
-    nodeinfo | jq -r .sshd.onion_address | sed 's/:.*//'
-    ```
-
-2. On your local machine, run Tor (listening on its default SOCKS port 9050) and
-   install an OpenBSD-style `nc`, e.g. `netcat` from nixpkgs or `netcat-openbsd` on
-   Debian. Add a host alias to `~/.ssh/config`:
-
-    ```
-    Host bitcoin-node-onion
-      HostName <SSH onion address>
-      User root
-      ProxyCommand nc -X 5 -x 127.0.0.1:9050 %h %p
-    ```
-
-3. Connect with `ssh bitcoin-node-onion`.
-
-4. To deploy through Tor, use `bitcoin-node-onion` as the node's address in your
-   deployment tool, e.g. `nixos-rebuild --target-host bitcoin-node-onion`, Colmena's
-   `deployment.targetHost` or krops' `target`. All of them connect through `ssh`, so
-   they use the alias.
-
 <a id="initialize-a-trezor-for-bitcoin-cores-hardware-wallet-interface"></a>
 
-# Initialize a Trezor for the Bitcoin Hardware Wallet Interface (HWI)
+### Initialize a Trezor for the Bitcoin Hardware Wallet Interface (HWI)
 
 1. Enable Trezor support in your configuration:
     ```nix
@@ -487,12 +387,12 @@ already deploy with.
 
 <a id="clightning"></a>
 
-# Core Lightning
+## Core Lightning
 
 Core Lightning (CLN), formerly c-lightning, uses the `services.clightning`
 options, `clightning` systemd service, and `lightning-cli` command in bitcoinix.
 
-## Plugins
+### Plugins
 There are a number of [plugins](https://github.com/lightningd/plugins) available for Core Lightning.
 See [`README: Features → Core Lightning`](https://github.com/bitcoinix/bitcoinix/blob/master/README.md) or [search.nixos.org][1] for a complete list.
 
@@ -512,7 +412,7 @@ services.clightning = {
 
 Please have a look at the module for a plugin (e.g. [clboss.nix](https://github.com/bitcoinix/bitcoinix/blob/master/modules/clightning-plugins/clboss.nix)) to learn its configuration options.
 
-### Trustedcoin
+#### Trustedcoin
 When `services.clightning.tor.proxy` is enabled, [trustedcoin](https://github.com/nbd-wtf/trustedcoin)
 also uses Tor for all external connections by default.
 In this case, connections to block explorers can sometimes get blocked.
@@ -529,3 +429,114 @@ services.clightning.plugins.trustedcoin.tor.proxy = false;
 ```
 This also disables `services.clightning.tor.enforce`, so the whole `clightning` service
 is no longer restricted to Tor.
+
+<a id="clightning-database-replication"></a>
+
+### Core Lightning database replication
+
+Core Lightning can write a live copy of its database to a local path
+or to a remote SSH target (mounted via SSHFS).
+Optionally, the copy can be encrypted with `gocryptfs`.
+See the [module](https://github.com/bitcoinix/bitcoinix/blob/master/modules/clightning-replication.nix)
+for all options.
+
+`clightning` requires the replication target: it doesn't start while the target is
+unavailable, e.g. when the SSHFS mount fails.
+
+Also back up:
+- the static file `hsm_secret` (`/var/lib/clightning/bitcoin/hsm_secret` by default).
+  The `services.backups` module includes it.
+- with `encrypt`, the password `$secretsDir/clightning-replication-password`. Without it,
+  the copy can't be decrypted. `services.backups` includes the secrets dir only
+  with `nix-bitcoin.generateSecrets`.
+
+#### Remote target via SSHFS
+
+1. Add this to your configuration:
+   ```nix
+   services.clightning.replication = {
+     enable = true;
+     sshfs.destination = "user@hostname:directory";
+     # This is optional
+     encrypt = true;
+   };
+   programs.ssh.knownHosts."hostname".publicKey = "<ssh public key from running `ssh-keyscan` on the host>";
+   ```
+
+   Leave out the `encrypt` line if you want to store data on your destination
+   in plaintext.\
+   Adjust `user`, `hostname` and `directory` as necessary. `directory` is relative to
+   the home of `user`. If the target's SSH server doesn't listen on port 22, set
+   `sshfs.port` and use `"[hostname]:<port>"` as the `knownHosts` name.
+
+2. Deploy. With `nix-bitcoin.generateSecrets`, this creates the SSH key
+   `$secretsDir/clightning-replication-ssh-key`.
+   `clightning` starts only once the target accepts this key (step 3).
+
+3. To allow SSH access from the bitcoinix node to the target node, either
+   use the remote node config below, or copy the contents of `$secretsDir/clightning-replication-ssh-key.pub`
+   to the `authorized_keys` file of `user` (or use `ssh-copy-id`).
+   Then run `systemctl restart clightning` as root.
+
+4. You can restrict the bitcoinix node's capabilities on the SSHFS target
+   to SFTP access in a chroot.
+   To implement this on NixOS, add the following to the NixOS configuration of
+   the SSHFS target node:
+   ```nix
+   systemd.tmpfiles.rules = [
+     # Because this directory is chrooted by sshd, it must only be writable by user/group root
+     "d /var/backup/nb-replication 0755 root root - -"
+     "d /var/backup/nb-replication/writable 0700 nb-replication - - -"
+   ];
+
+   services.openssh = {
+     extraConfig = ''
+       Match user nb-replication
+         ChrootDirectory /var/backup/nb-replication
+         AllowTcpForwarding no
+         AllowAgentForwarding no
+         ForceCommand internal-sftp
+         PasswordAuthentication no
+         X11Forwarding no
+     '';
+   };
+
+   users.users.nb-replication = {
+     isSystemUser = true;
+     group = "nb-replication";
+     shell = "${pkgs.coreutils}/bin/false";
+     openssh.authorizedKeys.keys = [ "<contents of $secretsDir/clightning-replication-ssh-key.pub>" ];
+   };
+   users.groups.nb-replication = {};
+   ```
+
+   With this setup, the corresponding `sshfs.destination` on the bitcoinix
+   node is `"nb-replication@hostname:writable"`.
+
+#### Local directory target
+
+1. Add this to your configuration:
+   ```nix
+   services.clightning.replication = {
+     enable = true;
+     local.directory = "/var/backup/clightning";
+     encrypt = true;
+   };
+   ```
+
+   Leave out the `encrypt` line if you want to store data in
+   `local.directory` in plaintext.
+
+2. Deploy
+
+Core Lightning will now replicate database files to `local.directory`. This
+can be used to replicate to an external HDD by mounting it at path
+`local.directory`.
+
+#### Custom remote destination
+
+Follow the steps in section "Local directory target" above and mount a custom remote
+destination (e.g., an NFS or SMB share) to `local.directory`.\
+You might want to disable `local.setupDirectory` in order to create the mount directory
+yourself with custom permissions.
+
