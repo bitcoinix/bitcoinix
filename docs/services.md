@@ -1,6 +1,3 @@
-> [!NOTE]
-> This document is inherited from nix-bitcoin, the predecessor project. It is a work in progress and may be outdated.
-
 # Using services
 
 How to reach and run the services on your node. Most sections assume the
