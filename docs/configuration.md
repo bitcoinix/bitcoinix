@@ -372,10 +372,11 @@ integration with other services, as it would happen when setting
 `services.<service>.enable = false`.
 
 Use the following approach:
+```nix
+systemd.services.<service>.wantedBy = lib.mkForce [];
 ```
-systemd.services.<service>.wantedBy = mkForce [];
-```
-This way, the systemd service still exists, but is not automatically started.\
+This needs `lib` in scope (see [Set options](#set-options)). The systemd service still
+exists, but is not automatically started.\
 Note: This only works for services that are not required by other active services.
 
 # Write to /run or /dev/shm from a service hook
