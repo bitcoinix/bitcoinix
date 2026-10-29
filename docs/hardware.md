@@ -4,19 +4,23 @@ Hardware requirements
 > [!NOTE]
 > This document is inherited from nix-bitcoin, the predecessor project. It is a work in progress and may be outdated.
 
+## Platforms
+
+bitcoinix supports two platforms:
+
+- `x86_64-linux`: 64-bit Intel and AMD CPUs
+- `aarch64-linux`: 64-bit ARM CPUs
+
+Other platforms are not supported.
+
+## Memory
+
 * RAM: 2 GB. ECC memory is better. Additionally, it's recommended to use DDR4 memory with
   targeted row refresh (TRR) enabled (https://rambleed.com/).
-* Disk space: 1 TB for an unpruned
+
+## Disk space
+
+* 1 TB for an unpruned
   instance of Bitcoin Core.
   * This can be significantly lowered by enabling pruning.
     Note: Pruning is not supported by electrs and Fulcrum.
-
-Tested low-end hardware includes:
-- [Raspberry Pi 4](https://www.raspberrypi.org/products/raspberry-pi-4-model-b/)
-- [PC Engines apu2c4](https://pcengines.ch/apu2c4.htm)
-- [Gigabyte GB-BACE-3150](https://www.gigabyte.com/Mini-PcBarebone/GB-BACE-3150-rev-10)
-- [Gigabyte GB-BACE-3160](https://www.gigabyte.com/de/Mini-PcBarebone/GB-BACE-3160-rev-10#ov)
-
-Some hardware (including Intel NUCs) may not be compatible with the [hardened kernel preset](https://github.com/bitcoinix/bitcoinix/blob/master/modules/presets/hardened.nix)
-(See https://github.com/fort-nix/nix-bitcoin/issues/39#issuecomment-517366093
-for a workaround).
