@@ -251,7 +251,8 @@ ssh root@nix-bitcoin-node 'systemctl start bitcoind'
 ```
 
 You can use the same workflow for other services.\
-The default data dir path is `/var/lib/<service>` for all services.
+The data dir is set by option `services.<service>.dataDir`. For bitcoind, clightning,
+lnd, electrs, fulcrum, rtl, btcpayserver and nbxplorer, it defaults to `/var/lib/<service>`.
 
 Some services require extra steps:
 
