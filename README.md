@@ -79,7 +79,7 @@ the project's direction, supported features, and hardware.
 Get started
 ---
 - See the [examples](examples/README.md) for an overview of all features.
-- To set up a new node from scratch, see the [installation instructions](docs/install.md).
+- To set up a new node from scratch, see the [installation instructions](https://docs.bitcoinix.net/install.html).
 - To add bitcoinix to an existing NixOS configuration, see [importable-configuration.nix](examples/importable-configuration.nix)
   and the [Flake example](examples/flakes/flake.nix).
 
@@ -99,15 +99,18 @@ See [customizing your configuration](docs/configuration.md#raw-service-configura
 
 Docs
 ---
+The documentation at [docs.bitcoinix.net](https://docs.bitcoinix.net) describes the latest release.
+For changes on `master`, see [docs/](docs/).
+
 <!-- TODO-EXTERNAL: -->
 <!-- Change query to `nix-bitcoin` when upstream search has been fixed -->
 * [NixOS options search](https://search.nixos.org/flakes?channel=unstable&sort=relevance&type=options&query=bitcoin)
-* [Hardware requirements](docs/hardware.md)
-* [Installation](docs/install.md)
-* [Configuration and maintenance](docs/configuration.md)
-* [Upgrading](docs/upgrading.md)
-* [Using services](docs/services.md)
-* [FAQ](docs/faq.md)
+* [Hardware requirements](https://docs.bitcoinix.net/hardware.html)
+* [Installation](https://docs.bitcoinix.net/install.html)
+* [Configuration and maintenance](https://docs.bitcoinix.net/configuration.html)
+* [Upgrading](https://docs.bitcoinix.net/upgrading.html)
+* [Using services](https://docs.bitcoinix.net/services.html)
+* [FAQ](https://docs.bitcoinix.net/faq.html)
 
 Features
 ---
@@ -166,6 +169,6 @@ See [dev/README](./dev/README.md).
 
 Troubleshooting
 ---
-If you are having problems with bitcoinix, check the [FAQ](docs/faq.md) or
+If you are having problems with bitcoinix, check the [FAQ](https://docs.bitcoinix.net/faq.html) or
 [submit an issue](https://github.com/bitcoinix/bitcoinix/issues).\
 We are always happy to help.

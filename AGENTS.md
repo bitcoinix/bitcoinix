@@ -6,8 +6,9 @@ This is `bitcoinix`, a community fork of the archived `fort-nix/nix-bitcoin`
 default/base branch `master`. Fork policy leans toward removing/decoupling
 unmaintained services — check before assuming an upstream service stays.
 Option namespaces and internal names stay `nix-bitcoin.*`; don't rename them to
-`bitcoinix` (breaks existing user configs). `docs/` is largely inherited from nix-bitcoin
-and is built with mdBook (`book.toml`; `docs/SUMMARY.md` lists the pages).
+`bitcoinix` (breaks existing user configs). `docs/` is the user guide, built with mdBook
+(`book.toml`, favicon in `theme/`; `docs/SUMMARY.md` lists the pages). Pages with the
+"inherited from nix-bitcoin" banner have not been reviewed yet.
 
 ## AI-assisted contributions
 

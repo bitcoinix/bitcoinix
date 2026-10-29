@@ -11,3 +11,5 @@ create-missing = false
 
 [output.html]
 git-repository-url = "https://github.com/bitcoinix/bitcoinix"
+# The published docs come from the latest release tag, but fixes go to master
+edit-url-template = "https://github.com/bitcoinix/bitcoinix/edit/master/{path}"
