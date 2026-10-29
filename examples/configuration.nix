@@ -33,9 +33,8 @@
   # Bitcoin Core is enabled by default via secure-node.nix.
   #
   # Set this option to enable pruning with a specified MiB value.
-  # Core Lightning is compatible with pruning. See
-  # https://github.com/ElementsProject/lightning/#pruning for more information.
-  # LND and electrs are not compatible with pruning.
+  # electrs, Fulcrum and mempool don't work on a pruned node. Core Lightning does.
+  # See https://docs.bitcoinix.net/hardware.html#pruning
   # services.bitcoind.prune = 100000;
   #
   # Set this to announce the onion service address to peers.
