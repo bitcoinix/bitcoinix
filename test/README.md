@@ -47,6 +47,12 @@ mode, and file-type checks. Shell predicates remain useful with
 
 ### Checks without a VM
 
+On a Mac, use the [macOS build guide](../dev/macos.md) to run builds in an
+OrbStack Linux machine (preferred when `orb` is installed) or Docker. Use
+`aarch64-linux` instead of `x86_64-linux` in the commands below for an ARM guest.
+Evaluation alone can run on macOS with Nix; building Linux outputs needs a Linux
+builder. VM scenarios additionally require usable KVM in that environment.
+
 From the repository root:
 
 ```bash

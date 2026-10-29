@@ -11,6 +11,14 @@ This directory contains docs and helper scripts for developing and debugging:
 
 See also: [test/README.md](../test/README.md)
 
+## Developing on macOS
+
+The supported build targets are `x86_64-linux` and `aarch64-linux`. On a Mac,
+run the development commands in Linux using
+[the macOS build guide](./macos.md): prefer OrbStack when `orb` is installed,
+with Docker as a fallback. The guide covers setup, sharing the current checkout,
+package builds, and checks that do not need a VM. Nix on macOS is optional.
+
 ## Pull request labels
 
 The [labeler workflow](../.github/workflows/labeler.yml) automatically adds area labels
@@ -35,6 +43,8 @@ Use `directories` and `names` for recursive matching that includes hidden files;
 `patterns` uses Node's `path.matchesGlob`, whose wildcards skip hidden names.
 
 ## Run a dev shell
+
+Run these commands inside the Linux environment selected above when using a Mac.
 
 There are two ways to run a dev shell:
 

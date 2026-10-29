@@ -165,7 +165,8 @@ See [SECURITY.md](SECURITY.md) for how to report a vulnerability and for past re
 
 Developing
 ---
-See [dev/README](./dev/README.md).
+See [dev/README](./dev/README.md), including
+[building Linux targets from macOS with OrbStack or Docker](./dev/macos.md).
 
 Troubleshooting
 ---

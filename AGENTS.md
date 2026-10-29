@@ -20,6 +20,8 @@ satisfy this policy.
 ## Commands
 
 All work happens through the flake. Nix is required (flakes enabled).
+Run the commands below in a supported Linux environment; for a Mac host, see
+the next section before trying `nix develop` or builds.
 
 ```bash
 nix develop                 # shell with run-tests.sh + helper/* on PATH
@@ -30,6 +32,26 @@ nix run nixpkgs#mdbook -- serve   # serve the docs locally with live reload
 ```
 
 Build/run a node VM: `nix run .` (alias for `.#vm`).
+
+## macOS hosts
+
+- macOS can host development, but the flake only provides `x86_64-linux` and
+  `aarch64-linux` outputs. Do not add Darwin outputs or change `supportedSystems`
+  to make a local build work. `--system aarch64-linux` alone supplies no Linux builder.
+- Check `uname -sm` and `command -v orb`. If `orb` is installed, prefer an
+  OrbStack Linux machine; inspect `orb list` and reuse a suitable machine with Nix.
+  Otherwise use Docker. Setup and noninteractive commands are in
+  [dev/macos.md](dev/macos.md); Nix on the Mac itself is optional.
+- Default OrbStack machines expose Mac files, macOS commands, and the SSH agent.
+  For untrusted PRs, use an isolated machine with a Linux-local clone, or Docker
+  with a disposable checkout and separate store; see the guide's isolation steps.
+- Prefer `aarch64-linux` on Apple Silicon and `x86_64-linux` on Intel. Run from
+  the checkout containing the revision and edits being tested. An isolated
+  machine's clone does not include edits from the Mac checkout automatically.
+- Start with the lightweight flake checks and relevant package builds. VM test
+  builds require usable KVM inside Linux; a successful package build or flake
+  check does not mean VM integration tests ran. Report these separately and state
+  any unavailable checks. See [test/README.md](test/README.md#checks-without-a-vm).
 
 ## Tests (primary dev loop)
 
