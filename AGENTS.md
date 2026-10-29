@@ -42,8 +42,12 @@ Build/run a node VM: `nix run .` (alias for `.#vm`).
   OrbStack Linux machine; inspect `orb list` and reuse a suitable machine with Nix.
   Otherwise use Docker. Setup and noninteractive commands are in
   [dev/macos.md](dev/macos.md); Nix on the Mac itself is optional.
+- Default OrbStack machines expose Mac files, macOS commands, and the SSH agent.
+  For untrusted PRs, use an isolated machine with a Linux-local clone, or Docker
+  with a disposable checkout and separate store; see the guide's isolation steps.
 - Prefer `aarch64-linux` on Apple Silicon and `x86_64-linux` on Intel. Run from
-  the current checkout inside Linux so builds include the edits being tested.
+  the checkout containing the revision and edits being tested. An isolated
+  machine's clone does not include edits from the Mac checkout automatically.
 - Start with the lightweight flake checks and relevant package builds. VM test
   builds require usable KVM inside Linux; a successful package build or flake
   check does not mean VM integration tests ran. Report these separately and state

@@ -11,6 +11,13 @@ volume named `bitcoinix-nix-amd64`. Prefer the guest's native architecture;
 
 ## OrbStack (preferred)
 
+Default machines expose the Mac filesystem (`/Users/...`, `/mnt/mac`), can run
+macOS commands through `mac`, and forward the SSH agent. Building or testing an
+untrusted PR there can access Mac files such as `~/.ssh`. Use this shared-checkout
+setup for trusted code. For untrusted code, use an
+[isolated machine](#isolated-orbstack-machine-for-untrusted-code) or the
+[Docker setup](#docker-fallback) with a disposable checkout.
+
 From the repository root on the Mac, inspect existing machines:
 
 ```bash
@@ -56,11 +63,49 @@ its own `/nix` store between commands. See the
 [OrbStack command reference](https://docs.orbstack.dev/machines/commands) for
 machine management. Continue with [Build and check](#build-and-check).
 
+### Isolated OrbStack machine for untrusted code
+
+Create a separate machine with
+[`--isolated`](https://docs.orbstack.dev/machines/isolated). This disables Mac
+filesystem mounts, macOS command access, and SSH agent forwarding by default:
+
+```bash
+orb create --isolated ubuntu bitcoinix-review
+```
+
+Repeat the Ubuntu/Nix installation above with `bitcoinix-review` as the machine
+name. Then clone inside Linux over HTTPS; the Mac checkout is not mounted:
+
+```bash
+orb -m bitcoinix-review bash -lc '
+  cd "$HOME" && git clone https://github.com/bitcoinix/bitcoinix.git bitcoinix
+'
+```
+
+Use this alternative helper to run commands in the Linux clone:
+
+```bash
+nb() {
+  orb -m bitcoinix-review bash -lc '
+    export NIX_CONFIG="experimental-features = nix-command flakes"
+    cd "$HOME/bitcoinix" && exec "$@"
+  ' bash "$@"
+}
+```
+
+Select the branch or PR to review using `nb git ...` before building. Mac edits
+are not included in this clone. Keep Mac mounts and SSH agent forwarding disabled.
+OrbStack machines share a Linux kernel; isolation reduces host access but is not
+a full VM boundary for code that actively attempts to escape.
+
 ## Docker fallback
 
 Use this when OrbStack is unavailable and a local Docker engine is running
 (`docker info`). From the repository root on the Mac, define this alternative
-`nb` helper:
+`nb` helper. For untrusted code, use a disposable standalone clone and a fresh
+store volume (replace `bitcoinix-nix-arm64` below with a separate name). Only the
+checkout and store volume are mounted, but code can modify both; do not mount
+Mac credentials, an SSH agent, or the Docker socket.
 
 ```bash
 nb() {
@@ -69,14 +114,15 @@ nb() {
     --mount "type=bind,src=$PWD,dst=$PWD" \
     --workdir "$PWD" \
     --env 'NIX_CONFIG=experimental-features = nix-command flakes' \
-    ghcr.io/nixos/nix:2.35.4 \
+    ghcr.io/nixos/nix:2.35.4@sha256:f159a58f390677f41e8e900a74b6e2f9c7f27b364122ae6acf7a652ce6c551c0 \
     bash -c 'git config --global --add safe.directory "$PWD" && exec "$@"' bash "$@"
 }
 ```
 
-The [official Nix image](https://github.com/NixOS/nix/pkgs/container/nix) has
-ARM64 and AMD64 variants. The named volume preserves the Linux store, database,
-and profiles across disposable containers; do not bind-mount the Mac's `/nix`.
+The [official Nix image](https://github.com/NixOS/nix/pkgs/container/nix) is pinned
+by its multi-architecture index digest, covering both ARM64 and AMD64. The named
+volume preserves the Linux store, database, and profiles across disposable
+containers; do not bind-mount the Mac's `/nix`.
 Docker [initializes an empty volume from the image](https://docs.docker.com/engine/storage/volumes/).
 Use a new volume when changing the image version so it starts with that image's
 Nix installation. The `safe.directory` setting trusts only this checkout inside
@@ -90,7 +136,9 @@ The helper omits `-it` for automation; add it to `docker run` for an interactive
 
 ## Build and check
 
-Run from the repository root on the Mac after defining either helper:
+After defining the appropriate helper, run these commands from the Mac. The
+shared-checkout and Docker helpers require the repository root as the current
+directory; the isolated-machine helper always uses its Linux-local clone:
 
 ```bash
 # Confirm Linux Nix and access to the checkout being edited.
