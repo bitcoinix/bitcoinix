@@ -502,11 +502,11 @@ You can activate and configure these plugins like so:
 
 ```nix
 services.clightning = {
-    enable = true;
-    plugins = {
-        clboss.enable = true;
-        clboss.min-onchain = 40000;
-    };
+  enable = true;
+  plugins = {
+    clboss.enable = true;
+    clboss.min-onchain = 40000;
+  };
 };
 ```
 
@@ -527,3 +527,5 @@ To work around this and connect via clearnet instead, set this option:
 ```nix
 services.clightning.plugins.trustedcoin.tor.proxy = false;
 ```
+This also disables `services.clightning.tor.enforce`, so the whole `clightning` service
+is no longer restricted to Tor.
