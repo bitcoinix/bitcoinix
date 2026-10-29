@@ -74,6 +74,15 @@ let
         or by running {command}`lightningd --help`.
       '';
     };
+    pluginsConfig = mkOption {
+      internal = true;
+      type = types.lines;
+      default = "";
+      description = ''
+        Configuration lines added by the plugin modules.
+        Rendered before `extraConfig`, so that user settings take precedence.
+      '';
+    };
     user = mkOption {
       type = types.str;
       default = "clightning";
@@ -128,6 +137,7 @@ let
     rpc-file-mode=0660
     log-timestamps=false
     ${optionalString (cfg.wallet != null) "wallet=${cfg.wallet}"}
+    ${cfg.pluginsConfig}
     ${cfg.extraConfig}
   '';
 

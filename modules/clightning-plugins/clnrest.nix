@@ -63,7 +63,7 @@ in
   inherit options;
 
   config = mkIf cfg.enable {
-    services.clightning.extraConfig = ''
+    services.clightning.pluginsConfig = ''
       plugin=${cfg.package}/bin/clnrest
       clnrest-host=${cfg.address}
       clnrest-port=${toString cfg.port}

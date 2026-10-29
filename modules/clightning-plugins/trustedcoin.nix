@@ -37,7 +37,7 @@ let cfg = config.services.clightning.plugins.trustedcoin; in
   config = mkIf cfg.enable {
     services.clightning = {
       useBcliPlugin = false;
-      extraConfig = ''
+      pluginsConfig = ''
         plugin=${cfg.package}/bin/trustedcoin
       '';
       # Without the proxy, trustedcoin needs clearnet access. This drops
