@@ -395,6 +395,10 @@ service, which the `secure-node.nix` and `enable-tor.nix` presets create.
     - Server: `<electrs onion address>:t`
 
 # Connect to bitcoinix node through the SSH onion service
+The `secure-node.nix` preset adds an onion service for SSH. It lets you reach and deploy
+to your node through Tor, e.g. when it's behind NAT. It uses the SSH keys that you
+already deploy with.
+
 1. Get the SSH onion address (excluding the port suffix)
 
     ```
@@ -402,32 +406,23 @@ service, which the `secure-node.nix` and `enable-tor.nix` presets create.
     nodeinfo | jq -r .sshd.onion_address | sed 's/:.*//'
     ```
 
-2. Create an SSH key
+2. On your local machine, run Tor (listening on its default SOCKS port 9050) and
+   install an OpenBSD-style `nc`, e.g. `netcat` from nixpkgs or `netcat-openbsd` on
+   Debian. Add a host alias to `~/.ssh/config`:
 
     ```
-    ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519
+    Host bitcoin-node-onion
+      HostName <SSH onion address>
+      User root
+      ProxyCommand nc -X 5 -x 127.0.0.1:9050 %h %p
     ```
 
-3. Place the Ed25519 public key in the `configuration.nix` `openssh.authorizedKeys.keys` field like so
+3. Connect with `ssh bitcoin-node-onion`.
 
-    ```
-    # FIXME: Add your SSH pubkey
-    services.openssh.enable = true;
-    users.users.root = {
-      openssh.authorizedKeys.keys = [ "<contents of ~/.ssh/id_ed25519.pub>" ];
-    };
-    ```
-
-4. Connect to your bitcoinix node's SSH onion service, forwarding a local port to the bitcoinix node's SSH server
-
-    ```
-    ssh -i ~/.ssh/id_ed25519 -L <random port of your choosing>:127.0.0.1:22 root@<SSH onion address>
-    ```
-
-5. Edit your deployment tool's configuration and change the node's address to `127.0.0.1` and the SSH port to `<random port of your choosing>`.
-   If you use krops as described in the [installation tutorial](./install.md), set `target = "127.0.0.1:<random port of your choosing>";` in `krops/deploy.nix`.
-
-6. After deploying the new configuration, it will connect through the SSH tunnel you established in step 4. This also allows you to do more complex SSH setups that some deployment tools don't support. An example would be authenticating with [Trezor's SSH agent](https://github.com/romanz/trezor-agent), which provides extra security.
+4. To deploy through Tor, use `bitcoin-node-onion` as the node's address in your
+   deployment tool, e.g. `nixos-rebuild --target-host bitcoin-node-onion`, Colmena's
+   `deployment.targetHost` or krops' `target`. All of them connect through `ssh`, so
+   they use the alias.
 
 <a id="initialize-a-trezor-for-bitcoin-cores-hardware-wallet-interface"></a>
 
