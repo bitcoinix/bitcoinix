@@ -17,9 +17,19 @@ Run command `nix-shell` in your deployment directory.\
 You now have access to deployment commands:
 
 - `deploy`\
-  Deploy the current configuration to your node.
+  Run `krops-deploy` and `eval-config` in parallel. If evaluation fails, the
+  deployment is stopped.
+- `krops-deploy`\
+  Run `generate-secrets` and deploy your node with krops.
 - `eval-config`\
   Locally evaluate the configuration. This is useful to check for configuration errors.
+- `build-config`\
+  Build your node system on your local machine.
+- `generate-secrets`\
+  Create the secrets required by your configuration in `./secrets/`.
+- `update-nix-bitcoin`\
+  Fetch and verify the latest signed bitcoinix release and pin it in
+  `nix-bitcoin-release.nix`. See [Upgrading](./upgrading.md).
 - `h`, `help`\
   Show help
 
@@ -60,6 +70,16 @@ networking.hostName = "myhost";
 time.timeZone = "UTC";
 ```
 
+Snippets that use `config` or `lib`, like `config.services.bitcoind.port`, must be in a
+module that takes these as arguments. The krops `configuration.nix` already does. The
+Colmena example's `configuration.nix` takes only `config`; add `lib` there if you need it.
+In the module of the `flake.nix` example, which is a plain attribute set, use this form instead:
+```nix
+({ config, lib, ... }: {
+  networking.firewall.allowedTCPPorts = [ config.services.bitcoind.port ];
+})
+```
+
 ## Raw service configuration (`extraConfig`)
 
 Prefer dedicated NixOS options when available. Settings you supply through
@@ -79,7 +99,19 @@ settings you add yourself. The warning does not print the configuration contents
 
 ## Debug your configuration
 
-To print the values of specific options of your config, add the following to your `configuration.nix`:
+To print the values of options of your config, evaluate them on your computer.
+With the `flake.nix` example, replace `fullnode` with the name of your node:
+```shell
+nix eval .#nixosConfigurations.fullnode.config.services.bitcoind.dataDir
+nix eval --json .#nixosConfigurations.fullnode.config.networking.firewall.allowedTCPPorts
+```
+
+With Colmena, run from the `nix develop` shell:
+```shell
+colmena eval -E '{ nodes, ... }: nodes.fullnode.config.services.bitcoind.dataDir'
+```
+
+With krops, add the following to your `configuration.nix`:
 ```nix
 system.extraDependencies = let
   debugVal = config.networking.firewall.allowedTCPPorts;
@@ -102,12 +134,13 @@ services.bitcoind = {
   # Listen to connections on all interfaces
   address = "0.0.0.0";
 
-  # Set this to also add IPv6 connectivity.
+  # Set this to also add IPv6 connectivity. This raw setting causes an evaluation
+  # warning, see "Raw service configuration" above.
   extraConfig = ''
     bind=::
   '';
 
-  # If you're using the `secure-node.nix` template, set this to allow non-Tor connections
+  # With the secure-node preset or `enable-tor.nix`, set this to allow non-Tor connections
   # to bitcoind
   tor.enforce = false;
   # Also set this if bitcoind should not use Tor for outgoing peer connections
@@ -149,7 +182,7 @@ services.bitcoind = {
     "10.50.0.3" # Allow a specific address
   ];
 
-  # Set this if you're using the `secure-node.nix` template
+  # Set this with the secure-node preset or `enable-tor.nix`
   tor.enforce = false;
 };
 
@@ -165,7 +198,7 @@ services.electrs = {
   # Listen to connections on all interfaces
   address = "0.0.0.0";
 
-  # Set this if you're using the `secure-node.nix` template
+  # Set this with the secure-node preset or `enable-tor.nix`
   tor.enforce = false;
 };
 
@@ -174,6 +207,28 @@ networking.firewall.allowedTCPPorts = [ config.services.electrs.port ];
 ```
 
 You can use the same approach to allow connections to other services.
+
+## Network namespace isolation
+
+`nix-bitcoin.netns-isolation` is experimental and disabled by default; the secure-node
+preset doesn't enable it. It runs each service listed in
+[netns-isolation.nix](https://github.com/bitcoinix/bitcoinix/blob/master/modules/netns-isolation.nix)
+in its own network namespace. With it enabled:
+
+- The snippets above don't work. The module sets the listen addresses of these services
+  (`address`, `rpc.address` and similar) to their namespace address in
+  `169.254.<addressblock>.0/24`. Setting them yourself fails evaluation with
+  `conflicting definition values`.
+- A namespace accepts connections only from localhost, from the host and from the
+  namespaces of connected services. Connections from your LAN are dropped, and opening
+  ports in `networking.firewall` doesn't change this. Use onion services for remote access.
+- With `tor.enforce`, a namespace also drops outgoing connections except to these
+  addresses.
+- IPv6 is disabled on the namespace interfaces.
+- On the host, connect to a service at its namespace address,
+  `config.nix-bitcoin.netns-isolation.netns.<service>.address`, not at `127.0.0.1`.
+- It can't be combined with a [bitcoind on another node](#use-bitcoind-from-another-node),
+  the WireGuard preset, nftables or firewalld.
 
 # Migrate existing services to bitcoinix
 
@@ -196,7 +251,8 @@ ssh root@nix-bitcoin-node 'systemctl start bitcoind'
 ```
 
 You can use the same workflow for other services.\
-The default data dir path is `/var/lib/<service>` for all services.
+The data dir is set by option `services.<service>.dataDir`. For bitcoind, clightning,
+lnd, electrs, fulcrum, rtl, btcpayserver and nbxplorer, it defaults to `/var/lib/<service>`.
 
 Some services require extra steps:
 
@@ -216,11 +272,22 @@ Some services require extra steps:
 
 # Use bitcoind from another node
 
-Here's how to use a bitcoind instance running on another node within a bitcoinix config:
+Here's how to use a bitcoind instance running on another node within a bitcoinix config.
+This doesn't work with [network namespace isolation](#network-namespace-isolation).
 
+Import the `bitcoind-remote.nix` preset. With the `flake.nix` example, add it to the `modules` list in
+`flake.nix`, next to `bitcoinix.nixosModules.default`:
+```nix
+(bitcoinix + "/modules/presets/bitcoind-remote.nix")
+```
+With Colmena, add `(inputs.bitcoinix + "/modules/presets/bitcoind-remote.nix")` to the
+`imports` of your node. With krops, add it to `configuration.nix`:
 ```nix
 imports = [ <nix-bitcoin/modules/presets/bitcoind-remote.nix> ];
+```
 
+Then configure the connection to the other node:
+```nix
 services.bitcoind = {
   enable = true;
 
@@ -228,41 +295,32 @@ services.bitcoind = {
   address = "10.10.0.2";
   rpc.address = "10.10.0.2";
 
-  # Some bitcoinix services require whitelisted bitcoind P2P connections
-  # to work reliably.
-  # Search for `whitelistedPort` in this repo to see the affected services.
-  # If you're using one of these services, either add a whitelisted P2P port
-  # on your remote node via `whitebind` and set it here:
-  whitelistedPort = <remote whitebind P2P port>;
-  #
-  # Or use the default P2P port and add `whitelist=<address of this node>` to
-  # your remote bitcoind config:
-  whitelistedPort = config.services.bitcoind.port;
+  # Only needed for BTCPay Server: NBXplorer needs a whitelisted P2P connection.
+  # Set the port of a `whitebind` on the other node, or its regular P2P port
+  # if it has `whitelist=<address of this node>`.
+  whitelistedPort = 8333;
 
-  rpc.users = let
-    # The fully privileged bitcoind RPC username of the other node
-    privilegedName = "myrpcuser";
-    # A restricted RPC user on the other node (see whitelist setup below)
-    publicName = "mypublicrpcuser";
-  in {
-    privileged.name = privilegedName;
-    public.name = publicName;
+  rpc.users = {
+    # The fully privileged RPC user on the other node
+    privileged.name = "myrpcuser";
+    # A restricted RPC user on the other node (see the whitelist setup below)
+    public.name = "mypublicrpcuser";
     ## Set this if you use BTCPay Server. It needs its own restricted RPC user.
     # btcpayserver.name = "mybtcpayrpcuser";
   };
 };
+
+# With the secure-node preset or `enable-tor.nix`: don't create an onion service
+# on this node that forwards to the other node.
+nix-bitcoin.onionServices.bitcoind.enable = false;
 ```
 
-For each service that connects to bitcoind and has option
-`services.<service>.tor.enforce` enabled (either explicitly or by importing
-`secure-node.nix` or `enable-tor.nix`), you need to
-allow the remote bitcoind connection:
+With Tor enforcement (`services.<service>.tor.enforce`, enabled by the secure-node
+preset and `enable-tor.nix`), services can't reach the other node. Allow the
+connection for each service that connects to bitcoind, for example electrs:
 ```nix
-systemd.services.<service>.serviceConfig.IPAddressAllow = [ config.services.bitcoind.rpc.address ];
+systemd.services.electrs.serviceConfig.IPAddressAllow = [ "10.10.0.2" ];
 ```
-
-> The above configuration is only required if the remote bitcoind **is
-> not** accessed via Tor.
 
 electrs reads blocks through bitcoind's REST interface. If you use electrs, set
 `rest=1` on the other node (Bitcoin Core 31 or later). REST is unauthenticated and
@@ -296,9 +354,9 @@ a whitelist, including the privileged user, an empty whitelist.
 
 Now save the RPC passwords to the following files on your bitcoinix node:
 ```shell
-# Password of the privileged user (`privilegedName`)
+# Password of the privileged user (`myrpcuser`)
 $secretsDir/bitcoin-rpcpassword-privileged
-# Password of the restricted user (`publicName`)
+# Password of the restricted user (`mypublicrpcuser`)
 $secretsDir/bitcoin-rpcpassword-public
 
 ## Password of `mybtcpayrpcuser`, only needed when set in the above config snippet
@@ -315,10 +373,11 @@ integration with other services, as it would happen when setting
 `services.<service>.enable = false`.
 
 Use the following approach:
+```nix
+systemd.services.<service>.wantedBy = lib.mkForce [];
 ```
-systemd.services.<service>.wantedBy = mkForce [];
-```
-This way, the systemd service still exists, but is not automatically started.\
+This needs `lib` in scope (see [Set options](#set-options)). The systemd service still
+exists, but is not automatically started.\
 Note: This only works for services that are not required by other active services.
 
 # Write to /run or /dev/shm from a service hook
@@ -362,3 +421,11 @@ Store final secrets inside the secrets directory, including secrets supplied by
 another tool, rather than linking to external files. See the
 [0.1.3 upgrade instructions](./upgrading.md#upgrading-to-config-version-013)
 for migration and recovery steps.
+
+Tools like agenix install secrets as symlinks to files outside the secrets directory
+by default. `setup-secrets` can't set the owner and permissions of these files, so
+setup fails. With agenix, set `symlink = false` for these secrets, and set their
+`owner`, `group` and `mode` to the values in `nix-bitcoin.secrets.<name>`. Or disable
+`nix-bitcoin.generateSecrets` and `nix-bitcoin.setupSecrets`, set
+`nix-bitcoin.secretsSetupMethod = "manual"`, and set the owners and permissions
+declared in `nix-bitcoin.secrets` yourself.
