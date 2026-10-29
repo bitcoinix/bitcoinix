@@ -208,6 +208,28 @@ networking.firewall.allowedTCPPorts = [ config.services.electrs.port ];
 
 You can use the same approach to allow connections to other services.
 
+## Network namespace isolation
+
+`nix-bitcoin.netns-isolation` is experimental and disabled by default; the secure-node
+preset doesn't enable it. It runs each service listed in
+[netns-isolation.nix](https://github.com/bitcoinix/bitcoinix/blob/master/modules/netns-isolation.nix)
+in its own network namespace. With it enabled:
+
+- The snippets above don't work. The module sets the listen addresses of these services
+  (`address`, `rpc.address` and similar) to their namespace address in
+  `169.254.<addressblock>.0/24`. Setting them yourself fails evaluation with
+  `conflicting definition values`.
+- A namespace accepts connections only from localhost, from the host and from the
+  namespaces of connected services. Connections from your LAN are dropped, and opening
+  ports in `networking.firewall` doesn't change this. Use onion services for remote access.
+- With `tor.enforce`, a namespace also drops outgoing connections except to these
+  addresses.
+- IPv6 is disabled on the namespace interfaces.
+- On the host, connect to a service at its namespace address,
+  `config.nix-bitcoin.netns-isolation.netns.<service>.address`, not at `127.0.0.1`.
+- It can't be combined with a [bitcoind on another node](#use-bitcoind-from-another-node),
+  the WireGuard preset, nftables or firewalld.
+
 # Migrate existing services to bitcoinix
 
 ## Example: bitcoind
