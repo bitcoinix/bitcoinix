@@ -48,7 +48,7 @@ in
   inherit options;
 
   config = mkIf (cfg.enable && clightning.enable) {
-    services.clightning.extraConfig = ''
+    services.clightning.pluginsConfig = ''
       plugin=${config.nix-bitcoin.pkgs.clightning-plugins.feeadjuster.path}
       feeadjuster-adjustment-method="${cfg.method}"
     '' + optionalString (!cfg.fuzz) ''

@@ -4,17 +4,12 @@ let
   cfg = config.services.bitcoind;
   secretsDir = config.nix-bitcoin.secretsDir;
 in {
-  services.bitcoind = {
+  systemd.services.bitcoind = {
     # Make the local bitcoin-cli work with the remote node.
     # Without this, bitcoin-cli would try to use the local RPC cookie for
     # authorization, which doesn't exist.
-    extraConfig = ''
-      rpcuser=${cfg.rpc.users.privileged.name}
-    '';
-  };
-
-  systemd.services.bitcoind = {
     preStart = lib.mkAfter ''
+      printf '%s\n' ${lib.escapeShellArg "rpcuser=${cfg.rpc.users.privileged.name}"} >> '${cfg.dataDir}/bitcoin.conf'
       echo "rpcpassword=$(cat ${secretsDir}/bitcoin-rpcpassword-privileged)" >> '${cfg.dataDir}/bitcoin.conf'
     '';
     serviceConfig = {

@@ -38,7 +38,7 @@ in
   inherit options;
 
   config = mkIf cfg.enable {
-    services.clightning.extraConfig = ''
+    services.clightning.pluginsConfig = ''
       plugin=${config.nix-bitcoin.pkgs.clightning-plugins.zmq.path}
       ${concatStrings (map setEndpoint endpoints)}
     '';

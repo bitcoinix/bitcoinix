@@ -22,7 +22,7 @@ in {
   inherit options;
 
   config = {
-    services.clightning.extraConfig = mkMerge [
+    services.clightning.pluginsConfig = mkMerge [
       (mkIf cfg.currencyrate.enable "plugin=${pluginPkgs.currencyrate.path}")
       (mkIf cfg.monitor.enable "plugin=${pluginPkgs.monitor.path}")
       (mkIf cfg.rebalance.enable "plugin=${pluginPkgs.rebalance.path}")

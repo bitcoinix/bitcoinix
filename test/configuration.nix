@@ -168,11 +168,53 @@ let
       { name = "disabled"; enable = false; value = fixture.value; count = 0; }
     ]
   ) extraConfigFixtures);
+  # Modules that write config lines themselves must not trigger the warning
+  extraConfigWarnings = option: config: builtins.filter
+    (lib.hasInfix "${option} is non-empty.") config.warnings;
+  clightningPlugins = [
+    "clboss" "clnrest" "feeadjuster" "trustedcoin" "zmq" "currencyrate" "monitor" "rebalance"
+  ];
+  pluginsConfigTests = lib.listToAttrs (map (plugin:
+    lib.nameValuePair "testExtraConfig-clightning-plugin-${plugin}" {
+      expr = map (lib.hasInfix "bitcoinix-test-private-setting") (lib.concatMap (extraConfig:
+        extraConfigWarnings "services.clightning.extraConfig" (evaluate {
+          services.clightning = {
+            enable = true;
+            plugins.${plugin}.enable = true;
+            inherit extraConfig;
+          };
+        })
+      ) [ "" "bitcoinix-test-private-setting=1" ]);
+      expected = [ false ];
+    }) clightningPlugins) // {
+    testExtraConfig-bitcoind-remote-preset = {
+      expr = let
+        config = evaluate {
+          imports = [ ../modules/presets/bitcoind-remote.nix ];
+          services.bitcoind.enable = true;
+        };
+      in {
+        warnings = extraConfigWarnings "services.bitcoind.extraConfig" config;
+        rpcuser = lib.hasInfix "rpcuser=privileged" config.systemd.services.bitcoind.preStart;
+      };
+      expected = { warnings = []; rpcuser = true; };
+    };
+  };
+  # The preset's preStart lines, run by the check below against a scratch data dir
+  remoteRpcUser = "rpc$USER'$(id)";
+  remotePresetPreStart = pkgs.writeText "bitcoind-remote-prestart"
+    (import ../modules/presets/bitcoind-remote.nix {
+      inherit lib pkgs;
+      config = {
+        services.bitcoind = { dataDir = "@dataDir@"; rpc.users.privileged.name = remoteRpcUser; };
+        nix-bitcoin.secretsDir = "@secretsDir@";
+      };
+    }).systemd.services.bitcoind.preStart.content;
 
   tests = lib.mapAttrs' (name: case: lib.nameValuePair "testREST-${name}" {
     expr = restAllowed case.args;
     inherit (case) expected;
-  }) restCases // extraConfigTests // {
+  }) restCases // extraConfigTests // pluginsConfigTests // {
     testBitcoinDefaults = {
       expr = getBitcoinDefaults bitcoin;
       expected = {
@@ -259,5 +301,15 @@ else
   pkgs.runCommand "nix-bitcoin-configuration-tests" {
     passthru.testCount = builtins.length (builtins.attrNames tests);
   } ''
+    mkdir data secrets
+    echo secret > secrets/bitcoin-rpcpassword-privileged
+    sed -e "s|@dataDir@|$PWD/data|g; s|@secretsDir@|$PWD/secrets|g" ${remotePresetPreStart} > prestart.sh
+    USER=bitcoin bash -eu prestart.sh
+    if ! grep -qFx ${lib.escapeShellArg "rpcuser=${remoteRpcUser}"} data/bitcoin.conf; then
+      echo "bitcoind-remote preset doesn't preserve the RPC username:" >&2
+      cat data/bitcoin.conf >&2
+      exit 1
+    fi
+
     echo '${toString (builtins.length (builtins.attrNames tests))} configuration tests passed' > "$out"
   ''

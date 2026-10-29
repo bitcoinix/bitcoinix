@@ -49,7 +49,7 @@ let cfg = config.services.clightning.plugins.clboss; in
   };
 
   config = mkIf cfg.enable {
-    services.clightning.extraConfig = ''
+    services.clightning.pluginsConfig = ''
       plugin=${cfg.package}/bin/clboss
       clboss-min-onchain=${toString cfg.min-onchain}
       clboss-min-channel=${toString cfg.min-channel}
