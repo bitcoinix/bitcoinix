@@ -421,3 +421,11 @@ Store final secrets inside the secrets directory, including secrets supplied by
 another tool, rather than linking to external files. See the
 [0.1.3 upgrade instructions](./upgrading.md#upgrading-to-config-version-013)
 for migration and recovery steps.
+
+Tools like agenix install secrets as symlinks to files outside the secrets directory
+by default. `setup-secrets` can't set the owner and permissions of these files, so
+setup fails. With agenix, set `symlink = false` for these secrets, and set their
+`owner`, `group` and `mode` to the values in `nix-bitcoin.secrets.<name>`. Or disable
+`nix-bitcoin.generateSecrets` and `nix-bitcoin.setupSecrets`, set
+`nix-bitcoin.secretsSetupMethod = "manual"`, and set the owners and permissions
+declared in `nix-bitcoin.secrets` yourself.
