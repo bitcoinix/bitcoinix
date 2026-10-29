@@ -20,7 +20,5 @@ Other platforms are not supported.
 
 ## Disk space
 
-* 1 TB for an unpruned
-  instance of Bitcoin Core.
-  * This can be significantly lowered by enabling pruning.
-    Note: Pruning is not supported by electrs and Fulcrum.
+Use a disk of at least 2 TB, preferably an SSD. An Electrum server (electrs or Fulcrum)
+needs an unpruned Bitcoin Core node and adds its own index on top of it.
