@@ -24,7 +24,13 @@ and the channel database.
 
 ## How do I free disk space used by Nix?
 
-Run `nix-collect-garbage -d`.
+Each deployment keeps the previous system generations, so you can roll back. Run
+`nix-collect-garbage -d` as root to delete the old generations and everything that only
+they use. You can't roll back to the deleted generations afterwards.
+
+To clean up automatically, set the NixOS option
+[`nix.gc.automatic`](https://search.nixos.org/options?query=nix.gc), e.g.
+with `nix.gc.options = "--delete-older-than 30d"`.
 
 ## Where is `sudo`?
 
