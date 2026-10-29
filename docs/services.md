@@ -428,65 +428,52 @@ already deploy with.
 
 # Initialize a Trezor for the Bitcoin Hardware Wallet Interface (HWI)
 
-1. Enable Trezor in `configuration.nix`
-
-    Change
-    ```
-    # services.hardware-wallets.trezor = true;
-    ```
-    to
-    ```
+1. Enable Trezor support in your configuration:
+    ```nix
     services.hardware-wallets.trezor = true;
     ```
+    This installs `hwi`, `trezorctl` and `lsusb`, and adds udev rules that give group
+    `hardware-wallets` access to the device. The `operator` user is in that group.
+    Hardware wallets require the bitcoind wallet, so `services.bitcoind.disablewallet`
+    must stay unset or `false`.
 
-2. Deploy new `configuration.nix`
+2. Deploy your configuration.
 
-3. Check that your bitcoinix node recognizes your Trezor
+3. Plug in your Trezor and check that your node recognizes it:
 
     ```
     ssh operator@bitcoin-node
     lsusb
     ```
-    Should show something relating to your Trezor
 
-4. If your Trezor has outdated firmware or is not yet initialized: Start your Trezor in bootloader mode
-
-    Trezor v1
-    ```
-    Plug in your Trezor with both buttons depressed
-    ```
-
-    Trezor v2
-    ```
-    Start swiping your finger across your Trezor's touchscreen and plug in the USB cable when your finger is halfway through
-    ```
-
-5. If your Trezor's firmware is outdated: Update your Trezor's firmware
+4. If your Trezor's firmware is outdated, update it:
 
     ```
-    trezorctl firmware-update
+    trezorctl firmware update
     ```
-    Follow the on-screen instructions
+    Keep your recovery seed at hand: a firmware update can wipe the device. See
+    [Trezor's firmware guide](https://trezor.io/learn/a/update-trezor-device-firmware)
+    for the bootloader mode of your model.
 
-    **Caution: This command _will_ wipe your Trezor. If you already store Bitcoin on it, only do this with the recovery seed nearby.**
-
-6. If your Trezor is not yet initialized: Set up your Trezor
+5. If your Trezor is not yet initialized, set it up with a PIN:
 
     ```
-    trezorctl reset-device -p
+    trezorctl device setup -p
     ```
-    Follow the on-screen instructions
 
-7. Find your Trezor
+6. Find your Trezor:
 
     ```
     hwi enumerate
+    ```
+    A Trezor One asks for its PIN through HWI:
+    ```
     hwi -t trezor -d <path from previous command> promptpin
     hwi -t trezor -d <path> sendpin <number positions for the PIN as displayed on your device's screen>
     hwi enumerate
     ```
 
-8. Follow Bitcoin Core's instructions on [Using Bitcoin Core with Hardware Wallets](https://github.com/bitcoin-core/HWI/blob/master/docs/bitcoin-core-usage.md) to use your Trezor with `bitcoin-cli` on your bitcoinix node
+7. Follow HWI's guide on [using Bitcoin Core with hardware wallets](https://hwi.readthedocs.io/en/latest/examples/bitcoin-core-usage.html) to use your Trezor with `bitcoin-cli` on your node.
 
 <a id="clightning"></a>
 
