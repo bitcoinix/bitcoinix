@@ -47,36 +47,20 @@ However, bitcoinix is agnostic to the deployment method and can be used with dif
 3. Finish the installation as described in the manual, and reboot.
 
 ## 2. Nix installation
-The following steps are meant to be run on the machine you deploy from, not the machine you deploy to.
-You can also build Nix from source by following the instructions at https://nixos.org/nix/manual/#ch-installing-source.
 
-1. Install dependencies (Debian 10 Buster)
+Run these steps on the computer you deploy from, not on the node.
 
-    ```
-    sudo apt-get install curl git gnupg2 dirmngr
-    ```
+1. Install git, and install Nix in multi-user mode as described at <https://nixos.org/download/>.
+    On NixOS, Nix is already installed.
 
-2. Install the latest Nix in "multi-user mode" with GPG verification according to https://nixos.org/download/
+2. Enable flakes, which the deployment below uses
 
     ```
-    curl -o install-nix-2.3.10 https://releases.nixos.org/nix/nix-2.3.10/install
-    curl -o install-nix-2.3.10.asc https://releases.nixos.org/nix/nix-2.3.10/install.asc
-    gpg2 --recv-keys B541D55301270E0BCF15CA5D8170B4726D7198DE
-    gpg2 --verify ./install-nix-2.3.10.asc
-    sh ./install-nix-2.3.10 --daemon
+    mkdir -p ~/.config/nix
+    echo "experimental-features = nix-command flakes" >> ~/.config/nix/nix.conf
     ```
 
-    Then follow the instructions. Open a new terminal window when you're done.
-
-    If you get an error similar to
-
-    ```
-    error: cloning builder process: Operation not permitted
-    error: unable to start build process
-    /tmp/nix-binary-tarball-unpack.hqawN4uSPr/unpack/nix-2.2.1-x86_64-linux/install: unable to install Nix into your default profile
-    ```
-
-    you're likely not installing as multi-user because you forgot to pass the `--daemon` flag to the install script.
+    On NixOS, set `nix.settings.experimental-features = [ "nix-command" "flakes" ];` instead.
 
 3. Optional: Disallow substitutes
 
