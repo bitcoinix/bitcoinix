@@ -263,29 +263,38 @@ external IP by querying public IP lookup services over clearnet.
 
 # Use ZEUS (mobile Lightning wallet) via WireGuard
 
-Connecting ZEUS directly to your node is much faster than using Tor, but a bit more complex to set up.
+Connecting ZEUS through a WireGuard tunnel is much faster than using Tor. The
+`wireguard.nix` preset sets up a WireGuard server on your node with a single peer, your
+mobile device. To use your own VPN instead, see
+[Connecting without Tor or WireGuard](#connecting-without-tor-or-wireguard).
 
-There are two ways to establish a secure, direct connection:
+The preset requires:
+- the NixOS firewall (`networking.firewall.enable`, set by the `secure-node.nix` preset)
+  with the iptables backend. `networking.nftables` and `services.firewalld` must be
+  disabled, because the preset protects the REST servers with iptables rules.
+- no `netns-isolation`.
 
-- Connecting via TLS. This requires installing your Lightning app's
-  TLS certificate on your mobile device.
+The preset binds the LND and clnrest REST servers to `0.0.0.0` and only allows REST
+connections from the WireGuard peer through the firewall. It also sets `tor.enforce = false`
+for the service whose connection helper you enable (see
+[Connecting without Tor or WireGuard](#connecting-without-tor-or-wireguard)).
 
-- Connecting via WireGuard. This approach is simpler and more versatile, and is
-  described in this guide.
-
-1. Install [ZEUS](https://zeusln.app) (version ≥ 0.9.0) and
+1. Install [ZEUS](https://zeusln.app) and
    [WireGuard](https://www.wireguard.com/install/) on your mobile device.
 
-2. Add the following to your `configuration.nix`:
+2. Import the preset. With the `flake.nix` example, add it to the `modules` list in
+   `flake.nix`, next to `bitcoinix.nixosModules.default`:
    ```nix
-   imports = [
-     # Use this line when using the default deployment method
-     <nix-bitcoin/modules/presets/wireguard.nix>
+   (bitcoinix + "/modules/presets/wireguard.nix")
+   ```
+   With Colmena, add `(inputs.bitcoinix + "/modules/presets/wireguard.nix")` to the
+   `imports` of your node. With krops, add it to `configuration.nix`:
+   ```nix
+   imports = [ <nix-bitcoin/modules/presets/wireguard.nix> ];
+   ```
 
-     # Use this line when using Flakes
-     (nix-bitcoin + /modules/presets/wireguard.nix)
-   ];
-
+   Then enable the connection helper:
+   ```nix
    # For LND
    services.lnd.lndconnect.enable = true;
 
@@ -308,24 +317,18 @@ There are two ways to establish a secure, direct connection:
 5. Set up WireGuard on your mobile device.
 
    Run the following command on your node (as user `operator`) to create a QR code
-   for WireGuard:
+   for WireGuard, with the public IP or hostname of your node:
    ```bash
-   nix-bitcoin-wg-connect
+   nix-bitcoin-wg-connect 93.184.216.34
+   nix-bitcoin-wg-connect mynode.example.com
 
    # For debugging: Show the WireGuard config as text
-   nix-bitcoin-wg-connect --text
+   nix-bitcoin-wg-connect --text mynode.example.com
    ```
-   The above commands automatically detect your node's external IP.\
-   To set a custom IP or hostname, run the following:
-   ```
-   nix-bitcoin-wg-connect 93.184.216.34
-   nix-bitcoin-wg-connect mynode.org
-   ```
+   Without an argument, `nix-bitcoin-wg-connect` detects your node's external IP by
+   querying public IP lookup services over clearnet.
 
-   Configure WireGuard:
-   - Press the `+` button in the bottom right corner
-   - Scan the QR code
-   - Add the tunnel
+   In the WireGuard app, add a tunnel by scanning the QR code.
 
 6. Set up ZEUS
 
@@ -341,18 +344,11 @@ There are two ways to establish a secure, direct connection:
    lnconnect-clnrest-wg
    ```
 
-   Configure ZEUS:
-   - Add a new node and scan the QR code
-   - Click `Save node config`
-   - On the certificate warning screen, click `I understand, save node config`.\
-     Certificates are not needed when connecting via WireGuard.
-   - Start sending and stacking sats privately
+   In ZEUS, add a new node and scan the QR code. The QR code contains no TLS certificate,
+   so ZEUS may warn about it; the WireGuard tunnel encrypts the connection.
 
-### Additional lndconnect features
-Create a plain text URL:
-```bash
-lndconnect-wg --url
-```
+To print the connection URL as text instead, run `lndconnect-wg --url` or
+`lnconnect-clnrest-wg --url`.
 
 # Connect to electrs
 <a id="requirements-android"></a>
