@@ -271,11 +271,22 @@ Some services require extra steps:
 
 # Use bitcoind from another node
 
-Here's how to use a bitcoind instance running on another node within a bitcoinix config:
+Here's how to use a bitcoind instance running on another node within a bitcoinix config.
+This doesn't work with [network namespace isolation](#network-namespace-isolation).
 
+Import the `bitcoind-remote.nix` preset. With the `flake.nix` example, add it to the `modules` list in
+`flake.nix`, next to `bitcoinix.nixosModules.default`:
+```nix
+(bitcoinix + "/modules/presets/bitcoind-remote.nix")
+```
+With Colmena, add `(inputs.bitcoinix + "/modules/presets/bitcoind-remote.nix")` to the
+`imports` of your node. With krops, add it to `configuration.nix`:
 ```nix
 imports = [ <nix-bitcoin/modules/presets/bitcoind-remote.nix> ];
+```
 
+Then configure the connection to the other node:
+```nix
 services.bitcoind = {
   enable = true;
 
@@ -283,41 +294,32 @@ services.bitcoind = {
   address = "10.10.0.2";
   rpc.address = "10.10.0.2";
 
-  # Some bitcoinix services require whitelisted bitcoind P2P connections
-  # to work reliably.
-  # Search for `whitelistedPort` in this repo to see the affected services.
-  # If you're using one of these services, either add a whitelisted P2P port
-  # on your remote node via `whitebind` and set it here:
-  whitelistedPort = <remote whitebind P2P port>;
-  #
-  # Or use the default P2P port and add `whitelist=<address of this node>` to
-  # your remote bitcoind config:
-  whitelistedPort = config.services.bitcoind.port;
+  # Only needed for BTCPay Server: NBXplorer needs a whitelisted P2P connection.
+  # Set the port of a `whitebind` on the other node, or its regular P2P port
+  # if it has `whitelist=<address of this node>`.
+  whitelistedPort = 8333;
 
-  rpc.users = let
-    # The fully privileged bitcoind RPC username of the other node
-    privilegedName = "myrpcuser";
-    # A restricted RPC user on the other node (see whitelist setup below)
-    publicName = "mypublicrpcuser";
-  in {
-    privileged.name = privilegedName;
-    public.name = publicName;
+  rpc.users = {
+    # The fully privileged RPC user on the other node
+    privileged.name = "myrpcuser";
+    # A restricted RPC user on the other node (see the whitelist setup below)
+    public.name = "mypublicrpcuser";
     ## Set this if you use BTCPay Server. It needs its own restricted RPC user.
     # btcpayserver.name = "mybtcpayrpcuser";
   };
 };
+
+# With the secure-node preset or `enable-tor.nix`: don't create an onion service
+# on this node that forwards to the other node.
+nix-bitcoin.onionServices.bitcoind.enable = false;
 ```
 
-For each service that connects to bitcoind and has option
-`services.<service>.tor.enforce` enabled (either explicitly or by importing
-`secure-node.nix` or `enable-tor.nix`), you need to
-allow the remote bitcoind connection:
+With Tor enforcement (`services.<service>.tor.enforce`, enabled by the secure-node
+preset and `enable-tor.nix`), services can't reach the other node. Allow the
+connection for each service that connects to bitcoind, for example electrs:
 ```nix
-systemd.services.<service>.serviceConfig.IPAddressAllow = [ config.services.bitcoind.rpc.address ];
+systemd.services.electrs.serviceConfig.IPAddressAllow = [ "10.10.0.2" ];
 ```
-
-> The above configuration is only required if the remote bitcoind **is
-> not** accessed via Tor.
 
 electrs reads blocks through bitcoind's REST interface. If you use electrs, set
 `rest=1` on the other node (Bitcoin Core 31 or later). REST is unauthenticated and
@@ -351,9 +353,9 @@ a whitelist, including the privileged user, an empty whitelist.
 
 Now save the RPC passwords to the following files on your bitcoinix node:
 ```shell
-# Password of the privileged user (`privilegedName`)
+# Password of the privileged user (`myrpcuser`)
 $secretsDir/bitcoin-rpcpassword-privileged
-# Password of the restricted user (`publicName`)
+# Password of the restricted user (`mypublicrpcuser`)
 $secretsDir/bitcoin-rpcpassword-public
 
 ## Password of `mybtcpayrpcuser`, only needed when set in the above config snippet
