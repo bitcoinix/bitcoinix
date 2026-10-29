@@ -34,7 +34,11 @@ with `nix.gc.options = "--delete-older-than 30d"`.
 
 ## Where is `sudo`?
 
-After [CVE-2021-3156](https://www.openwall.com/lists/oss-security/2021/01/26/3),
-we've replaced `sudo` with OpenBSD's `doas` for users of the `secure-node.nix` template.
-It has greatly reduced complexity and is therefore less likely to be a source of
-severe vulnerabilities in the future.
+The [`secure-node.nix`](https://github.com/bitcoinix/bitcoinix/blob/master/modules/presets/secure-node.nix)
+preset disables `sudo` and enables OpenBSD's `doas`, which is much smaller. It also adds the
+shell alias `sudo` for `doas`. This followed
+[CVE-2021-3156](https://www.openwall.com/lists/oss-security/2021/01/26/3) in `sudo`.
+
+To run commands as root, add your user to the `wheel` group, e.g.
+`users.users.operator.extraGroups = [ "wheel" ];`. `doas` asks members of `wheel` for their
+password, and the `operator` user has none by default. Set one as root with `passwd operator`.
