@@ -2,14 +2,22 @@
 > This document is inherited from nix-bitcoin, the predecessor project. It is a work in progress and may be outdated.
 
 # Nodeinfo
-Run `nodeinfo` to see onion addresses and local addresses for enabled services.
+Run `nodeinfo` as user `operator` (or root) to see onion addresses and local addresses
+for enabled services, and the node IDs of LND and Core Lightning. It prints JSON:
+```shell
+nodeinfo
+nodeinfo | jq -r .bitcoind.onion_address
+```
+`nodeinfo` and `jq` are included in the `secure-node.nix` preset. Without the preset,
+set `nix-bitcoin.nodeinfo.enable = true` and install `jq` for the example above.
 
 The `onion-addresses` service only publishes valid Tor v3 onion addresses. If a
 hostname file is unreadable, contains invalid content, or takes more than 10 seconds
 to read, its address is omitted. Other valid addresses are still published, but
-`onion-addresses.service` reports failure and `nodeinfo` reports an error.
+`onion-addresses.service` reports failure. `nodeinfo` then prints only
+`error: service 'onion-addresses' is not running`.
 
-As root, run `journalctl -u onion-addresses` to identify the affected
+Run `journalctl -u onion-addresses` to identify the affected
 `/var/lib/tor/onion/<service>/hostname` file. It must be readable by the `tor` user
 and contain a single v3 onion address, with at most one trailing newline. Once the
 Tor-generated hostname file and its permissions are correct, run
