@@ -70,6 +70,16 @@ networking.hostName = "myhost";
 time.timeZone = "UTC";
 ```
 
+Snippets that use `config` or `lib`, like `config.services.bitcoind.port`, must be in a
+module that takes these as arguments. The krops `configuration.nix` already does. The
+Colmena example's `configuration.nix` takes only `config`; add `lib` there if you need it.
+In the module of the `flake.nix` example, which is a plain attribute set, use this form instead:
+```nix
+({ config, lib, ... }: {
+  networking.firewall.allowedTCPPorts = [ config.services.bitcoind.port ];
+})
+```
+
 ## Raw service configuration (`extraConfig`)
 
 Prefer dedicated NixOS options when available. Settings you supply through
@@ -89,7 +99,19 @@ settings you add yourself. The warning does not print the configuration contents
 
 ## Debug your configuration
 
-To print the values of specific options of your config, add the following to your `configuration.nix`:
+To print the values of options of your config, evaluate them on your computer.
+With the `flake.nix` example, replace `fullnode` with the name of your node:
+```shell
+nix eval .#nixosConfigurations.fullnode.config.services.bitcoind.dataDir
+nix eval --json .#nixosConfigurations.fullnode.config.networking.firewall.allowedTCPPorts
+```
+
+With Colmena, run from the `nix develop` shell:
+```shell
+colmena eval -E '{ nodes, ... }: nodes.fullnode.config.services.bitcoind.dataDir'
+```
+
+With krops, add the following to your `configuration.nix`:
 ```nix
 system.extraDependencies = let
   debugVal = config.networking.firewall.allowedTCPPorts;
