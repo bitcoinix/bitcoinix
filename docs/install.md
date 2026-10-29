@@ -226,20 +226,15 @@ These steps continue from step 3 above.
 #### Optional: Specify the system of your node
 This enables evaluating your node config on a machine that has a different system platform
 than your node.\
-Examples: Deploying from macOS or deploying from an x86 desktop PC to a Raspberry Pi.
+Examples: Deploying from macOS or deploying from an x86 desktop PC to an ARM node.
 
 ```bash
 # Run this when your node has a 64-bit x86 CPU (e.g., an Intel or AMD CPU)
 echo "x86_64-linux" > krops/system
 
-# Run this when your node has a 64-bit ARM CPU (e.g., Raspberry Pi 4 B, Pine64)
+# Run this when your node has a 64-bit ARM CPU
 echo "aarch64-linux" > krops/system
 ```
-Other available systems:
-- `i686-linux` (`x86`)
-- `armv7l-linux` (`ARMv7`)\
-  This platform is untested and has no binary caches.
-  [See here](https://nixos.wiki/wiki/NixOS_on_ARM) for details.
 
 ### Deploy with krops
 
@@ -283,7 +278,7 @@ Other available systems:
 
     If you prefer to build the system from source instead of copying binaries from the Nix cache, add the following line to `configuration.nix`:
     ```
-    nix.extraOptions = "substitute = false";
+    nix.settings.substitute = false;
     ```
 
     If the build process fails for some reason when deploying with `krops-deploy` (see later step), it may be difficult to find the cause due to the missing output.
@@ -305,7 +300,7 @@ Other available systems:
     ```
 
     Pay attention to lines that are preceded by `FIXME` comments. In particular:
-    1. Make sure to set your SSH pubkey. Otherwise, you lose remote access because the config does not enable `permitRootLogin` (unless you add that manually).
+    1. Make sure to set your SSH pubkey. Otherwise, you lose remote access: root can only log in over SSH with a key.
     2. Uncomment the line `./hardware-configuration.nix` by removing `#`.
 
 6. Enter the deployment environment
