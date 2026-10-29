@@ -351,34 +351,31 @@ To print the connection URL as text instead, run `lndconnect-wg --url` or
 `lnconnect-clnrest-wg --url`.
 
 # Connect to electrs
+Electrum wallets can connect to your electrs (or Fulcrum) server through its onion
+service, which the `secure-node.nix` and `enable-tor.nix` presets create.
+
 <a id="requirements-android"></a>
 
 ### Android requirements
-* Android phone
-* [Orbot](https://guardianproject.info/apps/orbot/) installed from [F-Droid](https://guardianproject.info/fdroid) (recommended) or [Google Play](https://play.google.com/store/apps/details?id=org.torproject.android&hl=en)
-* [Electrum mobile app](https://electrum.org/#home) 4.0.1 and newer installed from [direct download](https://electrum.org/#download) or [Google Play](https://play.google.com/store/apps/details?id=org.electrum.electrum)
+* [Orbot](https://guardianproject.info/apps/org.torproject.android/) from F-Droid or [Google Play](https://play.google.com/store/apps/details?id=org.torproject.android)
+* [Electrum](https://electrum.org/#download) from the direct download or [Google Play](https://play.google.com/store/apps/details?id=org.electrum.electrum)
 
 <a id="requirements-desktop"></a>
 
 ### Desktop requirements
-* [Tor](https://www.torproject.org/) installed from [source](https://www.torproject.org/docs/tor-doc-unix.html.en) or [repository](https://www.torproject.org/docs/debian.html.en)
-* [Electrum](https://electrum.org/#download) installed
+* [Tor](https://support.torproject.org/little-t-tor/), listening on its default SOCKS port 9050
+* [Electrum](https://electrum.org/#download)
 
-1. Enable electrs in `configuration.nix`
-
-    Change
-    ```
-    # services.electrs.enable = true;
-    ```
-    to
-    ```
+1. Enable electrs in your configuration:
+    ```nix
     services.electrs.enable = true;
     ```
+    For Fulcrum, set `services.fulcrum.enable = true` and use `.fulcrum` instead of
+    `.electrs` below.
 
-2. Deploy new `configuration.nix`
+2. Deploy your configuration.
 
-3. Get electrs onion address with format `<onion-address>:<port>`
-
+3. Get the electrs onion address, in the format `<onion-address>:<port>`:
     ```
     nodeinfo | jq -r .electrs.onion_address
     ```
@@ -389,17 +386,13 @@ To print the connection URL as text instead, run `lndconnect-wg --url` or
 
     On your desktop
     ```
-    electrum --oneserver -1 -s "<electrs onion address>:t" -p socks5:127.0.0.1:9050
+    electrum --oneserver -s "<electrs onion address>:t" -p socks5:127.0.0.1:9050
     ```
 
-    On Android
-    ```
-    Three dots in the upper-right-hand corner
-    Network > Proxy mode: socks5, Host: 127.0.0.1, Port: 9050
-    Network > Auto-connect: OFF
-    Network > One-server mode: ON
-    Network > Server: <electrs onion address>:t
-    ```
+    On Android, open the network settings and set:
+    - Proxy: SOCKS5, host `127.0.0.1`, port `9050`
+    - Auto-connect: off, one-server mode: on
+    - Server: `<electrs onion address>:t`
 
 # Connect to bitcoinix node through the SSH onion service
 1. Get the SSH onion address (excluding the port suffix)
