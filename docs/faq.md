@@ -2,14 +2,25 @@
 
 ## Why does Core Lightning fail on my pruned node?
 
-When you run `lightning-cli getinfo` as user operator, you may see `lightning-cli:
-Connecting to 'lightning-rpc': Connection refused`. Check your Core Lightning logs with
-`journalctl -eu clightning`. Do you see something like `bitcoin-cli getblock ... false`
-failed? Are you using pruned mode? That means that Core Lightning hasn't seen all the blocks
-it needs to and it can't get that block because your node is pruned.
+You may see `lightning-cli: Connecting to 'lightning-rpc': Connection refused`. Check the
+log with `journalctl -eu clightning`. Core Lightning needs every block since it last ran.
+When Bitcoin Core has already pruned one of them, the `bcli` plugin asks Bitcoin Core to
+fetch it from a peer with `getblockfrompeer`. This needs connected peers that still serve
+the block.
 
-If you're just setting up a new node you can `systemctl stop clightning` and wipe your
-`/var/lib/clightning` directory. Otherwise you need to reindex your Bitcoin Core node.
+`getblockfrompeer` is unavailable when `services.clightning.useBcliPlugin` is off,
+e.g. with the `trustedcoin` plugin, which fetches blocks from public block explorers instead.
+
+If the node is new and holds no funds or channels, you can start over:
+
+```shell
+systemctl stop clightning
+find /var/lib/clightning -mindepth 1 -delete
+systemctl start clightning
+```
+
+Never do this on a node with funds or channels. `/var/lib/clightning` holds `hsm_secret`
+and the channel database.
 
 ## How do I free disk space used by Nix?
 
