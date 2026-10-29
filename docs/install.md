@@ -1,13 +1,5 @@
 # Tutorial: Install and configure NixOS for bitcoinix on a dedicated machine
 
-> [!NOTE]
-> This document is inherited from nix-bitcoin, the predecessor project. It is a work in progress and may be outdated.
-
-> [!WARNING]
-> This documentation may be outdated or contain installation steps that do not work with
-> bitcoinix yet.
-> Please report problems at <https://github.com/bitcoinix/bitcoinix/issues>.
-
 This tutorial describes how to manage your Bitcoin node comfortably from your personal computer: you keep the node configuration in a Nix flake and deploy it over SSH with `nixos-rebuild` or [Colmena](https://colmena.cli.rs/).
 The deployment tool [krops](https://github.com/krebs/krops) is described as a legacy alternative.
 However, bitcoinix is agnostic to the deployment method and can be used with different or without such tools (see [examples](https://github.com/bitcoinix/bitcoinix/blob/master/examples/README.md)).

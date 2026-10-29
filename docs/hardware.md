@@ -1,8 +1,4 @@
-Hardware requirements
----
-
-> [!NOTE]
-> This document is inherited from nix-bitcoin, the predecessor project. It is a work in progress and may be outdated.
+# Hardware requirements
 
 ## Platforms
 
