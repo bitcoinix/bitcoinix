@@ -100,6 +100,27 @@ let
     networking.firewall.backend = "iptables";
     networking.firewall.package = pkgs.iptables;
   };
+  wireguardLndconnect = {
+    imports = [ ../modules/presets/wireguard.nix ];
+    services.lnd = { enable = true; lndconnect.enable = true; };
+  };
+  wireguardNftablesIptablesBackend = evaluate {
+    imports = [ wireguardLndconnect ];
+    networking.nftables.enable = true;
+    networking.firewall.backend = "iptables";
+  };
+  wireguardNftablesIptablesPackage = evaluate {
+    imports = [ wireguardLndconnect ];
+    networking.nftables.enable = true;
+    networking.firewall.backend = "iptables";
+    networking.firewall.package = pkgs.iptables;
+  };
+  wireguardNftablesIptablesExtraPackage = evaluate {
+    imports = [ wireguardLndconnect ];
+    networking.nftables.enable = true;
+    networking.firewall.backend = "iptables";
+    networking.firewall.extraPackages = [ pkgs.iptables ];
+  };
   customMempoolUser = evaluate {
     services.mempool = { enable = true; user = "mempool-custom"; };
   };
@@ -267,6 +288,19 @@ let
     };
     testNetnsAllowsNftablesWithIptablesPackage = {
       expr = failedAssertions netnsNftablesIptablesPackage;
+      expected = [];
+    };
+    testWireguardRejectsNftablesWithIptablesBackend = {
+      expr = map (lib.hasInfix "need `iptables` on the firewall service's PATH")
+        (failedAssertions wireguardNftablesIptablesBackend);
+      expected = [ true ];
+    };
+    testWireguardAllowsNftablesWithIptablesPackage = {
+      expr = failedAssertions wireguardNftablesIptablesPackage;
+      expected = [];
+    };
+    testWireguardAllowsNftablesWithIptablesExtraPackage = {
+      expr = failedAssertions wireguardNftablesIptablesExtraPackage;
       expected = [];
     };
     testNetnsRESTAddresses = {
