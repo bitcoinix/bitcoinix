@@ -111,6 +111,42 @@ let
       plugins.feeadjuster = { enable = true; adjustDaily = true; };
     };
   };
+  lndconnectOnion = {
+    services.lnd = { enable = true; lndconnect = { enable = true; onion = true; }; };
+  };
+  lndconnectNoOperator = evaluate lndconnectOnion;
+  lndconnectWithOperator = evaluate {
+    imports = [ lndconnectOnion ];
+    nix-bitcoin.operator.enable = true;
+  };
+  lnconnectNoOperator = evaluate {
+    services.clightning = {
+      enable = true;
+      plugins.clnrest = { enable = true; lnconnect = { enable = true; onion = true; }; };
+    };
+  };
+  # An existing account named as the operator, with the operator role disabled
+  operatorAccountOnion = {
+    imports = [ lndconnectOnion ];
+    users.users.alice.isNormalUser = true;
+    nix-bitcoin.operator.name = "alice";
+    services.clightning = {
+      enable = true;
+      # Don't conflict with the lnd p2p port
+      port = 9736;
+      plugins.clnrest = { enable = true; lnconnect = { enable = true; onion = true; }; };
+    };
+  };
+  operatorAccountRoleDisabled = evaluate operatorAccountOnion;
+  operatorAccountExplicitAccess = evaluate {
+    imports = [ operatorAccountOnion ];
+    nix-bitcoin.onionAddresses.access.alice = [ "lnd-rest" "clnrest" ];
+  };
+  onionAccessUnknownUser = evaluate {
+    nix-bitcoin.onionAddresses.access."no-such-user" = [ "bitcoind" ];
+  };
+  getOnionAccessUsers = config:
+    lib.sort lib.lessThan (builtins.attrNames config.nix-bitcoin.onionAddresses.access);
   getBitcoinDefaults = config: with config.services.bitcoind; {
     inherit network port listen;
     rpc = { inherit (rpc) address port allowip; };
@@ -272,6 +308,45 @@ let
     testNetnsRESTAddresses = {
       expr = getRestAddresses netns;
       expected = with netns.nix-bitcoin.netns-isolation.netns; [ lnd.address clightning.address ];
+    };
+    testLndconnectWithoutOperator = {
+      expr = {
+        failed = failedAssertions lndconnectNoOperator;
+        users = getOnionAccessUsers lndconnectNoOperator;
+      };
+      expected = { failed = []; users = [ lndconnectNoOperator.services.lnd.user ]; };
+    };
+    testLndconnectWithOperator = {
+      expr = getOnionAccessUsers lndconnectWithOperator;
+      expected = with lndconnectWithOperator;
+        lib.sort lib.lessThan [ services.lnd.user nix-bitcoin.operator.name ];
+    };
+    testLnconnectOnionRequiresOperator = {
+      expr = map (lib.hasInfix "nix-bitcoin.operator.enable")
+        (failedAssertions lnconnectNoOperator);
+      expected = [ true ];
+    };
+    testOperatorAccountGetsNoAutomaticAccess = {
+      expr = {
+        users = getOnionAccessUsers operatorAccountRoleDisabled;
+        lnconnectFails = map (lib.hasInfix "lnconnect.onion")
+          (failedAssertions operatorAccountRoleDisabled);
+      };
+      expected = {
+        users = [ operatorAccountRoleDisabled.services.lnd.user ];
+        lnconnectFails = [ true ];
+      };
+    };
+    testOperatorAccountExplicitAccess = {
+      expr = with operatorAccountExplicitAccess; {
+        failed = failedAssertions operatorAccountExplicitAccess;
+        alice = nix-bitcoin.onionAddresses.access.alice;
+      };
+      expected = { failed = []; alice = [ "lnd-rest" "clnrest" ]; };
+    };
+    testOnionAccessRejectsUnknownUser = {
+      expr = map (lib.hasInfix "no-such-user") (failedAssertions onionAccessUnknownUser);
+      expected = [ true ];
     };
     testMempoolCustomUser = {
       expr = with customMempoolUser; {

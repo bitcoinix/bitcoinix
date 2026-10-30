@@ -136,7 +136,13 @@ let
     fi
   '');
 
-  operatorName = config.nix-bitcoin.operator.name;
+  # Like onion-services.nix, give the operator onion access only when the
+  # operator role is enabled, so that access stays an explicit choice
+  operator = config.nix-bitcoin.operator;
+  operatorName = operator.name;
+  # This is also true when a config grants the access explicitly
+  operatorHasClnrestAccess =
+    elem "clnrest" (config.nix-bitcoin.onionAddresses.access.${operatorName} or []);
 in {
   inherit options;
 
@@ -169,10 +175,11 @@ in {
               port = lnd.restPort;
             };
           };
-          nix-bitcoin.onionAddresses.access = {
-            ${lnd.user} = [ "lnd-rest" ];
-            ${operatorName} = [ "lnd-rest" ];
-          };
+          # Two definitions, so that `operatorName == lnd.user` is not a duplicate key
+          nix-bitcoin.onionAddresses.access = mkMerge [
+            { ${lnd.user} = [ "lnd-rest" ]; }
+            (mkIf operator.enable { ${operatorName} = [ "lnd-rest" ]; })
+          ];
         })
       ]))
 
@@ -195,6 +202,17 @@ in {
         }
 
         (mkIf clnrest.lnconnect.onion {
+          assertions = [
+            { assertion = operatorHasClnrestAccess;
+              message = ''
+                `services.clightning.plugins.clnrest.lnconnect.onion` requires that the
+                operator user `${operatorName}` can read the clnrest onion address, because
+                `lnconnect-clnrest` reads it from that user's directory.
+                Set `nix-bitcoin.operator.enable = true`, or add "clnrest" to
+                `nix-bitcoin.onionAddresses.access.${operatorName}`.
+              '';
+            }
+          ];
           services.tor = {
             enable = true;
             relay.onionServices.clnrest = nbLib.mkOnionService {
@@ -204,7 +222,7 @@ in {
             };
           };
           # This also allows nodeinfo to show the clnrest onion address
-          nix-bitcoin.onionAddresses.access.${operatorName} = [ "clnrest" ];
+          nix-bitcoin.onionAddresses.access = mkIf operator.enable { ${operatorName} = [ "clnrest" ]; };
         })
       ])
     )
