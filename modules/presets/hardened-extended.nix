@@ -40,6 +40,12 @@
     "net.ipv4.tcp_sack" = "0";
     "net.ipv4.tcp_dsack" = "0";
 
+    # Disable Multipath TCP. Go 1.24 and later listen with MPTCP by default, so
+    # every Go daemon on the node (lnd, tailscale, caddy, ...) exposes the MPTCP
+    # code paths without being asked. A node does not need MPTCP, and the
+    # exploit published for CVE-2026-98432 went through an MPTCP listener.
+    "net.mptcp.enabled" = "0";
+
     # Restrict usage of ptrace to only processes with the CAP_SYS_PTRACE
     # capability
     "kernel.yama.ptrace_scope" = "2";

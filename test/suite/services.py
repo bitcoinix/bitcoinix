@@ -143,6 +143,11 @@ def test_lnd():
     assert_str_matches(cert_alt_names, '20.0.0.1')
     assert_str_matches(cert_alt_names, 'example.com')
 
+    # Go 1.24 listens with Multipath TCP by default. The lnd unit turns that
+    # off, so no lnd socket may show up as an MPTCP listener.
+    mptcp_listeners = succeed("ss -Mlnp")
+    assert "lnd" not in mptcp_listeners, mptcp_listeners
+
 
 @test("charge-lnd")
 def test_charge_lnd():
