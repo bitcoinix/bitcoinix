@@ -289,5 +289,5 @@
   # The bitcoinix release version that your config is compatible with.
   # When upgrading to a backwards-incompatible release, bitcoinix will display an
   # error and provide instructions for migrating your config to the new release.
-  nix-bitcoin.configVersion = "0.1.3";
+  nix-bitcoin.configVersion = "0.1.4";
 }

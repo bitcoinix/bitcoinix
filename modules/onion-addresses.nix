@@ -42,10 +42,22 @@ let
 
   cfg = config.nix-bitcoin.onionAddresses;
   nbLib = config.nix-bitcoin.lib;
+  missingUsers = filter (user: !(hasAttr user config.users.users)) (attrNames cfg.access);
 in {
   inherit options;
 
   config = mkIf (cfg.access != {} || cfg.services != []) {
+    # The service chowns each user's dir, so one missing user would make it
+    # abort and publish no onion address for anyone.
+    assertions = [
+      { assertion = missingUsers == [];
+        message = ''
+          `nix-bitcoin.onionAddresses.access` contains users that are not defined:
+          ${concatStringsSep ", " missingUsers}
+        '';
+      }
+    ];
+
     systemd.services.onion-addresses = {
       wantedBy = [ "tor.service" ];
       bindsTo = [ "tor.service" ];

@@ -23,6 +23,37 @@ This fetches the latest release, verifies the signature on its release tag and u
 It refuses to switch to a release older than the one currently pinned. To downgrade on purpose,
 run `fetch-release.sh` with `releaseVersion=<version>` and write its output to `nix-bitcoin-release.nix`.
 
+## Upgrading to config version 0.1.4
+
+`services.lnd.lndconnect.onion` and
+`services.clightning.plugins.clnrest.lnconnect.onion` now give the operator user
+access to the `lnd-rest` and `clnrest` onion addresses only when
+`nix-bitcoin.operator.enable` is set. This matches the access to the other onion
+addresses. Before, the operator user received this access whenever it existed,
+for example when `nix-bitcoin.operator.name` named an existing account and the
+operator role was disabled. When the operator user didn't exist at all, the
+`onion-addresses` service failed and published no onion address for anyone.
+Evaluation now fails if `nix-bitcoin.onionAddresses.access` names a user that
+isn't defined.
+
+If your operator user relied on this access, choose one of the following:
+
+- Enable the operator role. It merges into an existing account of the same name,
+  but also adds the operator's groups and its permission to run commands as service
+  users:
+  ```nix
+  nix-bitcoin.operator.enable = true;
+  ```
+- Keep the role disabled and grant only the onion address access:
+  ```nix
+  nix-bitcoin.onionAddresses.access.<operator name> = [ "lnd-rest" "clnrest" ];
+  ```
+  List only the services you use. `lnconnect-clnrest` reads the clnrest onion address
+  from the operator user's directory, so with `clnrest.lnconnect.onion` enabled,
+  evaluation fails unless the operator user has `clnrest` access.
+
+After migrating your configuration, set `nix-bitcoin.configVersion = "0.1.4";`.
+
 ## Upgrading to config version 0.1.3
 
 Bitcoin Knots support and the `services.bitcoind.package` option have been removed.
