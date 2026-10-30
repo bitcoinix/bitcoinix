@@ -110,9 +110,17 @@ in {
         # `extraCommands` rules, which also enforce `restrictPeer`. `extraCommands`
         # run only with the iptables backend: NixOS rejects a non-empty
         # `extraCommands` under nftables, and firewalld silently ignores them.
+        # The backend alone is not enough: `networking.firewall.package` defaults
+        # to `pkgs.nftables` whenever `networking.nftables` is enabled, whatever
+        # the backend says, and the firewall service finds `iptables` only in that
+        # package. Without the binary the service fails at its first rule and the
+        # box runs with no firewall at all, so check the package the rules run
+        # with. An explicit iptables package next to nftables is fine.
         assertion = !(lndconnect || lnconnect-clnrest || cfg.restrictPeer)
-                    || (config.networking.firewall.enable && config.networking.firewall.backend == "iptables");
-        message = "`nix-bitcoin.wireguard` protects the REST API of the enabled `*connect` helpers (bound to 0.0.0.0) and enforces `restrictPeer` only through `networking.firewall.extraCommands`, which run only with the iptables backend. Enable `networking.firewall` and disable `networking.nftables` and `services.firewalld`, so that the firewall defaults to the iptables backend.";
+                    || (config.networking.firewall.enable
+                        && config.networking.firewall.backend == "iptables"
+                        && lib.getName config.networking.firewall.package != "nftables");
+        message = "`nix-bitcoin.wireguard` protects the REST API of the enabled `*connect` helpers (bound to 0.0.0.0) and enforces `restrictPeer` only through `networking.firewall.extraCommands`, which run only with the iptables backend and need `iptables` in `networking.firewall.package` (currently ${lib.getName config.networking.firewall.package}). Enable `networking.firewall` and disable `networking.nftables` and `services.firewalld`, or keep `networking.firewall.backend = \"iptables\"` and set `networking.firewall.package` to a package with `bin/iptables`.";
       }
     ];
 
