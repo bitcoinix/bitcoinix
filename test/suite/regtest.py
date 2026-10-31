@@ -79,6 +79,11 @@ def test_trustedcoin():
         machine.wait_until_succeeds(log_has_string("clightning", str))
 
     expect_clightning_log(r"plugin-trustedcoin\b.*?\bbitcoind RPC working")
+    # The startup line names the RPC user but must not show the password
+    expect_clightning_log(r"plugin-trustedcoin\b.*?\bbitcoind RPC settings: .*password: <redacted>")
+    machine.fail(
+        "journalctl -b --output=cat -u clightning | grep -qF \"$(cat /secrets/bitcoin-rpcpassword-public)\""
+    )
     if "regtest" in enabled_tests:
         num_blocks = test_data["num_blocks"]
         expect_clightning_log(rf"plugin-trustedcoin\b.*?\breturning block {num_blocks}")
