@@ -1,4 +1,4 @@
-{ prevVersions ? null, removedPkgs ? [] }:
+{ prevVersions ? null, removedPkgs ? [], addedPkgs ? [] }:
 let
   flake = builtins.getFlake (toString ../.);
   inherit (flake.inputs.nixpkgs) lib;
@@ -20,7 +20,7 @@ in rec {
       !(unstable ? "${pkgName}") ||
       ((stable ? "${pkgName}")
        && (builtins.compareVersions stable.${pkgName}.version unstable.${pkgName}.version >= 0))
-    ) (builtins.attrNames pinnedPkgs);
+    ) (lib.unique (builtins.attrNames pinnedPkgs ++ addedPkgs));
   in {
     stable   = lib.genAttrs isStable.right (pkgName: stable.${pkgName}.version);
     unstable = lib.genAttrs isStable.wrong (pkgName: unstable.${pkgName}.version);
