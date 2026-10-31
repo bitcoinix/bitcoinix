@@ -11,6 +11,9 @@ buildGoModule rec {
     hash = "sha256-mi+sri+N/EFXGm5JwNIAV+oXS0joOY5vef8FrKPmn7A=";
   };
 
+  # Keep the bitcoind RPC password out of the startup log line.
+  patches = [ ./redact-rpc-password.patch ];
+
   vendorHash = "sha256-fW+EoNPC0mH8C06Q6GXNwFdzE7oQT+qd+B7hGGml+hc=";
 
   subPackages = [ "." ];
