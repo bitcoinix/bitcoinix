@@ -3,7 +3,7 @@
 
   inputs = {
     # Pin the latest release tag listed at https://github.com/bitcoinix/bitcoinix/tags
-    bitcoinix.url = "github:bitcoinix/bitcoinix/v0.1.2";
+    bitcoinix.url = "github:bitcoinix/bitcoinix/v0.1.3";
 
     # Use the nixpkgs that bitcoinix is tested with
     nixpkgs.follows = "bitcoinix/nixpkgs";
@@ -93,7 +93,7 @@
               # The bitcoinix release that your config is written for. After you
               # update the pinned release, evaluation fails if your config needs
               # changes and says what to do; then set this to the new release.
-              configVersion = "0.1.2";
+              configVersion = "0.1.3";
             };
           };
       };
