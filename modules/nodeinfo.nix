@@ -131,7 +131,7 @@ in {
     nix-bitcoin.nodeinfo.services = with nodeinfoLib; {
       bitcoind = mkInfo "";
       clightning = mkInfo ''
-        info["nodeid"] = shell("lightning-cli getinfo | jq -r '.id'")
+        info["nodeid"] = shell("lightning-cli getinfo | ${pkgs.jq}/bin/jq -r '.id'")
         if 'onion_address' in info:
             info["id"] = f"{info['nodeid']}@{info['onion_address']}"
       '';
@@ -140,7 +140,7 @@ in {
       '' + mkIfOnionPort "lnd-rest" (onionPort: ''
         info["onion_rest_address"] = get_onion_address("lnd-rest", ${onionPort})
       '') + ''
-        info["nodeid"] = shell("lncli getinfo | jq -r '.identity_pubkey'")
+        info["nodeid"] = shell("lncli getinfo | ${pkgs.jq}/bin/jq -r '.identity_pubkey'")
       '') name cfg;
       clnrest = name: cfg: mkInfoLong {
         inherit name cfg;
