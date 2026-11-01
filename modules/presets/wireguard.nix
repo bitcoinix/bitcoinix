@@ -110,9 +110,21 @@ in {
         # `extraCommands` rules, which also enforce `restrictPeer`. `extraCommands`
         # run only with the iptables backend: NixOS rejects a non-empty
         # `extraCommands` under nftables, and firewalld silently ignores them.
+        # The backend alone is not enough: `networking.firewall.package` defaults
+        # to `pkgs.nftables` whenever `networking.nftables` is enabled, whatever
+        # the backend says, and the firewall service's PATH holds only that
+        # package plus `networking.firewall.extraPackages`. Without an `iptables`
+        # binary on it the service fails at its first rule and the box runs with
+        # no firewall at all, so check what the rules run with. An iptables
+        # package next to nftables, as the package or in extraPackages, is fine.
+        # This catches the default that `networking.nftables` sets, not every
+        # package whose iptables doesn't work on the running kernel.
         assertion = !(lndconnect || lnconnect-clnrest || cfg.restrictPeer)
-                    || (config.networking.firewall.enable && config.networking.firewall.backend == "iptables");
-        message = "`nix-bitcoin.wireguard` protects the REST API of the enabled `*connect` helpers (bound to 0.0.0.0) and enforces `restrictPeer` only through `networking.firewall.extraCommands`, which run only with the iptables backend. Enable `networking.firewall` and disable `networking.nftables` and `services.firewalld`, so that the firewall defaults to the iptables backend.";
+                    || (config.networking.firewall.enable
+                        && config.networking.firewall.backend == "iptables"
+                        && (lib.getName config.networking.firewall.package != "nftables"
+                            || lib.any (p: lib.getName p == "iptables") config.networking.firewall.extraPackages));
+        message = "`nix-bitcoin.wireguard` protects the REST API of the enabled `*connect` helpers (bound to 0.0.0.0) and enforces `restrictPeer` only through `networking.firewall.extraCommands`, which run only with the iptables backend and need `iptables` on the firewall service's PATH (`networking.firewall.package` is ${lib.getName config.networking.firewall.package}). Enable `networking.firewall` and disable `networking.nftables` and `services.firewalld`, or keep `networking.firewall.backend = \"iptables\"` and provide `iptables` through `networking.firewall.package` or `networking.firewall.extraPackages`.";
       }
     ];
 
