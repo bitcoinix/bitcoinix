@@ -240,6 +240,13 @@ in {
       wantedBy = [ "multi-user.target" "bitcoind.service" ];
       requires = [ "bitcoind.service" ];
       after = [ "bitcoind.service" "nix-bitcoin-secrets.target" ];
+      # Go 1.24 and later open every listener as Multipath TCP when the kernel
+      # supports it, so lnd's P2P, RPC and REST ports become MPTCP sockets
+      # without lnd asking for it. MPTCP adds kernel attack surface on the
+      # public P2P port: the exploit published for CVE-2026-98432 goes through
+      # an MPTCP listener. lnd does not need MPTCP, so turn it off in the Go
+      # runtime; the sockets fall back to plain TCP.
+      environment.GODEBUG = "multipathtcp=0";
       preStart = ''
         conf=$(
           cat ${configFile}
