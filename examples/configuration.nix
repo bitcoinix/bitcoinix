@@ -12,13 +12,8 @@
     # Turn it off when not needed.
     <nix-bitcoin/modules/presets/secure-node.nix>
 
-    # FIXME: The hardened kernel profile improves security but
-    # decreases performance by ~50%.
-    # Turn it off when not needed.
-    <nix-bitcoin/modules/presets/hardened.nix>
-    #
-    # You can enable the hardened-extended preset instead to further improve security
-    # at the cost of functionality and performance.
+    # FIXME: Uncomment the next line to enable the hardened-extended preset.
+    # It improves security at the cost of functionality and performance.
     # See the comments at the top of `hardened-extended.nix` for further details.
     # <nix-bitcoin/modules/presets/hardened-extended.nix>
 

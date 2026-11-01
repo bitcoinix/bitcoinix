@@ -1,6 +1,5 @@
-# This preset adds additional hardening settings on top of the
-# default ./hardened.nix preset.
-# These settings trade even more functionality and performance for increased security.
+# This preset adds kernel and system hardening settings.
+# These settings trade functionality and performance for increased security.
 
 # This preset enables usbguard. Use `services.usbguard.rules` to whitelist
 # select devices.
@@ -9,11 +8,6 @@
 # https://madaidans-insecurities.github.io/guides/linux-hardening.html
 
 {
-  imports = [
-    # Build on standard hardened preset
-    ./hardened.nix
-  ];
-
   boot.kernel.sysctl = {
     # Prevent boot console kernel log information leaks
     "kernel.printk" = "3 3 3 3";
