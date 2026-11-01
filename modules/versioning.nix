@@ -412,6 +412,31 @@ let
         See docs/upgrading.md, "Upgrading to config version 0.1.3".
       '';
     }
+    {
+      version = "0.1.4";
+      # Before 0.1.4, these modules granted the operator access whenever the
+      # operator user existed, even with the operator role disabled.
+      # Only configs that don't grant the access themselves are affected.
+      condition = let
+        operator = config.nix-bitcoin.operator;
+        lnd = config.services.lnd;
+        clnrest = config.services.clightning.plugins.clnrest;
+        access = config.nix-bitcoin.onionAddresses.access.${operator.name} or [];
+        lacks = service: !(elem service access);
+      in !operator.enable
+         && config.users.users ? ${operator.name}
+         && (lnd.enable && lnd.lndconnect.enable && lnd.lndconnect.onion && lacks "lnd-rest"
+             || clnrest.enable && clnrest.lnconnect.enable && clnrest.lnconnect.onion && lacks "clnrest");
+      message = ''
+        lndconnect and lnconnect-clnrest now give the operator user access to the
+        lnd-rest and clnrest onion addresses only when `nix-bitcoin.operator.enable`
+        is set. The operator user `${config.nix-bitcoin.operator.name}` exists, but the
+        operator role is disabled, so the user loses this access.
+        To keep it, set `nix-bitcoin.operator.enable = true`, or add the services to
+        `nix-bitcoin.onionAddresses.access.${config.nix-bitcoin.operator.name}`.
+        See docs/upgrading.md, "Upgrading to config version 0.1.4".
+      '';
+    }
   ];
 
   clightningRestUsed = options.services.clightning-rest.isDefined

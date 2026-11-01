@@ -200,6 +200,11 @@ See: [Secrets dir](./configuration.md#secrets-dir)
    ```
    lnconnect-clnrest
    ```
+   `lnconnect-clnrest` reads the onion address from the operator user's directory.
+   The operator user gets access to it when the operator role is enabled
+   (`nix-bitcoin.operator.enable = true;`, which the secure-node preset sets).
+   With the role disabled, grant the access explicitly:
+   `nix-bitcoin.onionAddresses.access.<operator name> = [ "clnrest" ];`
 
 5. Configure ZEUS
    - Add a new node and scan the QR code
