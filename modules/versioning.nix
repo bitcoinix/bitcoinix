@@ -412,6 +412,37 @@ let
         See docs/upgrading.md, "Upgrading to config version 0.1.3".
       '';
     }
+    {
+      version = "0.1.5";
+      # Before 0.1.5, lnconnect-clnrest granted the operator clnrest onion access
+      # whenever the operator user existed, even with the operator role disabled.
+      # Only configs that don't grant the access themselves are affected.
+      # The operator's lnd-rest access isn't checked here: lndconnect reads the
+      # lnd user's copy, and the only reader of the operator's copy is nodeinfo,
+      # which enables the operator role itself.
+      condition = let
+        operator = config.nix-bitcoin.operator;
+        clnrest = config.services.clightning.plugins.clnrest;
+        access = config.nix-bitcoin.onionAddresses.access.${operator.name} or [];
+      in !operator.enable
+         && config.users.users ? ${operator.name}
+         && clnrest.enable && clnrest.lnconnect.enable && clnrest.lnconnect.onion
+         && !(elem "clnrest" access);
+      message = let
+        name = config.nix-bitcoin.operator.name;
+      in ''
+        lnconnect-clnrest now gives the operator user access to the clnrest onion
+        address only when `nix-bitcoin.operator.enable` is set. The operator user
+        `${name}` exists, but the operator role is disabled, so the user loses this
+        access.
+        To keep it, set `nix-bitcoin.operator.enable = true`, or add "clnrest" to
+        `nix-bitcoin.onionAddresses.access.${name}`. To run `lnconnect-clnrest` as
+        `${name}` instead of root, also add "${config.services.clightning.group}" to
+        `users.users.${name}.extraGroups`. That group can read the admin rune and use
+        the clightning RPC socket.
+        See docs/upgrading.md, "Upgrading to config version 0.1.5".
+      '';
+    }
   ];
 
   clightningRestUsed = options.services.clightning-rest.isDefined

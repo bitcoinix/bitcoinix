@@ -23,6 +23,47 @@ This fetches the latest release, verifies the signature on its release tag and u
 It refuses to switch to a release older than the one currently pinned. To downgrade on purpose,
 run `fetch-release.sh` with `releaseVersion=<version>` and write its output to `nix-bitcoin-release.nix`.
 
+## Upgrading to config version 0.1.5
+
+`services.lnd.lndconnect.onion` and
+`services.clightning.plugins.clnrest.lnconnect.onion` now give the operator user
+access to the `lnd-rest` and `clnrest` onion addresses only when
+`nix-bitcoin.operator.enable` is set. This matches the access to the other onion
+addresses. Before, the operator user received this access whenever it existed,
+for example when `nix-bitcoin.operator.name` named an existing account and the
+operator role was disabled. When the operator user didn't exist at all, the
+`onion-addresses` service failed and published no onion address for anyone.
+Evaluation now fails if `nix-bitcoin.onionAddresses.access` names a user that
+isn't defined.
+
+`lndconnect` isn't affected. It runs as the lnd user and reads the lnd user's copy
+of the address. With the operator role disabled, only `lnconnect-clnrest` reads the
+address from the operator user's directory. `nodeinfo` reads it too, but it enables
+the operator role itself. So with `clnrest.lnconnect.onion` enabled, evaluation
+fails unless the operator user has `clnrest` access. If you use it with the operator
+role disabled, choose one of the following:
+
+- Enable the operator role. It merges into an existing account of the same name,
+  but also adds the operator's groups and its permission to run commands as service
+  users:
+  ```nix
+  nix-bitcoin.operator.enable = true;
+  ```
+- Keep the role disabled and grant only the onion address access:
+  ```nix
+  nix-bitcoin.onionAddresses.access.<operator name> = [ "clnrest" ];
+  ```
+  `lnconnect-clnrest` also reads the admin rune, which only the `clightning` group
+  can read. Without the role, run `lnconnect-clnrest` as root, or add the user to
+  this group:
+  ```nix
+  users.users.<operator name>.extraGroups = [ "clightning" ];
+  ```
+  Members of this group can read the admin rune and use the clightning RPC socket,
+  so they have full control over the node.
+
+After migrating your configuration, set `nix-bitcoin.configVersion = "0.1.5";`.
+
 ## Upgrading to config version 0.1.3
 
 Bitcoin Knots support and the `services.bitcoind.package` option have been removed.
