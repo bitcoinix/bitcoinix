@@ -70,11 +70,16 @@ def test_netns_isolation():
     for service in enabled_tests.intersection(test_data["netns"]):
         veth = f"nb-veth-{test_data['netns'][service]['id']}"
         assert_full_match(f"ip netns exec nb-{service} ip -6 addr show dev {veth}", "")
-        # The netns scenarios turn MPTCP off on the host, and every service
-        # namespace must inherit that
-        assert_full_match(
-            f"ip netns exec nb-{service} cat /proc/sys/net/mptcp/enabled", "0\n"
-        )
+
+    # The netns scenarios turn MPTCP off on the host, and every service
+    # namespace must inherit that, including the ones without a test of their own.
+    # Timer-started services like charge-lnd have no namespace yet, so check the
+    # namespaces that exist.
+    namespaces = succeed("ip netns list | cut -d' ' -f1").split()
+    assert "nb-bitcoind" in namespaces, namespaces
+    for ns in [f"nb-{service}" for service in test_data["netns"]]:
+        if ns in namespaces:
+            assert_full_match(f"ip netns exec {ns} cat /proc/sys/net/mptcp/enabled", "0\n")
 
     # netns addresses can not be bound to in the main netns.
     # This prevents processes in the main netns from impersonating nix-bitcoin services.
