@@ -164,11 +164,23 @@ in {
           echo 1 > /proc/sys/net/ipv6/conf/${peer}/disable_ipv6
           ${ip} link set ${peer} up
           ${ip} link set ${peer} master nb-br
+          # net.mptcp.enabled is per network namespace, and a new one starts at
+          # the kernel default. Pass the host's value in, so turning MPTCP off
+          # on the host (like presets/hardened-extended does) covers the
+          # services in their namespaces too. The copy is made when the netns
+          # is set up, so a later change on the host needs a reboot.
+          if [ -e /proc/sys/net/mptcp/enabled ]; then
+            hostMptcp=$(cat /proc/sys/net/mptcp/enabled)
+            export hostMptcp
+          fi
           exec ${nsenter} --net=/run/netns/${netnsName} ${script "in-netns" setupInNetns}
         '';
 
         setupInNetns = ''
           ${ip} link set lo up
+          if [ -n "''${hostMptcp:-}" ]; then
+            echo "$hostMptcp" > /proc/sys/net/mptcp/enabled
+          fi
           # The iptables rules below cover IPv4 only. Without this, the link
           # gets an IPv6 link-local address and other netns can reach it over
           # the bridge unfiltered.
