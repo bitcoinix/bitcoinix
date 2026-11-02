@@ -100,6 +100,44 @@ let
     networking.firewall.backend = "iptables";
     networking.firewall.package = pkgs.iptables;
   };
+  wireguardLndconnect = {
+    imports = [ ../modules/presets/wireguard.nix ];
+    services.lnd = { enable = true; lndconnect.enable = true; };
+  };
+  wireguardNftablesIptablesBackend = evaluate {
+    imports = [ wireguardLndconnect ];
+    networking.nftables.enable = true;
+    networking.firewall.backend = "iptables";
+  };
+  wireguardNftablesIptables = {
+    imports = [ wireguardLndconnect ];
+    networking.nftables.enable = true;
+    networking.firewall.backend = "iptables";
+    networking.firewall.package = pkgs.iptables;
+  };
+  wireguardNftablesIptablesPackage = evaluate wireguardNftablesIptables;
+  wireguardNftablesIptablesExtraPackage = evaluate {
+    imports = [ wireguardLndconnect ];
+    networking.nftables.enable = true;
+    networking.firewall.backend = "iptables";
+    networking.firewall.extraPackages = [ pkgs.iptables ];
+  };
+  wireguardNftablesRuleset = evaluate {
+    imports = [ wireguardNftablesIptables ];
+    networking.nftables.ruleset = "table inet extra { }";
+  };
+  wireguardNftablesOldStateVersion = evaluate {
+    imports = [ wireguardNftablesIptables ];
+    system.stateVersion = lib.mkForce "23.05";
+  };
+  wireguardNftablesTables = evaluate {
+    imports = [ wireguardNftablesIptables ];
+    networking.nftables.tables.extra = { family = "inet"; content = ""; };
+  };
+  wireguardNftablesIptablesTable = evaluate {
+    imports = [ wireguardNftablesIptables ];
+    networking.nftables.tables.filter = { family = "ip"; content = ""; };
+  };
   customMempoolUser = evaluate {
     services.mempool = { enable = true; user = "mempool-custom"; };
   };
@@ -268,6 +306,38 @@ let
     testNetnsAllowsNftablesWithIptablesPackage = {
       expr = failedAssertions netnsNftablesIptablesPackage;
       expected = [];
+    };
+    testWireguardRejectsNftablesWithIptablesBackend = {
+      expr = map (lib.hasInfix "need `iptables` on the firewall service's PATH")
+        (failedAssertions wireguardNftablesIptablesBackend);
+      expected = [ true ];
+    };
+    testWireguardAllowsNftablesWithIptablesPackage = {
+      expr = failedAssertions wireguardNftablesIptablesPackage;
+      expected = [];
+    };
+    testWireguardAllowsNftablesWithIptablesExtraPackage = {
+      expr = failedAssertions wireguardNftablesIptablesExtraPackage;
+      expected = [];
+    };
+    testWireguardRejectsNftablesRuleset = {
+      expr = map (lib.hasInfix "`networking.nftables.flushRuleset` deletes them")
+        (failedAssertions wireguardNftablesRuleset);
+      expected = [ true ];
+    };
+    testWireguardRejectsNftablesOldStateVersion = {
+      expr = map (lib.hasInfix "`networking.nftables.flushRuleset` deletes them")
+        (failedAssertions wireguardNftablesOldStateVersion);
+      expected = [ true ];
+    };
+    testWireguardAllowsNftablesTables = {
+      expr = failedAssertions wireguardNftablesTables;
+      expected = [];
+    };
+    testWireguardRejectsNftablesIptablesTable = {
+      expr = map (lib.hasInfix "`networking.nftables.tables` replaces ip filter")
+        (failedAssertions wireguardNftablesIptablesTable);
+      expected = [ true ];
     };
     testNetnsRESTAddresses = {
       expr = getRestAddresses netns;

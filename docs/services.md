@@ -291,6 +291,18 @@ There are two ways to establish a secure, direct connection:
      };
    };
    ```
+   The preset guards the REST API with `networking.firewall.extraCommands` rules. They need
+   the iptables firewall backend and `iptables` on the firewall service's PATH, and firewalld
+   isn't supported. `networking.nftables` can stay enabled if you set
+   `networking.firewall.backend = "iptables"` and `networking.firewall.package = pkgs.iptables`
+   (or add `pkgs.iptables` to `networking.firewall.extraPackages`). Then put your own nftables
+   rules in `networking.nftables.tables` and keep `networking.nftables.flushRuleset = false`.
+   Flushing the ruleset deletes the preset's rules. It's on by default when
+   `networking.nftables.ruleset` or `rulesetFile` is set or `system.stateVersion` is older than 23.11.
+   Don't name a table `filter` in the `ip` or `ip6` family, since iptables keeps its rules there.
+   If you fix either of these on a running node, run `systemctl restart firewall` once after
+   deploying, since the first reload still runs the old deletions.
+
 3. Deploy your configuration.
 
 4. If your node is behind an external firewall or NAT (e.g. a router), add the following port forwarding
