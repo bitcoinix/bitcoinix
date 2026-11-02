@@ -13,6 +13,7 @@ set -euo pipefail
 #     Packages for which the stable und unstable versions are identical are
 #     pinned to stable.
 #     All other pkgs are pinned to unstable.
+# - Write ../versions.json with the selected package versions and nixpkgs channels.
 
 forceRun=
 nixosVersion=
@@ -78,3 +79,6 @@ if [[ $pinnedSrc != $(cat "$pinned") ]]; then
     echo
     echo "Updated pinned.nix"
 fi
+
+nix eval --json -f update-flake.nix versionsFile |
+    nix shell --inputs-from .. nixpkgs#jq -c jq . > ../versions.json

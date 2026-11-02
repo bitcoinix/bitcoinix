@@ -1,0 +1,54 @@
+{
+  "bitcoin": {
+    "channel": "stable",
+    "version": "32.1"
+  },
+  "bitcoind": {
+    "channel": "stable",
+    "version": "32.1"
+  },
+  "btcpayserver": {
+    "channel": "unstable",
+    "version": "2.4.6"
+  },
+  "charge-lnd": {
+    "channel": "stable",
+    "version": "0.3.1"
+  },
+  "clboss": {
+    "channel": "unstable",
+    "version": "0.17.2"
+  },
+  "clightning": {
+    "channel": "unstable",
+    "version": "26.06.9"
+  },
+  "electrs": {
+    "channel": "unstable",
+    "version": "0.12.0"
+  },
+  "extra-container": {
+    "channel": "stable",
+    "version": "0.17"
+  },
+  "fulcrum": {
+    "channel": "unstable",
+    "version": "2.1.4"
+  },
+  "lnd": {
+    "channel": "unstable",
+    "version": "0.21.6-beta"
+  },
+  "lndconnect": {
+    "channel": "stable",
+    "version": "0.2.1"
+  },
+  "lndinit": {
+    "channel": "unstable",
+    "version": "0.1.38-beta"
+  },
+  "nbxplorer": {
+    "channel": "unstable",
+    "version": "2.6.17"
+  }
+}
