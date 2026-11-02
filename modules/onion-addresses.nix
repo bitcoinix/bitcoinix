@@ -42,7 +42,10 @@ let
 
   cfg = config.nix-bitcoin.onionAddresses;
   nbLib = config.nix-bitcoin.lib;
-  missingUsers = filter (user: !(hasAttr user config.users.users)) (attrNames cfg.access);
+  # The service chowns to these names, so compare with the login names of the
+  # enabled accounts, not with the attribute names of `users.users`
+  userNames = map (u: u.name) (filter (u: u.enable or true) (attrValues config.users.users));
+  missingUsers = filter (user: !(elem user userNames)) (attrNames cfg.access);
 in {
   inherit options;
 

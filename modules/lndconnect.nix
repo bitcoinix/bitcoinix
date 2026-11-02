@@ -143,7 +143,12 @@ let
   # This is also true when a config grants the access explicitly
   operatorHasClnrestAccess =
     elem "clnrest" (config.nix-bitcoin.onionAddresses.access.${operatorName} or []);
-  operatorExists = config.users.users ? ${operatorName};
+  # The `users.users` attribute that defines the operator's login, which can
+  # differ from the login name. null if no enabled account has that name.
+  operatorAccount = findFirst (key:
+    let u = config.users.users.${key}; in u.name == operatorName && (u.enable or true)
+  ) null (attrNames config.users.users);
+  operatorExists = operatorAccount != null;
 in {
   inherit options;
 
@@ -213,7 +218,7 @@ in {
               '' + (if operatorExists then ''
                 Or add "clnrest" to `nix-bitcoin.onionAddresses.access.${operatorName}`.
                 To run `lnconnect-clnrest` as `${operatorName}` instead of root, also add
-                "${clightning.group}" to `users.users.${operatorName}.extraGroups`. That group
+                "${clightning.group}" to `users.users.${operatorAccount}.extraGroups`. That group
                 can read the admin rune and use the clightning RPC socket.
               '' else ''
                 Or define the user `${operatorName}` and grant the access explicitly,
