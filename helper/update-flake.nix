@@ -77,8 +77,17 @@ in rec {
     }
   '';
 
-  versionsFile = lib.mapAttrs (name: version: {
-    inherit version;
-    channel = if versions.stable ? ${name} then "stable" else "unstable";
-  }) (versions.stable // versions.unstable);
+  versionsFile = let
+    # Skip the demo VM outputs to avoid evaluating a NixOS system for the manifest.
+    packages = builtins.removeAttrs flake.packages.x86_64-linux [ "runVM" "vm" ];
+    localPkgs = lib.filterAttrs (_: pkg: pkg ? version) packages;
+  in
+    lib.mapAttrs (name: version: {
+      inherit version;
+      channel = if versions.stable ? ${name} then "stable" else "unstable";
+    }) (versions.stable // versions.unstable)
+    // lib.mapAttrs (_: pkg: {
+      inherit (pkg) version;
+      channel = "local";
+    }) localPkgs;
 }

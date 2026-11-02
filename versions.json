@@ -23,6 +23,30 @@
     "channel": "unstable",
     "version": "26.06.9"
   },
+  "clightning-plugins/currencyrate": {
+    "channel": "local",
+    "version": "c0ba9dc"
+  },
+  "clightning-plugins/feeadjuster": {
+    "channel": "local",
+    "version": "c0ba9dc"
+  },
+  "clightning-plugins/monitor": {
+    "channel": "local",
+    "version": "c0ba9dc"
+  },
+  "clightning-plugins/rebalance": {
+    "channel": "local",
+    "version": "c0ba9dc"
+  },
+  "clightning-plugins/zmq": {
+    "channel": "local",
+    "version": "c0ba9dc"
+  },
+  "clnrest": {
+    "channel": "local",
+    "version": "0.2.0"
+  },
   "electrs": {
     "channel": "unstable",
     "version": "0.12.0"
@@ -34,6 +58,10 @@
   "fulcrum": {
     "channel": "unstable",
     "version": "2.1.4"
+  },
+  "hwi": {
+    "channel": "local",
+    "version": "3.1.0"
   },
   "lnd": {
     "channel": "unstable",
@@ -47,8 +75,28 @@
     "channel": "unstable",
     "version": "0.1.38-beta"
   },
+  "mempool-backend": {
+    "channel": "local",
+    "version": "3.3.2"
+  },
+  "mempool-frontend": {
+    "channel": "local",
+    "version": "3.3.2"
+  },
+  "mempool-rust-gbt": {
+    "channel": "local",
+    "version": "3.3.2"
+  },
   "nbxplorer": {
     "channel": "unstable",
     "version": "2.6.17"
+  },
+  "rtl": {
+    "channel": "local",
+    "version": "0.15.16"
+  },
+  "trustedcoin": {
+    "channel": "local",
+    "version": "0.8.7"
   }
 }

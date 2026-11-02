@@ -13,7 +13,7 @@ set -euo pipefail
 #     Packages for which the stable und unstable versions are identical are
 #     pinned to stable.
 #     All other pkgs are pinned to unstable.
-# - Write ../versions.json with the selected package versions and nixpkgs channels.
+# - Write ../versions.json with pinned and local package versions and channels.
 
 forceRun=
 nixosVersion=
