@@ -152,6 +152,9 @@ Run `helper/update-flake.sh` to update all flake inputs. It also regenerates
 [`versions.json`](../versions.json), which maps each pinned package name to its
 selected `version` and nixpkgs `channel` (`stable` or `unstable`).
 
+CI checks that `versions.json` matches the locked inputs. Run
+`./test/ci/check-versions.sh` to check it locally without updating dependencies.
+
 ## Switching to a new NixOS release
 - Run command `update-flake.sh 26.05`
 - Treewide: check if any `TODO-EXTERNAL` comments can be resolved
