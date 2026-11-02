@@ -297,6 +297,15 @@ let
     };
   };
   operatorAccountRoleDisabled = evaluate operatorAccountOnion;
+  # The same, with the account defined under an attribute that isn't its login name
+  operatorRenamedAccountRoleDisabled = evaluate {
+    imports = [ lndconnectOnion ];
+    users.users.account = { name = "alice"; isNormalUser = true; };
+    nix-bitcoin.operator.name = "alice";
+    services.clightning = {
+      inherit (operatorAccountOnion.services.clightning) enable port plugins;
+    };
+  };
   # The migration that docs/upgrading.md describes for a disabled role
   operatorAccountGrant = {
     imports = [ operatorAccountOnion ];
@@ -311,6 +320,15 @@ let
   }).system.stateVersion).success;
   onionAccessUnknownUser = evaluate {
     nix-bitcoin.onionAddresses.access."no-such-user" = [ "bitcoind" ];
+  };
+  # The access key is a login name, which can differ from the attribute name
+  onionAccessRenamedUser = evaluate {
+    users.users.account = { name = "renamed-user"; isNormalUser = true; };
+    nix-bitcoin.onionAddresses.access."renamed-user" = [ "bitcoind" ];
+  };
+  onionAccessDisabledUser = evaluate {
+    users.users.disabled-user = { isNormalUser = true; enable = false; };
+    nix-bitcoin.onionAddresses.access."disabled-user" = [ "bitcoind" ];
   };
   getOnionAccessUsers = config:
     lib.sort lib.lessThan (builtins.attrNames config.nix-bitcoin.onionAddresses.access);
@@ -677,10 +695,13 @@ let
       expr = {
         noUser = hints lnconnectNoOperator;
         existingUser = hints operatorAccountRoleDisabled;
+        renamedAccount = map (lib.hasInfix "users.users.account.extraGroups")
+          (failedAssertions operatorRenamedAccountRoleDisabled);
       };
       expected = {
         noUser = [ { grant = false; defineUser = true; } ];
         existingUser = [ { grant = true; defineUser = false; } ];
+        renamedAccount = [ true ];
       };
     };
     # lndconnect reads the lnd user's copy, so only the clnrest access is checked
@@ -698,6 +719,14 @@ let
     };
     testOnionAccessRejectsUnknownUser = {
       expr = map (lib.hasInfix "no-such-user") (failedAssertions onionAccessUnknownUser);
+      expected = [ true ];
+    };
+    testOnionAccessAcceptsLoginName = {
+      expr = failedAssertions onionAccessRenamedUser;
+      expected = [ ];
+    };
+    testOnionAccessRejectsDisabledUser = {
+      expr = map (lib.hasInfix "disabled-user") (failedAssertions onionAccessDisabledUser);
       expected = [ true ];
     };
     testMempoolCustomUser = {

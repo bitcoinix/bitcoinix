@@ -462,11 +462,15 @@ let
         clnrest = config.services.clightning.plugins.clnrest;
         access = config.nix-bitcoin.onionAddresses.access.${operator.name} or [];
       in !operator.enable
-         && config.users.users ? ${operator.name}
+         && any (u: u.name == operator.name && (u.enable or true)) (attrValues config.users.users)
          && clnrest.enable && clnrest.lnconnect.enable && clnrest.lnconnect.onion
          && !(elem "clnrest" access);
       message = let
         name = config.nix-bitcoin.operator.name;
+        # The attribute that defines the account, which can differ from its name
+        account = findFirst (key:
+          let u = config.users.users.${key}; in u.name == name && (u.enable or true)
+        ) name (attrNames config.users.users);
       in ''
         lnconnect-clnrest now gives the operator user access to the clnrest onion
         address only when `nix-bitcoin.operator.enable` is set. The operator user
@@ -475,7 +479,7 @@ let
         To keep it, set `nix-bitcoin.operator.enable = true`, or add "clnrest" to
         `nix-bitcoin.onionAddresses.access.${name}`. To run `lnconnect-clnrest` as
         `${name}` instead of root, also add "${config.services.clightning.group}" to
-        `users.users.${name}.extraGroups`. That group can read the admin rune and use
+        `users.users.${account}.extraGroups`. That group can read the admin rune and use
         the clightning RPC socket.
         See docs/upgrading.md, "Upgrading to config version 0.1.5".
       '';

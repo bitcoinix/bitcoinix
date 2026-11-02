@@ -107,8 +107,10 @@ role disabled, choose one of the following:
   can read. Without the role, run `lnconnect-clnrest` as root, or add the user to
   this group:
   ```nix
-  users.users.<operator name>.extraGroups = [ "clightning" ];
+  users.users.<operator account>.extraGroups = [ "clightning" ];
   ```
+  `<operator account>` is the `users.users` attribute that defines the account. It's
+  usually the operator name.
   Members of this group can read the admin rune and use the clightning RPC socket,
   so they have full control over the node.
 
