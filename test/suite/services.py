@@ -144,8 +144,12 @@ def test_lnd():
     assert_str_matches(cert_alt_names, 'example.com')
 
     # Go 1.24 listens with Multipath TCP by default. The lnd unit turns that
-    # off, so no lnd socket may show up as an MPTCP listener.
-    mptcp_listeners = succeed("ss -Mlnp")
+    # off, so no lnd socket may show up as an MPTCP listener. Look in lnd's
+    # namespace, and check that ss sees lnd there at all, so the test can't
+    # pass by looking in the wrong place.
+    netns = "ip netns exec nb-lnd " if "netns-isolation" in enabled_tests else ""
+    assert_str_matches(succeed(f"{netns}ss -ltnp"), '"lnd"')
+    mptcp_listeners = succeed(f"{netns}ss -Mlnp")
     assert "lnd" not in mptcp_listeners, mptcp_listeners
 
 

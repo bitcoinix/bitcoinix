@@ -403,6 +403,8 @@ let
       test.data.netns = config.nix-bitcoin.netns-isolation.netns;
       tests.netns-isolation = true;
       environment.systemPackages = [ pkgs.fping ];
+      # The netns-isolation test checks that the service namespaces inherit this
+      boot.kernel.sysctl."net.mptcp.enabled" = "0";
     };
 
     regtestBase = { config, pkgs, ... }: {
