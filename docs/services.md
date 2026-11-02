@@ -218,6 +218,21 @@ See: [Secrets dir](./configuration.md#secrets-dir)
    ```
    lnconnect-clnrest
    ```
+   `lnconnect-clnrest` reads the onion address from the operator user's directory.
+   The operator user gets access to it when the operator role is enabled
+   (`nix-bitcoin.operator.enable = true;`, which the secure-node preset sets).
+   With the role disabled, grant the access explicitly:
+   ```nix
+   nix-bitcoin.onionAddresses.access.<operator name> = [ "clnrest" ];
+   ```
+   `lnconnect-clnrest` also reads the admin rune, which only the `clightning` group can
+   read. The operator role adds the operator user to this group. With the role disabled,
+   run `lnconnect-clnrest` as root, or add the user to the group:
+   ```nix
+   users.users.<operator name>.extraGroups = [ "clightning" ];
+   ```
+   Members of this group can read the admin rune and use the clightning RPC socket,
+   so they have full control over the node.
 
 5. In ZEUS, add a new node and scan the QR code.
 

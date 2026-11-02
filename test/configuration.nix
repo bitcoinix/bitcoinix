@@ -270,6 +270,50 @@ let
     (evaluate {
       services.clightning = { enable = true; replication = { enable = true; } // replication; };
     }).warnings;
+  lndconnectOnion = {
+    services.lnd = { enable = true; lndconnect = { enable = true; onion = true; }; };
+  };
+  lndconnectNoOperator = evaluate lndconnectOnion;
+  lndconnectWithOperator = evaluate {
+    imports = [ lndconnectOnion ];
+    nix-bitcoin.operator.enable = true;
+  };
+  lnconnectNoOperator = evaluate {
+    services.clightning = {
+      enable = true;
+      plugins.clnrest = { enable = true; lnconnect = { enable = true; onion = true; }; };
+    };
+  };
+  # An existing account named as the operator, with the operator role disabled
+  operatorAccountOnion = {
+    imports = [ lndconnectOnion ];
+    users.users.alice.isNormalUser = true;
+    nix-bitcoin.operator.name = "alice";
+    services.clightning = {
+      enable = true;
+      # Don't conflict with the lnd p2p port
+      port = 9736;
+      plugins.clnrest = { enable = true; lnconnect = { enable = true; onion = true; }; };
+    };
+  };
+  operatorAccountRoleDisabled = evaluate operatorAccountOnion;
+  # The migration that docs/upgrading.md describes for a disabled role
+  operatorAccountGrant = {
+    imports = [ operatorAccountOnion ];
+    nix-bitcoin.onionAddresses.access.alice = [ "clnrest" ];
+    users.users.alice.extraGroups = [ "clightning" ];
+  };
+  operatorAccountExplicitAccess = evaluate operatorAccountGrant;
+  # Whether a config written for the last release passes the versioning check
+  passesVersionCheck = module: (builtins.tryEval (evaluate {
+    imports = [ module ];
+    nix-bitcoin.configVersion = "0.1.4";
+  }).system.stateVersion).success;
+  onionAccessUnknownUser = evaluate {
+    nix-bitcoin.onionAddresses.access."no-such-user" = [ "bitcoind" ];
+  };
+  getOnionAccessUsers = config:
+    lib.sort lib.lessThan (builtins.attrNames config.nix-bitcoin.onionAddresses.access);
   getBitcoinDefaults = config: with config.services.bitcoind; {
     inherit network port listen;
     rpc = { inherit (rpc) address port allowip; };
@@ -587,6 +631,74 @@ let
         zstd = [ true true false ];
         none = [ true true false ];
       };
+    };
+    testLndconnectWithoutOperator = {
+      expr = {
+        failed = failedAssertions lndconnectNoOperator;
+        users = getOnionAccessUsers lndconnectNoOperator;
+      };
+      expected = { failed = []; users = [ lndconnectNoOperator.services.lnd.user ]; };
+    };
+    testLndconnectWithOperator = {
+      expr = getOnionAccessUsers lndconnectWithOperator;
+      expected = with lndconnectWithOperator;
+        lib.sort lib.lessThan [ services.lnd.user nix-bitcoin.operator.name ];
+    };
+    testLnconnectOnionRequiresOperator = {
+      expr = map (lib.hasInfix "nix-bitcoin.operator.enable")
+        (failedAssertions lnconnectNoOperator);
+      expected = [ true ];
+    };
+    testOperatorAccountGetsNoAutomaticAccess = {
+      expr = {
+        users = getOnionAccessUsers operatorAccountRoleDisabled;
+        lnconnectFails = map (lib.hasInfix "lnconnect.onion")
+          (failedAssertions operatorAccountRoleDisabled);
+      };
+      expected = {
+        users = [ operatorAccountRoleDisabled.services.lnd.user ];
+        lnconnectFails = [ true ];
+      };
+    };
+    testOperatorAccountExplicitAccess = {
+      expr = with operatorAccountExplicitAccess; {
+        failed = failedAssertions operatorAccountExplicitAccess;
+        alice = nix-bitcoin.onionAddresses.access.alice;
+      };
+      expected = { failed = []; alice = [ "clnrest" ]; };
+    };
+    # Offer the access hint only when the operator user exists
+    testLnconnectAssertionHints = let
+      hints = config: map (message: {
+        grant = lib.hasInfix "extraGroups" message;
+        defineUser = lib.hasInfix "define the user" message;
+      }) (failedAssertions config);
+    in {
+      expr = {
+        noUser = hints lnconnectNoOperator;
+        existingUser = hints operatorAccountRoleDisabled;
+      };
+      expected = {
+        noUser = [ { grant = false; defineUser = true; } ];
+        existingUser = [ { grant = true; defineUser = false; } ];
+      };
+    };
+    # lndconnect reads the lnd user's copy, so only the clnrest access is checked
+    testVersioningOperatorAccess = {
+      expr = {
+        clnrest = passesVersionCheck operatorAccountOnion;
+        lndOnly = passesVersionCheck {
+          imports = [ lndconnectOnion ];
+          users.users.alice.isNormalUser = true;
+          nix-bitcoin.operator.name = "alice";
+        };
+        explicitAccess = passesVersionCheck operatorAccountGrant;
+      };
+      expected = { clnrest = false; lndOnly = true; explicitAccess = true; };
+    };
+    testOnionAccessRejectsUnknownUser = {
+      expr = map (lib.hasInfix "no-such-user") (failedAssertions onionAccessUnknownUser);
+      expected = [ true ];
     };
     testMempoolCustomUser = {
       expr = with customMempoolUser; {
