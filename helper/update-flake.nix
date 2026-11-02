@@ -76,4 +76,9 @@ in rec {
       inherit pkgs pkgsUnstable;
     }
   '';
+
+  versionsFile = lib.mapAttrs (name: version: {
+    inherit version;
+    channel = if versions.stable ? ${name} then "stable" else "unstable";
+  }) (versions.stable // versions.unstable);
 }

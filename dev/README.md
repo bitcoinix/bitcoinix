@@ -145,6 +145,13 @@ See [the test execution phases](../test/README.md#execution-phases) before addin
 or moving a test. Configuration defaults and invalid option combinations can
 be covered by the [checks without a VM](../test/README.md#checks-without-a-vm).
 
+## Updating dependencies
+
+Run `helper/update-flake.sh` to update all flake inputs. It also regenerates
+[`pkgs/pinned.nix`](../pkgs/pinned.nix) and
+[`versions.json`](../versions.json), which maps each pinned package name to its
+selected `version` and nixpkgs `channel` (`stable` or `unstable`).
+
 ## Switching to a new NixOS release
 - Run command `update-flake.sh 26.05`
 - Treewide: check if any `TODO-EXTERNAL` comments can be resolved
