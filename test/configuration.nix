@@ -233,6 +233,17 @@ let
         rpc = tests.testBitcoinDefaults.expected.rpc // { port = 18443; };
       };
     };
+    testCurrencyrateMigration = {
+      expr = map (case: (builtins.tryEval (evaluate {
+        nix-bitcoin.configVersion = case.version;
+        services.clightning.plugins.currencyrate.enable = case.enable;
+      }).system.stateVersion).success) [
+        { version = "0.1.4"; enable = true; }
+        { version = "0.1.4"; enable = false; }
+        { version = "0.1.5"; enable = true; }
+      ];
+      expected = [ false true true ];
+    };
     testElectrsEnablesBitcoinREST = {
       expr = with electrs.services.bitcoind; [ enable rest.enable ];
       expected = [ true true ];

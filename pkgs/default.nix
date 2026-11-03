@@ -10,8 +10,12 @@ in
   }
 }:
 let self = {
-  clightning-plugins = pkgs.lib.recurseIntoAttrs (import ./clightning-plugins pkgs self.nbPython3Packages);
-  clnrest = pkgs.callPackage ./clnrest { inherit (self.pinned) clightning; };
+  clightning-plugins = pkgs.lib.recurseIntoAttrs (
+    (import ./clightning-plugins/python.nix pkgs self.nbPython3Packages) // {
+      inherit (pkgs.callPackage ./clightning-plugins/rust.nix { inherit (self.pinned) clightning; })
+        clnrest currencyrate;
+    }
+  );
   rtl = pkgs.callPackage ./rtl { inherit (self) fetchNodeModules; };
   inherit (pkgs.callPackage ./mempool { inherit (self) fetchNodeModules; })
     mempool-backend

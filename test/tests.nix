@@ -85,7 +85,7 @@ let
         nbPkgs = config.nix-bitcoin.pkgs;
         pluginPkgs = nbPkgs.clightning-plugins // {
           clboss.path = "${plugins.clboss.package}/bin/clboss";
-          clnrest.path = "${plugins.clnrest.package}/bin/clnrest";
+          clnrest = plugins.clnrest.package;
           trustedcoin.path = "${plugins.trustedcoin.package}/bin/trustedcoin";
         };
       in map (plugin: pluginPkgs.${plugin}.path) enabled;
@@ -259,6 +259,7 @@ let
     (mkIf config.test.features.clightningPlugins {
       services.clightning.plugins = {
         clboss.enable = true;
+        currencyrate.enable = true;
         feeadjuster.enable = true;
         monitor.enable = true;
         rebalance.enable = true;

@@ -117,6 +117,13 @@ def test_clightning():
         active = [os.path.splitext(os.path.basename(p))[0] for p in enabled_plugins]
         machine.log("\n".join(["Active clightning plugins:", *active]))
 
+        # Check the Rust currencyrate RPCs without querying public price sources.
+        if "cln-currencyrate" in active:
+            methods = {method["command"].split()[0]
+                       for method in succeed_json("lightning-cli -J help")["help"]}
+            assert {"currencyrate", "currencyconvert", "listcurrencyrates"} <= methods
+            assert "currencyrates" not in methods
+
         if "feeadjuster" in active:
             # This is a one-shot service, so this command only succeeds if the service succeeds
             succeed("systemctl start clightning-feeadjuster")

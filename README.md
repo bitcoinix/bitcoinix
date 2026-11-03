@@ -125,12 +125,12 @@ NixOS modules ([src](modules/modules.nix))
     Available plugins:
     * [CLBOSS](https://github.com/ksedgwic/clboss): automated Core Lightning node manager
     * [clnrest](https://docs.corelightning.org/docs/rest): REST API and WebSocket notifications for Core Lightning
-    * [currencyrate](https://github.com/lightningd/plugins/tree/master/currencyrate): currency converter
+    * [currencyrate](https://github.com/ElementsProject/lightning/tree/master/plugins/currencyrate-plugin): currency converter
     * [feeadjuster](https://github.com/lightningd/plugins/tree/master/feeadjuster): automatically adjusts channel fees to keep channels balanced
     * [monitor](https://github.com/lightningd/plugins/tree/master/monitor): helps you analyze the health of your peers and channels
     * [rebalance](https://github.com/lightningd/plugins/tree/master/rebalance): keeps your channels balanced
     * [trustedcoin](https://github.com/nbd-wtf/trustedcoin) ([experimental](docs/services.md#trustedcoin)): replaces bitcoind with trusted public explorers
-    * [zmq](https://github.com/lightningd/plugins/tree/master/zmq): publishes notifications via ZeroMQ to configured endpoints
+    * [zmq](https://github.com/lightningd/plugins/tree/master/cl-zmq): publishes notifications via ZeroMQ to configured endpoints
   * [LND](https://github.com/lightningnetwork/lnd) with support for announcing an onion service and [static channel backups](https://github.com/lightningnetwork/lnd/blob/master/docs/recovery.md)
     * [charge-lnd](https://github.com/accumulator/charge-lnd): policy-based channel fee manager
   * [lndconnect](https://github.com/LN-Zap/lndconnect): connect your wallet to LND or

@@ -37,8 +37,8 @@ let
       };
       package = mkOption {
         type = types.package;
-        default = config.nix-bitcoin.pkgs.clnrest;
-        defaultText = "config.nix-bitcoin.pkgs.clnrest";
+        default = config.nix-bitcoin.pkgs.clightning-plugins.clnrest;
+        defaultText = "config.nix-bitcoin.pkgs.clightning-plugins.clnrest";
         description = "The package providing clnrest binaries.";
       };
     };
@@ -64,7 +64,7 @@ in
 
   config = mkIf cfg.enable {
     services.clightning.pluginsConfig = ''
-      plugin=${cfg.package}/bin/clnrest
+      plugin=${lib.getExe cfg.package}
       clnrest-host=${cfg.address}
       clnrest-port=${toString cfg.port}
     '';
