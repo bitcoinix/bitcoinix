@@ -26,6 +26,18 @@ The [README](https://github.com/bitcoinix/bitcoinix#features) lists all services
 [NixOS options search](https://search.nixos.org/flakes?channel=unstable&sort=relevance&type=options&query=bitcoin)
 lists their options.
 
+## Software versions
+
+The services bitcoinix packages or pins in this release:
+
+{{#include versions-table.md}}
+
+Channel `local` packages other than `hwi` are built by bitcoinix from sources it pins and always
+have this version. `unstable` packages come by default from the `nixpkgs-unstable` input that
+bitcoinix locks. `stable` packages, and `hwi`, which bitcoinix only wraps, come from your system's
+nixpkgs, so their version matches the table only if your nixpkgs is the one that bitcoinix locks or
+if you set `nix-bitcoin.useVersionLockedPkgs = true`.
+
 ## Security
 
 * Only the services you enable and their dependencies are installed.

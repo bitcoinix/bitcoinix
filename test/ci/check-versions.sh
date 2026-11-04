@@ -12,3 +12,10 @@ if ! diff -u versions.json "$expected"; then
     echo "error: versions.json is out of date. Run helper/update-flake.sh and commit the generated files." >&2
     exit 1
 fi
+
+# The docs table is generated from versions.json
+helper/gen-docs-versions.sh > "$expected"
+if ! diff -u docs/versions-table.md "$expected"; then
+    echo "error: docs/versions-table.md is out of date. Run helper/gen-docs-versions.sh > docs/versions-table.md and commit it." >&2
+    exit 1
+fi
