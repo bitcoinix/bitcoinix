@@ -97,7 +97,10 @@ jobs:
           src=$RUNNER_TEMP/release
           mkdir -p "$src"
           git archive "refs/tags/v$version" | tar -x -C "$src"
-          nix shell --inputs-from "path:$trusted" nixpkgs#mdbook -c mdbook build "$src"
+          # Show the release in the menu bar and page titles. The version is not stored
+          # in the repo, so it can only be injected here.
+          MDBOOK_BOOK__TITLE="bitcoinix v$version" \
+              nix shell --inputs-from "path:$trusted" nixpkgs#mdbook -c mdbook build "$src"
           echo "BOOK_DIR=$src/book" >> "$GITHUB_ENV"
       - if: github.event_name != 'pull_request'
         uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
