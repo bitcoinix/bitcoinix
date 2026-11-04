@@ -9,7 +9,7 @@
   },
   "btcpayserver": {
     "channel": "unstable",
-    "version": "2.4.6"
+    "version": "2.4.7"
   },
   "charge-lnd": {
     "channel": "stable",
