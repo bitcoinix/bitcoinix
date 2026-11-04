@@ -28,7 +28,8 @@ lists their options.
 
 ## Software versions
 
-The services bitcoinix packages or pins in this release:
+This release packages or pins the following software. Each version links to the project's
+release notes, tag or source directory:
 
 {{#include versions-table.md}}
 
