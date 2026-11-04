@@ -23,29 +23,29 @@
     "channel": "unstable",
     "version": "26.06.9"
   },
+  "clightning-plugins/clnrest": {
+    "channel": "local",
+    "version": "0.2.0"
+  },
   "clightning-plugins/currencyrate": {
     "channel": "local",
-    "version": "c0ba9dc"
+    "version": "0.1.0"
   },
   "clightning-plugins/feeadjuster": {
     "channel": "local",
-    "version": "c0ba9dc"
+    "version": "0.1.0-f0d33fd"
   },
   "clightning-plugins/monitor": {
     "channel": "local",
-    "version": "c0ba9dc"
+    "version": "0.1.0-f0d33fd"
   },
   "clightning-plugins/rebalance": {
     "channel": "local",
-    "version": "c0ba9dc"
+    "version": "0.1.0-f0d33fd"
   },
   "clightning-plugins/zmq": {
     "channel": "local",
-    "version": "c0ba9dc"
-  },
-  "clnrest": {
-    "channel": "local",
-    "version": "0.2.0"
+    "version": "0.1.0-f0d33fd"
   },
   "electrs": {
     "channel": "unstable",

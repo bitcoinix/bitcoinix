@@ -409,6 +409,27 @@ services.clightning = {
 
 Please have a look at the module for a plugin (e.g. [clboss.nix](https://github.com/bitcoinix/bitcoinix/blob/master/modules/clightning-plugins/clboss.nix)) to learn its configuration options.
 
+#### Currency rates
+
+Enable the Rust [cln-currencyrate plugin](https://github.com/ElementsProject/lightning/tree/master/plugins/currencyrate-plugin):
+
+```nix
+services.clightning.plugins.currencyrate.enable = true;
+```
+
+Use `lightning-cli currencyconvert 100 USD` to convert a fiat amount into
+millisatoshis, `lightning-cli listcurrencyrates USD` to list source prices in
+USD per BTC, or `lightning-cli currencyrate USD` to get the median rate.
+
+For custom price sources, set `currencyrate-add-source` and
+`currencyrate-disable-source` in `services.clightning.extraConfig`; see the
+[upstream plugin documentation](https://github.com/ElementsProject/lightning/tree/master/plugins/currencyrate-plugin).
+The plugin follows CLN's configured proxy and shares its service sandbox and
+network namespace.
+
+If you used the former Python plugin, follow the
+[currencyrate migration instructions](./upgrading.md#upgrading-to-config-version-015).
+
 #### Trustedcoin
 When `services.clightning.tor.proxy` is enabled, [trustedcoin](https://github.com/nbd-wtf/trustedcoin)
 also uses Tor for all external connections by default.

@@ -9,8 +9,6 @@ rec {
       pyln-proto = clightningPkg ./pyln-proto;
       pyln-bolt7 = clightningPkg ./pyln-bolt7;
       pylightning = clightningPkg ./pylightning;
-      # TODO: Remove after 2026-05-09
-      clnrest = throw "`nbPython3Packages.clnrest` has been replaced with nix-bitcoin pkg `clnrest` (Rust rewrite)";
     };
 
   nbPython3Packages = (python3.override {

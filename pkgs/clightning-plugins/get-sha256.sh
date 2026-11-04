@@ -8,7 +8,7 @@ archive_hash () {
     nix-prefetch-url --unpack "https://github.com/${repo}/archive/${rev}.tar.gz" 2> /dev/null | tail -n 1
 }
 
-echo "Fetching latest lightningd/plugins release"
+echo "Fetching latest lightningd/plugins master"
 latest=$(git ls-remote https://github.com/lightningd/plugins master | cut -f 1)
 echo "rev = \"${latest}\";"
-echo "sha256 = \"$(archive_hash lightningd/plugins "$latest")\";"
+echo "hash = \"$(nix hash convert --hash-algo sha256 --to sri "$(archive_hash lightningd/plugins "$latest")")\";"

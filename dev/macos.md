@@ -152,8 +152,8 @@ nb nix build --no-link \
   .#checks.aarch64-linux.test-runner \
   .#checks.aarch64-linux.cve-tools
 
-# Build a package, replacing clnrest with the package being changed.
-nb nix build --no-link .#packages.aarch64-linux.clnrest
+# Build a package, replacing clightning-plugins/clnrest with the package being changed.
+nb nix build --no-link '.#packages.aarch64-linux.clightning-plugins/clnrest'
 
 # Evaluate all supported outputs and run checks for the guest's system.
 nb nix flake check --all-systems

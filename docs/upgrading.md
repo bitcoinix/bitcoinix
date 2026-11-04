@@ -23,6 +23,52 @@ This fetches the latest release, verifies the signature on its release tag and u
 It refuses to switch to a release older than the one currently pinned. To downgrade on purpose,
 run `fetch-release.sh` with `releaseVersion=<version>` and write its output to `nix-bitcoin-release.nix`.
 
+## Upgrading to config version 0.1.5
+
+The clnrest package has moved from `nix-bitcoin.pkgs.clnrest` to
+`nix-bitcoin.pkgs.clightning-plugins.clnrest`. Update explicit package references
+in custom configurations. For flake builds, use
+`'.#packages.aarch64-linux.clightning-plugins/clnrest'` (or `x86_64-linux`)
+instead of `'.#packages.aarch64-linux.clnrest'`.
+The default package is selected automatically.
+
+The Python currencyrate plugin has been replaced by Rust `cln-currencyrate`.
+Keep `services.clightning.plugins.currencyrate.enable = true`, but update any
+custom scripts before deploying:
+
+- Replace `currencyrates <currency>` with `listcurrencyrates <currency>`.
+  The response is now `{"currencyrates": [{"source": "…", "amount": 95000.0}, …]}`,
+  with amounts in fiat per BTC, replacing the map of source names to msat per
+  fiat unit. Adapt both parsing and units.
+  `currencyrate <currency>` returns a single median rate in fiat per BTC.
+- `currencyconvert` still takes `amount` and `currency`, for example
+  `lightning-cli currencyconvert 10 USD`, but its `msat` result is now a JSON
+  number rather than a string with an `msat` suffix. The median is now calculated
+  from fiat prices before conversion.
+- Rename `add-source` and `disable-source` in `services.clightning.extraConfig`
+  to `currencyrate-add-source` and `currencyrate-disable-source`. Review them
+  against the [new plugin's README](https://github.com/ElementsProject/lightning/tree/master/plugins/currencyrate-plugin).
+  The plugin follows CLN's configured proxy.
+
+After deploying, check that `lightning-cli help currencyconvert` and
+`lightning-cli help listcurrencyrates` list the new RPCs. A live conversion such
+as `lightning-cli currencyconvert 100 USD` also needs reachable price sources.
+
+The rebalance plugin now uses Core Lightning's `askrene` routing. If you enable
+`services.clightning.plugins.rebalance.enable`, update custom scripts and
+configuration before deploying:
+
+- Remove the `getroute_method` argument from `rebalance` RPC calls; it is no
+  longer accepted.
+- Remove `rebalance-getroute`, `rebalance-maxhops` and `rebalance-msatfactor` from
+  `services.clightning.extraConfig` and any included configuration files. These
+  settings are still accepted with a deprecation warning but are ignored, so they
+  no longer control route selection or hop limits.
+- Update scripts that read `rebalancereport`: its `getroute_method`,
+  `maxhops_threshold` and `msatfactor` fields have been removed.
+
+After addressing these changes, set `nix-bitcoin.configVersion = "0.1.5";`.
+
 ## Upgrading to config version 0.1.3
 
 Bitcoin Knots support and the `services.bitcoind.package` option have been removed.
