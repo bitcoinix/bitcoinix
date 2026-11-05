@@ -328,6 +328,10 @@ for the service whose connection helper you enable (see
    Neither applies when the firewall runs `pkgs.iptables-legacy`, whose rules live outside the
    nftables ruleset: set it as `networking.firewall.package`, or keep the default nftables
    package and put it first in `networking.firewall.extraPackages`.
+   iptables-legacy needs a kernel with legacy xtables (`CONFIG_NETFILTER_XTABLES_LEGACY`,
+   or `CONFIG_IP_NF_IPTABLES_LEGACY` on older kernels).
+   The default kernel doesn't enable them, and `firewall.service` then fails to start.
+   `pkgs.linuxPackages_6_12` has them, so set `boot.kernelPackages` to it and reboot.
    If you fix either of these on a running node, run `systemctl restart firewall` once after
    deploying, since the first reload still runs the old deletions.
 
