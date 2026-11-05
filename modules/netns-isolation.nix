@@ -201,8 +201,15 @@ in {
           set -e
           ${src}
         '';
+        setupScript = script "setup" setup;
       in {
-        "${n}".serviceConfig.NetworkNamespacePath = "/var/run/netns/${netnsName}";
+        "${n}" = {
+          serviceConfig.NetworkNamespacePath = "/var/run/netns/${netnsName}";
+          # A changed setup script restarts netns-${n}, which stops this
+          # service because it requires netns-${n}. Restart this service
+          # too, so that a switch starts it again.
+          restartTriggers = [ setupScript ];
+        };
 
         "netns-${n}" = rec {
           requires = [ "nb-netns-bridge.service" ];
@@ -212,7 +219,7 @@ in {
           serviceConfig = {
             Type = "oneshot";
             RemainAfterExit = true;
-            ExecStart = script "setup" setup;
+            ExecStart = setupScript;
           };
           # Link deletion is implicit in netns deletion, but it sometimes only happens
           # after `netns delete` finishes. Add an extra `link del` to ensure that
