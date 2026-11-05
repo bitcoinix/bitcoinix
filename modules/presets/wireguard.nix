@@ -44,6 +44,16 @@ let
   iptablesTablesInNftables = mapAttrsToList (_: t: "${t.family} ${t.name}")
     (filterAttrs (_: t: t.enable && t.name == "filter" && elem t.family [ "ip" "ip6" ])
       config.networking.nftables.tables);
+  # `pkgs.iptables-legacy` keeps its rules in the legacy xtables, outside the
+  # nftables ruleset. It ships `bin/iptables`, so it's the iptables the firewall
+  # runs when its bin comes first on the service's PATH, after only nftables' bin,
+  # which has no iptables. Anything else, such as a renamed or wrapped build,
+  # counts as iptables-nft.
+  firewallUsesIptablesLegacy =
+    findFirst (dir: dir != "${pkgs.nftables}/bin") null
+      (splitString ":" (toString (config.systemd.services.firewall.environment.PATH or null)))
+    == "${pkgs.iptables-legacy}/bin";
+  iptablesUsesNftables = !firewallUsesIptablesLegacy;
 
   serverAddress = "${wgSubnet}.1";
   peerAddress = "${wgSubnet}.2";
@@ -137,8 +147,9 @@ in {
         # runs `flush ruleset` and deletes them while `firewall.service` stays
         # active. NixOS turns it on by default when `ruleset` or `rulesetFile` is
         # set or `system.stateVersion` is older than 23.11. Rules in
-        # `networking.nftables.tables` don't need it.
-        assertion = !needsFirewallRules
+        # `networking.nftables.tables` don't need it. iptables-legacy is exempt:
+        # its rules aren't part of the nftables ruleset, so a flush keeps them.
+        assertion = !needsFirewallRules || !iptablesUsesNftables
                     || !(config.networking.nftables.enable && config.networking.nftables.flushRuleset);
         message = "`nix-bitcoin.wireguard` needs its `networking.firewall.extraCommands` rules to stay in place, but `networking.nftables.flushRuleset` deletes them whenever `nftables.service` starts or reloads. It's on by default when `networking.nftables.ruleset` or `networking.nftables.rulesetFile` is set or `system.stateVersion` is older than 23.11. Move your nftables rules to `networking.nftables.tables` and set `networking.nftables.flushRuleset = false`. Restart `firewall.service` once after deploying, since the first reload still runs the old flush.";
       }
@@ -148,7 +159,9 @@ in {
         # `networking.nftables.tables`, so a table with the same family and name
         # would replace the firewall. Raw `flush` or `delete` commands in
         # `ruleset`, `rulesetFile` or `extraDeletions` aren't checked.
-        assertion = !needsFirewallRules || !config.networking.nftables.enable
+        # iptables-legacy doesn't use these tables, so it's exempt.
+        assertion = !needsFirewallRules || !iptablesUsesNftables
+                    || !config.networking.nftables.enable
                     || iptablesTablesInNftables == [];
         message = "`nix-bitcoin.wireguard` needs its `networking.firewall.extraCommands` rules, which iptables-nft keeps in the `ip filter` and `ip6 filter` tables, but `networking.nftables.tables` replaces ${concatStringsSep " and " iptablesTablesInNftables} on every start or reload of `nftables.service`. Rename the table or use the `inet` family, then restart `firewall.service` once after deploying, since the first reload still deletes the old table.";
       }

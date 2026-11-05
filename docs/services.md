@@ -325,6 +325,9 @@ for the service whose connection helper you enable (see
    Flushing the ruleset deletes the preset's rules. It's on by default when
    `networking.nftables.ruleset` or `rulesetFile` is set or `system.stateVersion` is older than 23.11.
    Don't name a table `filter` in the `ip` or `ip6` family, since iptables keeps its rules there.
+   Neither applies when the firewall runs `pkgs.iptables-legacy`, whose rules live outside the
+   nftables ruleset: set it as `networking.firewall.package`, or keep the default nftables
+   package and put it first in `networking.firewall.extraPackages`.
    If you fix either of these on a running node, run `systemctl restart firewall` once after
    deploying, since the first reload still runs the old deletions.
 
