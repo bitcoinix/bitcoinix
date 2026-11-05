@@ -314,18 +314,24 @@ let
   };
   operatorAccountExplicitAccess = evaluate operatorAccountGrant;
   # Whether a config written for the last release passes the versioning check
-  passesVersionCheck = module: (builtins.tryEval (evaluate {
+  passesVersionCheckAt = version: module: (builtins.tryEval (evaluate {
     imports = [ module ];
-    nix-bitcoin.configVersion = "0.1.4";
+    nix-bitcoin.configVersion = version;
   }).system.stateVersion).success;
+  passesVersionCheck = passesVersionCheckAt "0.1.4";
+  # A user that exists only outside `users.users`, for example via useradd or LDAP
+  onionAccessExternalUser = {
+    nix-bitcoin.onionAddresses.access.external-user = [ "bitcoind" ];
+  };
   onionAccessUnknownUser = evaluate {
     nix-bitcoin.onionAddresses.access."no-such-user" = [ "bitcoind" ];
   };
   # The access key is a login name, which can differ from the attribute name
-  onionAccessRenamedUser = evaluate {
+  onionAccessLoginName = {
     users.users.account = { name = "renamed-user"; isNormalUser = true; };
     nix-bitcoin.onionAddresses.access."renamed-user" = [ "bitcoind" ];
   };
+  onionAccessRenamedUser = evaluate onionAccessLoginName;
   onionAccessDisabledUser = evaluate {
     users.users.disabled-user = { isNormalUser = true; enable = false; };
     nix-bitcoin.onionAddresses.access."disabled-user" = [ "bitcoind" ];
@@ -714,8 +720,20 @@ let
           nix-bitcoin.operator.name = "alice";
         };
         explicitAccess = passesVersionCheck operatorAccountGrant;
+        # An operator account from outside `users.users`, for example via LDAP
+        externalOperator = passesVersionCheck {
+          imports = [ lndconnectOnion ];
+          nix-bitcoin.operator.name = "alice";
+          services.clightning = {
+            enable = true;
+            port = 9736;
+            plugins.clnrest = { enable = true; lnconnect = { enable = true; onion = true; }; };
+          };
+        };
       };
-      expected = { clnrest = false; lndOnly = true; explicitAccess = true; };
+      expected = {
+        clnrest = false; lndOnly = true; explicitAccess = true; externalOperator = false;
+      };
     };
     testOnionAccessRejectsUnknownUser = {
       expr = map (lib.hasInfix "no-such-user") (failedAssertions onionAccessUnknownUser);
@@ -728,6 +746,26 @@ let
     testOnionAccessRejectsDisabledUser = {
       expr = map (lib.hasInfix "disabled-user") (failedAssertions onionAccessDisabledUser);
       expected = [ true ];
+    };
+    # Before 0.1.5, the access could name users that aren't defined or enabled in `users.users`
+    testVersioningOnionAccessUndefinedUser = {
+      expr = {
+        undefined = passesVersionCheck onionAccessExternalUser;
+        current = passesVersionCheckAt "0.1.5" onionAccessExternalUser;
+        currentFails = map (lib.hasInfix "external-user")
+          (failedAssertions (evaluate {
+            imports = [ onionAccessExternalUser ];
+            nix-bitcoin.configVersion = "0.1.5";
+          }));
+        defined = passesVersionCheck onionAccessLoginName;
+        disabled = passesVersionCheck {
+          users.users.disabled-user = { isNormalUser = true; enable = false; };
+          nix-bitcoin.onionAddresses.access."disabled-user" = [ "bitcoind" ];
+        };
+      };
+      expected = {
+        undefined = false; current = true; currentFails = [ true ]; defined = true; disabled = false;
+      };
     };
     testMempoolCustomUser = {
       expr = with customMempoolUser; {
