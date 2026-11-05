@@ -318,7 +318,16 @@ let
     imports = [ module ];
     nix-bitcoin.configVersion = version;
   }).system.stateVersion).success;
-  passesVersionCheck = passesVersionCheckAt "0.1.4";
+  # Whether a 0.1.4 config gets the notice whose message contains `phrase`.
+  # The versioning throw is a definition of `system`, which the module check
+  # forces on any config access, so skip the check here.
+  hasNotice = phrase: module: lib.any (lib.hasInfix phrase) (evaluate {
+    imports = [ module ];
+    nix-bitcoin.configVersion = "0.1.4";
+    _module.check = false;
+  }).nix-bitcoin.versioning.incompatibleChanges;
+  hasOperatorAccessNotice = hasNotice "lnconnect-clnrest now gives the operator user";
+  hasAccessUsersNotice = hasNotice "now accepts only users that are defined";
   # A user that exists only outside `users.users`, for example via useradd or LDAP
   onionAccessExternalUser = {
     nix-bitcoin.onionAddresses.access.external-user = [ "bitcoind" ];
@@ -713,15 +722,15 @@ let
     # lndconnect reads the lnd user's copy, so only the clnrest access is checked
     testVersioningOperatorAccess = {
       expr = {
-        clnrest = passesVersionCheck operatorAccountOnion;
-        lndOnly = passesVersionCheck {
+        clnrest = hasOperatorAccessNotice operatorAccountOnion;
+        lndOnly = hasOperatorAccessNotice {
           imports = [ lndconnectOnion ];
           users.users.alice.isNormalUser = true;
           nix-bitcoin.operator.name = "alice";
         };
-        explicitAccess = passesVersionCheck operatorAccountGrant;
+        explicitAccess = hasOperatorAccessNotice operatorAccountGrant;
         # An operator account from outside `users.users`, for example via LDAP
-        externalOperator = passesVersionCheck {
+        externalOperator = hasOperatorAccessNotice {
           imports = [ lndconnectOnion ];
           nix-bitcoin.operator.name = "alice";
           services.clightning = {
@@ -732,7 +741,7 @@ let
         };
       };
       expected = {
-        clnrest = false; lndOnly = true; explicitAccess = true; externalOperator = false;
+        clnrest = true; lndOnly = false; explicitAccess = false; externalOperator = true;
       };
     };
     testOnionAccessRejectsUnknownUser = {
@@ -750,21 +759,21 @@ let
     # Before 0.1.5, the access could name users that aren't defined or enabled in `users.users`
     testVersioningOnionAccessUndefinedUser = {
       expr = {
-        undefined = passesVersionCheck onionAccessExternalUser;
+        undefined = hasAccessUsersNotice onionAccessExternalUser;
         current = passesVersionCheckAt "0.1.5" onionAccessExternalUser;
         currentFails = map (lib.hasInfix "external-user")
           (failedAssertions (evaluate {
             imports = [ onionAccessExternalUser ];
             nix-bitcoin.configVersion = "0.1.5";
           }));
-        defined = passesVersionCheck onionAccessLoginName;
-        disabled = passesVersionCheck {
+        defined = hasAccessUsersNotice onionAccessLoginName;
+        disabled = hasAccessUsersNotice {
           users.users.disabled-user = { isNormalUser = true; enable = false; };
           nix-bitcoin.onionAddresses.access."disabled-user" = [ "bitcoind" ];
         };
       };
       expected = {
-        undefined = false; current = true; currentFails = [ true ]; defined = true; disabled = false;
+        undefined = true; current = true; currentFails = [ true ]; defined = false; disabled = true;
       };
     };
     testMempoolCustomUser = {

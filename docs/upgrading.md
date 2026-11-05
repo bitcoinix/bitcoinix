@@ -28,8 +28,9 @@ run `fetch-release.sh` with `releaseVersion=<version>` and write its output to `
 ## Upgrading to config version 0.1.5
 
 Currencyrate, rebalance and mempool's `settings.CORE_RPC.PASSWORD` each
-have a migration notice. Review the changes for each one you use before updating
-your config version.
+have a migration notice, and so do the onion address access changes below. Review
+the changes for each one you use, and the onion address access changes if you use
+onion addresses, before updating your config version.
 
 The Python currencyrate plugin has been replaced by Rust `cln-currencyrate`.
 Keep `services.clightning.plugins.currencyrate.enable = true`, but update any

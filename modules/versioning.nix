@@ -25,6 +25,15 @@ let
         error message during evaluation.
       '';
     };
+    # Lets tests check each notice
+    nix-bitcoin.versioning.incompatibleChanges = mkOption {
+      internal = true;
+      readOnly = true;
+      type = with types; listOf str;
+      default = map (change: change.message) incompatibleChanges;
+      defaultText = "(See source)";
+      description = "Messages of the changes that apply to this config.";
+    };
   };
 
   # Sorted by increasing version numbers
@@ -492,8 +501,8 @@ let
       version = "0.1.5";
       # Before 0.1.5, access could name users provisioned outside `users.users`
       # (useradd, LDAP/NSS) or disabled there. Compare login names as
-      # onion-addresses.nix does. Both 0.1.5 entries can fire, even for the same
-      # user, and then both apply.
+      # onion-addresses.nix does. Both onion access entries can fire, even for the
+      # same user, and then both apply.
       condition = missingOnionAccessUsers != [];
       message = ''
         `nix-bitcoin.onionAddresses.access` now accepts only users that are defined
