@@ -117,6 +117,13 @@ def test_clightning():
         active = [os.path.splitext(os.path.basename(p))[0] for p in enabled_plugins]
         machine.log("\n".join(["Active clightning plugins:", *active]))
 
+        # Check the Rust currencyrate RPCs without querying public price sources.
+        if "cln-currencyrate" in active:
+            methods = {method["command"].split()[0]
+                       for method in succeed_json("lightning-cli -J help")["help"]}
+            assert {"currencyrate", "currencyconvert", "listcurrencyrates"} <= methods
+            assert "currencyrates" not in methods
+
         if "feeadjuster" in active:
             # This is a one-shot service, so this command only succeeds if the service succeeds
             succeed("systemctl start clightning-feeadjuster")
@@ -142,6 +149,11 @@ def test_lnd():
     assert_str_matches(cert_alt_names, '10.0.0.1')
     assert_str_matches(cert_alt_names, '20.0.0.1')
     assert_str_matches(cert_alt_names, 'example.com')
+
+    # Go 1.24 listens with Multipath TCP by default. The lnd unit turns that
+    # off, so no lnd socket may show up as an MPTCP listener.
+    mptcp_listeners = succeed("ss -Mlnp")
+    assert "lnd" not in mptcp_listeners, mptcp_listeners
 
 
 @test("charge-lnd")

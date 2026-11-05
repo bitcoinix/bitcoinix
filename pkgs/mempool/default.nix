@@ -203,7 +203,6 @@ rec {
     description = "Bitcoin blockchain and mempool explorer";
     homepage = "https://github.com/mempool/mempool/";
     license = licenses.agpl3Plus;
-    maintainers = with maintainers; [ erikarvstedt ];
     platforms = platforms.unix;
   };
 }

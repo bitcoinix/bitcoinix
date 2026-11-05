@@ -1,0 +1,102 @@
+{
+  "bitcoin": {
+    "channel": "stable",
+    "version": "32.1"
+  },
+  "bitcoind": {
+    "channel": "stable",
+    "version": "32.1"
+  },
+  "btcpayserver": {
+    "channel": "unstable",
+    "version": "2.4.7"
+  },
+  "charge-lnd": {
+    "channel": "stable",
+    "version": "0.3.1"
+  },
+  "clboss": {
+    "channel": "unstable",
+    "version": "0.17.2"
+  },
+  "clightning": {
+    "channel": "unstable",
+    "version": "26.06.9"
+  },
+  "clightning-plugins/clnrest": {
+    "channel": "local",
+    "version": "0.2.0"
+  },
+  "clightning-plugins/currencyrate": {
+    "channel": "local",
+    "version": "0.1.0"
+  },
+  "clightning-plugins/feeadjuster": {
+    "channel": "local",
+    "version": "0.1.0-f0d33fd"
+  },
+  "clightning-plugins/monitor": {
+    "channel": "local",
+    "version": "0.1.0-f0d33fd"
+  },
+  "clightning-plugins/rebalance": {
+    "channel": "local",
+    "version": "0.1.0-f0d33fd"
+  },
+  "clightning-plugins/zmq": {
+    "channel": "local",
+    "version": "0.1.0-f0d33fd"
+  },
+  "electrs": {
+    "channel": "unstable",
+    "version": "0.12.0"
+  },
+  "extra-container": {
+    "channel": "stable",
+    "version": "0.17"
+  },
+  "fulcrum": {
+    "channel": "unstable",
+    "version": "2.1.4"
+  },
+  "hwi": {
+    "channel": "local",
+    "version": "3.1.0"
+  },
+  "lnd": {
+    "channel": "unstable",
+    "version": "0.21.6-beta"
+  },
+  "lndconnect": {
+    "channel": "stable",
+    "version": "0.2.1"
+  },
+  "lndinit": {
+    "channel": "unstable",
+    "version": "0.1.38-beta"
+  },
+  "mempool-backend": {
+    "channel": "local",
+    "version": "3.3.2"
+  },
+  "mempool-frontend": {
+    "channel": "local",
+    "version": "3.3.2"
+  },
+  "mempool-rust-gbt": {
+    "channel": "local",
+    "version": "3.3.2"
+  },
+  "nbxplorer": {
+    "channel": "unstable",
+    "version": "2.6.17"
+  },
+  "rtl": {
+    "channel": "local",
+    "version": "0.15.16"
+  },
+  "trustedcoin": {
+    "channel": "local",
+    "version": "0.8.7"
+  }
+}

@@ -110,7 +110,7 @@ let
         The new `services.postgresql` database name is `nbxplorer`.
         The migration happens automatically after deploying.
         Migration time for a large server with a 5GB DBTrie database takes about 40 minutes.
-        See also: https://github.com/dgarage/NBXplorer/blob/master/docs/Postgres-Migration.md
+        See also: https://github.com/btcpayserver/NBXplorer/blob/b691999b14eb2a06547ffa708c11574fa323d769/docs/Postgres-Migration.md
       '';
     }
     {
@@ -410,6 +410,48 @@ let
         to root even when `nix-bitcoin.generateSecrets` is false. Repair the
         missing or invalid secret and rerun setup to restore service access.
         See docs/upgrading.md, "Upgrading to config version 0.1.3".
+      '';
+    }
+    {
+      version = "0.1.5";
+      condition = config.services.clightning.plugins.currencyrate.enable;
+      message = ''
+        The Python currencyrate plugin has been replaced by Core Lightning's Rust
+        cln-currencyrate plugin. Keep `services.clightning.plugins.currencyrate.enable`,
+        but replace `currencyrates` with `listcurrencyrates` (fiat per BTC rather
+        than msat per fiat unit). `currencyconvert` now returns a numeric `msat`.
+        Rename `add-source` and `disable-source` to `currencyrate-add-source` and
+        `currencyrate-disable-source`. The plugin now follows CLN's configured proxy.
+        See docs/upgrading.md, "Upgrading to config version 0.1.5".
+      '';
+    }
+    {
+      version = "0.1.5";
+      condition = config.services.clightning.plugins.rebalance.enable;
+      message = ''
+        The rebalance plugin now uses Core Lightning's askrene routing.
+        Remove the `getroute_method` argument from `rebalance` RPC calls and
+        remove `rebalance-getroute`, `rebalance-maxhops` and `rebalance-msatfactor`
+        from your configuration; these settings are now ignored.
+        The `rebalancereport` fields `getroute_method`, `maxhops_threshold` and
+        `msatfactor` have been removed. Update scripts that read these fields.
+        See docs/upgrading.md, "Upgrading to config version 0.1.5".
+      '';
+    }
+    {
+      version = "0.1.5";
+      # Package references in custom scripts cannot be inspected at evaluation
+      # time, so notify everyone using clnrest.
+      condition = config.services.clightning.plugins.clnrest.enable;
+      message = ''
+        The clnrest package has moved from `nix-bitcoin.pkgs.clnrest` to
+        `nix-bitcoin.pkgs.clightning-plugins.clnrest`. Update explicit package
+        references in custom configurations and scripts. For flake builds, use
+        `packages.<system>.clightning-plugins/clnrest` instead of
+        `packages.<system>.clnrest`. The default package is selected automatically.
+        This notice also applies when RTL enables clnrest automatically. If you
+        have no custom package references, this rename requires no manual changes.
+        See docs/upgrading.md, "Upgrading to config version 0.1.5".
       '';
     }
     {

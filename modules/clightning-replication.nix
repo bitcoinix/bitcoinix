@@ -18,7 +18,7 @@ let
         When `encrypt` is `true`, directory `lightningd-db` is written to the destination.
         It includes the encrypted database and gocryptfs metadata.
 
-        See also: https://github.com/ElementsProject/lightning/blob/master/doc/BACKUP.md
+        See also: https://docs.corelightning.org/docs/backup
       '';
     };
     sshfs = {
