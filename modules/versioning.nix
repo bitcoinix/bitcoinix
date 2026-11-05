@@ -415,8 +415,9 @@ let
     {
       version = "0.1.5";
       # Before 0.1.5, lnconnect-clnrest granted the operator clnrest onion access
-      # whenever the operator user existed, even with the operator role disabled.
-      # Only configs that don't grant the access themselves are affected.
+      # even with the operator role disabled. Only configs that don't grant the
+      # access themselves are affected. The operator account may come from outside
+      # `users.users` (useradd, LDAP), so don't require it to be defined there.
       # The operator's lnd-rest access isn't checked here: lndconnect reads the
       # lnd user's copy, and the only reader of the operator's copy is nodeinfo,
       # which enables the operator role itself.
@@ -425,29 +426,57 @@ let
         clnrest = config.services.clightning.plugins.clnrest;
         access = config.nix-bitcoin.onionAddresses.access.${operator.name} or [];
       in !operator.enable
-         && any (u: u.name == operator.name && (u.enable or true)) (attrValues config.users.users)
          && clnrest.enable && clnrest.lnconnect.enable && clnrest.lnconnect.onion
          && !(elem "clnrest" access);
       message = let
         name = config.nix-bitcoin.operator.name;
-        # The attribute that defines the account, which can differ from its name
-        account = findFirst (key:
-          let u = config.users.users.${key}; in u.name == name && (u.enable or true)
-        ) name (attrNames config.users.users);
+        # The attribute that defines the account, which can differ from its name.
+        # Prefer an enabled declaration, then a disabled one.
+        accountKeys = filter (key: config.users.users.${key}.name == name)
+          (attrNames config.users.users);
+        account = findFirst (key: config.users.users.${key}.enable or true)
+          (if accountKeys == [] then name else head accountKeys) accountKeys;
       in ''
         lnconnect-clnrest now gives the operator user access to the clnrest onion
-        address only when `nix-bitcoin.operator.enable` is set. The operator user
-        `${name}` exists, but the operator role is disabled, so the user loses this
-        access.
-        To keep it, set `nix-bitcoin.operator.enable = true`, or add "clnrest" to
-        `nix-bitcoin.onionAddresses.access.${name}`. To run `lnconnect-clnrest` as
+        address only when `nix-bitcoin.operator.enable` is set. The operator role is
+        disabled, so the operator user `${name}` doesn't get this access.
+        To keep it, add "clnrest" to `nix-bitcoin.onionAddresses.access.${name}`,
+        which needs `${name}` to be an enabled account in `users.users`. Or set
+        `nix-bitcoin.operator.enable = true`, but only if the account is declared as
+        an enabled `users.users.${name}` or doesn't exist yet, since the role
+        declares it as a normal user. To run `lnconnect-clnrest` as
         `${name}` instead of root, also add "${config.services.clightning.group}" to
         `users.users.${account}.extraGroups`. That group can read the admin rune and use
         the clightning RPC socket.
         See docs/upgrading.md, "Upgrading to config version 0.1.5".
       '';
     }
+    {
+      version = "0.1.5";
+      # Before 0.1.5, access could name users provisioned outside `users.users`
+      # (useradd, LDAP/NSS) or disabled there. Compare login names as
+      # onion-addresses.nix does. Both 0.1.5 entries can fire, even for the same
+      # user, and then both apply.
+      condition = missingOnionAccessUsers != [];
+      message = ''
+        `nix-bitcoin.onionAddresses.access` now accepts only users that are defined
+        and enabled in `users.users`. These users aren't:
+        ${concatStringsSep ", " missingOnionAccessUsers}
+        Before, the onion-addresses service looked the names up at runtime, and a name
+        that didn't resolve made it publish no onion address for anyone. Now evaluation
+        checks them instead.
+        To keep a user's access, define and enable the account in `users.users`. For an
+        account created with useradd, declare its current uid, group, home and shell,
+        since NixOS applies its defaults otherwise. Or remove the user from
+        `nix-bitcoin.onionAddresses.access`.
+        See docs/upgrading.md, "Upgrading to config version 0.1.5".
+      '';
+    }
   ];
+
+  missingOnionAccessUsers = let
+    userNames = map (u: u.name) (filter (u: u.enable or true) (attrValues config.users.users));
+  in filter (user: !(elem user userNames)) (attrNames config.nix-bitcoin.onionAddresses.access);
 
   clightningRestUsed = options.services.clightning-rest.isDefined
     || options.services.rtl.cl-rest.isDefined;

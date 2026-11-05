@@ -55,7 +55,7 @@ in {
     assertions = [
       { assertion = missingUsers == [];
         message = ''
-          `nix-bitcoin.onionAddresses.access` contains users that are not defined:
+          `nix-bitcoin.onionAddresses.access` contains users that aren't defined and enabled in `users.users`:
           ${concatStringsSep ", " missingUsers}
         '';
       }
