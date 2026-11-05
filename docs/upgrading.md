@@ -25,8 +25,10 @@ run `fetch-release.sh` with `releaseVersion=<version>` and write its output to `
 
 ## Upgrading to config version 0.1.5
 
-Currencyrate, rebalance and clnrest each have a migration notice. Review the
-changes for each plugin you enable before updating your config version.
+Currencyrate, rebalance and clnrest each have a migration notice, and so do the
+onion address access changes below. Review the changes for each plugin you enable,
+and the onion address access changes if you use onion addresses, before updating
+your config version.
 
 The clnrest package has moved from `nix-bitcoin.pkgs.clnrest` to
 `nix-bitcoin.pkgs.clightning-plugins.clnrest`. Update explicit package references
