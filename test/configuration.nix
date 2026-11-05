@@ -200,6 +200,22 @@ let
       expected = { warnings = []; rpcuser = true; };
     };
   };
+  pluginMigrationTests = lib.listToAttrs (map (plugin:
+    lib.nameValuePair "testClightningPluginMigration-${plugin}" {
+      expr = map (case: (builtins.tryEval (evaluate {
+        nix-bitcoin.configVersion = case.version;
+        services.clightning = {
+          enable = true;
+          plugins.${plugin}.enable = case.enable;
+        };
+      }).system.stateVersion).success) [
+        { version = "0.1.4"; enable = true; }
+        { version = "0.1.4"; enable = false; }
+        { version = "0.1.5"; enable = true; }
+        { version = null; enable = true; }
+      ];
+      expected = [ false true true true ];
+    }) [ "currencyrate" "rebalance" "clnrest" ]);
   # The preset's preStart lines, run by the check below against a scratch data dir
   remoteRpcUser = "rpc$USER'$(id)";
   remotePresetPreStart = pkgs.writeText "bitcoind-remote-prestart"
@@ -214,7 +230,7 @@ let
   tests = lib.mapAttrs' (name: case: lib.nameValuePair "testREST-${name}" {
     expr = restAllowed case.args;
     inherit (case) expected;
-  }) restCases // extraConfigTests // pluginsConfigTests // {
+  }) restCases // extraConfigTests // pluginsConfigTests // pluginMigrationTests // {
     testBitcoinDefaults = {
       expr = getBitcoinDefaults bitcoin;
       expected = {
@@ -232,17 +248,6 @@ let
         port = 18444;
         rpc = tests.testBitcoinDefaults.expected.rpc // { port = 18443; };
       };
-    };
-    testCurrencyrateMigration = {
-      expr = map (case: (builtins.tryEval (evaluate {
-        nix-bitcoin.configVersion = case.version;
-        services.clightning.plugins.currencyrate.enable = case.enable;
-      }).system.stateVersion).success) [
-        { version = "0.1.4"; enable = true; }
-        { version = "0.1.4"; enable = false; }
-        { version = "0.1.5"; enable = true; }
-      ];
-      expected = [ false true true ];
     };
     testElectrsEnablesBitcoinREST = {
       expr = with electrs.services.bitcoind; [ enable rest.enable ];

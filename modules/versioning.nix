@@ -425,6 +425,35 @@ let
         See docs/upgrading.md, "Upgrading to config version 0.1.5".
       '';
     }
+    {
+      version = "0.1.5";
+      condition = config.services.clightning.plugins.rebalance.enable;
+      message = ''
+        The rebalance plugin now uses Core Lightning's askrene routing.
+        Remove the `getroute_method` argument from `rebalance` RPC calls and
+        remove `rebalance-getroute`, `rebalance-maxhops` and `rebalance-msatfactor`
+        from your configuration; these settings are now ignored.
+        The `rebalancereport` fields `getroute_method`, `maxhops_threshold` and
+        `msatfactor` have been removed. Update scripts that read these fields.
+        See docs/upgrading.md, "Upgrading to config version 0.1.5".
+      '';
+    }
+    {
+      version = "0.1.5";
+      # Package references in custom scripts cannot be inspected at evaluation
+      # time, so notify everyone using clnrest.
+      condition = config.services.clightning.plugins.clnrest.enable;
+      message = ''
+        The clnrest package has moved from `nix-bitcoin.pkgs.clnrest` to
+        `nix-bitcoin.pkgs.clightning-plugins.clnrest`. Update explicit package
+        references in custom configurations and scripts. For flake builds, use
+        `packages.<system>.clightning-plugins/clnrest` instead of
+        `packages.<system>.clnrest`. The default package is selected automatically.
+        This notice also applies when RTL enables clnrest automatically. If you
+        have no custom package references, this rename requires no manual changes.
+        See docs/upgrading.md, "Upgrading to config version 0.1.5".
+      '';
+    }
   ];
 
   clightningRestUsed = options.services.clightning-rest.isDefined
