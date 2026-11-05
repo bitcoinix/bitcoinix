@@ -25,12 +25,17 @@ run `fetch-release.sh` with `releaseVersion=<version>` and write its output to `
 
 ## Upgrading to config version 0.1.5
 
+Currencyrate, rebalance and clnrest each have a migration notice. Review the
+changes for each plugin you enable before updating your config version.
+
 The clnrest package has moved from `nix-bitcoin.pkgs.clnrest` to
 `nix-bitcoin.pkgs.clightning-plugins.clnrest`. Update explicit package references
 in custom configurations. For flake builds, use
 `'.#packages.aarch64-linux.clightning-plugins/clnrest'` (or `x86_64-linux`)
 instead of `'.#packages.aarch64-linux.clnrest'`.
 The default package is selected automatically.
+The migration notice also applies when RTL enables clnrest automatically. If you
+have no custom package references, this rename requires no manual changes.
 
 The Python currencyrate plugin has been replaced by Rust `cln-currencyrate`.
 Keep `services.clightning.plugins.currencyrate.enable = true`, but update any
