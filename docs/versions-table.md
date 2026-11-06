@@ -2,7 +2,6 @@
 
 | Package | Version | Channel |
 |---|---|---|
-| `bitcoin` | [32.1](https://bitcoincore.org/en/releases/32.1/) | stable |
 | `bitcoind` | [32.1](https://bitcoincore.org/en/releases/32.1/) | stable |
 | `btcpayserver` | [2.4.7](https://github.com/btcpayserver/btcpayserver/releases/tag/v2.4.7) | unstable |
 | `charge-lnd` | [0.3.1](https://github.com/accumulator/charge-lnd/releases/tag/v0.3.1) | stable |

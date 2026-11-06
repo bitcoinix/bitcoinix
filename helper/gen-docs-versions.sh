@@ -25,7 +25,6 @@ jq -r '
   def clnPlugin($dir): "https://github.com/ElementsProject/lightning/tree/v@CLN@/plugins/\($dir)";
 
   {
-    "bitcoin": "https://bitcoincore.org/en/releases/@VERSION@/",
     "bitcoind": "https://bitcoincore.org/en/releases/@VERSION@/",
     "btcpayserver": gh("btcpayserver/btcpayserver"; "v"),
     "charge-lnd": gh("accumulator/charge-lnd"; "v"),

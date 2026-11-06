@@ -1,8 +1,4 @@
 {
-  "bitcoin": {
-    "channel": "stable",
-    "version": "32.1"
-  },
   "bitcoind": {
     "channel": "stable",
     "version": "32.1"
