@@ -7,6 +7,9 @@ def test_lndconnect_onion_lnd():
 @test("lnconnect-onion-clnrest")
 def test_lnconnect_onion_clnrest():
     assert_running("clightning")
+    # lnconnect-clnrest reads the address that onion-addresses publishes, and
+    # nothing orders clightning after that service
+    machine.wait_for_unit("onion-addresses")
     assert_matches("runuser -u operator -- lnconnect-clnrest --url", ".onion")
 
 

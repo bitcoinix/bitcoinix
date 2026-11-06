@@ -425,6 +425,28 @@ let
       '';
     };
 
+    # An operator account without the operator role, set up as docs/upgrading.md
+    # describes: explicit clnrest onion access and the clightning group
+    lnconnectNoOperatorRole = {
+      nix-bitcoin.operator.enable = mkForce false;
+      users.users.operator = {
+        isNormalUser = true;
+        extraGroups = [ "clightning" ];
+      };
+      nix-bitcoin.onionAddresses.access.operator = [ "clnrest" ];
+      services.clightning = {
+        enable = true;
+        plugins.clnrest = {
+          enable = true;
+          lnconnect = { enable = true; onion = true; };
+        };
+      };
+      tests = mkForce {
+        clightning = true;
+        lnconnect-onion-clnrest = true;
+      };
+    };
+
     # Test the special bitcoin RPC setup that lnd uses when bitcoin is pruned
     lndPruned = {
       services.lnd.enable = true;
