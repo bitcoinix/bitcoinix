@@ -188,16 +188,21 @@ in {
           "''${gocryptfs[@]}" "$cipherDir" ${plaintextDir}
         '';
 
+      # The FUSE daemons unmount on SIGTERM, so these are usually no longer mounted
       postStop =
         optionalString cfg.encrypt ''
           umount ${plaintextDir} || true
         '' +
         optionalString useSshfs ''
-          umount ${sshfsDir}
+          umount ${sshfsDir} || true
         '';
 
+      # No `StopPropagatedFrom=`: it's a [Unit] option, so systemd ignored it in
+      # `serviceConfig`. In [Unit], a lightningd crash would stop this unit
+      # retroactively, and that stop reaches clightning via `requiredBy` and
+      # `bindsTo` and cancels its auto-restart (systemd 260).
+      # Stopping and remounting together with clightning needs its own change.
       serviceConfig = {
-        StopPropagatedFrom = [ "clightning.service" ];
         CacheDirectory = "clightning-replication";
         CacheDirectoryMode = "770";
         User = user;
