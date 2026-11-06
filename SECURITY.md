@@ -57,7 +57,12 @@ Running twice a week keeps the cached NVD data within vulnix's seven-day window 
 incremental updates. A missing cache or a longer gap still requires the yearly feeds.
 
 Every run writes a summary of the findings that are not whitelisted to the run's step summary,
-and uploads the full report as the `vulnix-report` artifact.
+and uploads the full report as the `vulnix-report` artifact. Each finding shows the package version,
+the CVSS v3 base score and its severity (Low from 0.1, Medium from 4.0, High from 7.0,
+Critical from 9.0), and whether the CVE is in CISA's
+[Known Exploited Vulnerabilities](https://www.cisa.gov/known-exploited-vulnerabilities-catalog)
+catalog, read from CISA's GitHub mirror [cisagov/kev-data](https://github.com/cisagov/kev-data).
+A CVE without a CVSS v3 score, or with a score of 0.0 (vulnix leaves those out), reads "unknown".
 
 Maintainers can set the repository variable `CVE_SCAN_ISSUE` to the number of a pinned
 tracking issue. The job then writes its report into that issue below a `<!-- cve-scan-report -->`
