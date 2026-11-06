@@ -2,7 +2,6 @@
 pkgs: pkgsUnstable:
 {
   inherit (pkgs)
-    bitcoin
     bitcoind
     charge-lnd
     extra-container
