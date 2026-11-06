@@ -105,7 +105,8 @@ sudo ./test/run-tests.sh container          # fast container; needs systemd + ro
   into the flake's pinned nixpkgs.
 - Always update `flake.lock` via `helper/update-flake.sh`; never hand-edit it or
   run `nix flake update` / `nix flake lock` directly. The helper keeps
-  `pkgs/pinned.nix` and `versions.json` in sync with the locked inputs.
+  `pkgs/pinned.nix`, `versions.json` and `docs/versions-table.md` in sync with
+  the locked inputs.
 - `pkgs/pinned.nix` is **generated** by `helper/update-flake.sh` (packages are
   pinned to stable vs. unstable by version comparison) — don't hand-edit it.
 - Only `x86_64-linux` and `aarch64-linux` are supported and tested.

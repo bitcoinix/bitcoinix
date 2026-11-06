@@ -14,6 +14,7 @@ set -euo pipefail
 #     pinned to stable.
 #     All other pkgs are pinned to unstable.
 # - Write ../versions.json with pinned and local package versions and channels.
+# - Write ../docs/versions-table.md, the package versions table of the docs.
 
 forceRun=
 nixosVersion=
@@ -82,3 +83,4 @@ fi
 
 nix eval --json -f update-flake.nix versionsFile |
     nix shell --inputs-from .. nixpkgs#jq -c jq . > ../versions.json
+./gen-docs-versions.sh > ../docs/versions-table.md

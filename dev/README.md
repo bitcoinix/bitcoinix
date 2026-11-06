@@ -158,9 +158,16 @@ flake inputs:
 
 ```bash
 nix eval --json -f helper/update-flake.nix versionsFile | jq . > versions.json
+helper/gen-docs-versions.sh > docs/versions-table.md
 ```
 
-CI checks that `versions.json` matches the locked inputs and local packages. Run
+The second command regenerates the package versions table that
+[`docs/introduction.md`](../docs/introduction.md) includes. When you add a package to
+`versions.json`, add its release link to `helper/gen-docs-versions.sh`; the script fails
+without it.
+
+CI checks that `versions.json` matches the locked inputs and local packages, and that
+the docs table matches `versions.json`. Run
 `./test/ci/check-versions.sh` to check it locally without updating dependencies.
 
 ## Switching to a new NixOS release
