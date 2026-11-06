@@ -111,6 +111,11 @@ let
       plugins.feeadjuster = { enable = true; adjustDaily = true; };
     };
   };
+  replicationHostKeyWarnings = replication: builtins.filter
+    (lib.hasInfix "disables SSH host key checking")
+    (evaluate {
+      services.clightning = { enable = true; replication = { enable = true; } // replication; };
+    }).warnings;
   getBitcoinDefaults = config: with config.services.bitcoind; {
     inherit network port listen;
     rpc = { inherit (rpc) address port allowip; };
@@ -307,6 +312,15 @@ let
         quotedDataDir = lib.hasInfix "--lightning-dir '/var/lib/cln custom' feeadjust" ExecStart;
       };
       expected = { user = "cln-custom"; quotedDataDir = true; };
+    };
+    testReplicationWarnsWithoutHostKeyCheck = {
+      expr = map (replication: builtins.length (replicationHostKeyWarnings replication)) [
+        { sshfs.destination = "user@host:dir"; }
+        { sshfs = { destination = "user@host:dir"; sshOptions = [ "StrictHostKeyChecking = No" ]; }; }
+        { sshfs = { destination = "user@host:dir"; sshOptions = [ "reconnect,stricthostkeychecking=off" ]; }; }
+        { local.directory = "/var/backup/cln"; sshfs.sshOptions = [ "StrictHostKeyChecking=no" ]; }
+      ];
+      expected = [ 0 1 1 0 ];
     };
   };
   failures = lib.debug.runTests tests;

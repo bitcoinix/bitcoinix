@@ -478,7 +478,7 @@ Also back up:
      # This is optional
      encrypt = true;
    };
-   programs.ssh.knownHosts."hostname".publicKey = "<ssh public key from running `ssh-keyscan` on the host>";
+   programs.ssh.knownHosts."hostname".publicKey = "<contents of /etc/ssh/ssh_host_ed25519_key.pub on the target>";
    ```
 
    Leave out the `encrypt` line if you want to store data on your destination
@@ -486,6 +486,14 @@ Also back up:
    Adjust `user`, `hostname` and `directory` as necessary. `directory` is relative to
    the home of `user`. If the target's SSH server doesn't listen on port 22, set
    `sshfs.port` and use `"[hostname]:<port>"` as the `knownHosts` name.
+
+   The `knownHosts` entry is required: the mount runs without a terminal, so SSH
+   can't ask you to accept an unknown host key and the mount fails.
+   Read the host key on the target itself, not with `ssh-keyscan` from the node,
+   which trusts whatever host answers.
+   Don't add `StrictHostKeyChecking=no` to `sshfs.sshOptions`. It allows any host
+   on the network path to impersonate the target and receive the database,
+   in plaintext without `encrypt`.
 
 2. Deploy. With `nix-bitcoin.generateSecrets`, this creates the SSH key
    `$secretsDir/clightning-replication-ssh-key`.
