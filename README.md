@@ -1,8 +1,10 @@
 <p align="center">
-  <img
-    width="480"
-    src="assets/logo-text.png"
-    alt="bitcoinix logo">
+  <a href="https://bitcoinix.net">
+    <img
+      width="480"
+      src="assets/logo-text.png"
+      alt="bitcoinix logo">
+  </a>
 </p>
 <br/>
 <p align="center">
