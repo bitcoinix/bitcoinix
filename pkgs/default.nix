@@ -21,6 +21,8 @@ let self = {
     mempool-frontend
     mempool-rust-gbt
     mempool-nginx-conf;
+  # nixpkgs 26.05 has bun 1.3, which rejects the wallet's bun 1.4 lockfile
+  unbeholden-wallet = pkgs.callPackage ./unbeholden-wallet { inherit (pkgsUnstable) bun; };
 
   inherit (self.pyPkgs.nbPython3PackagesWithUnlockedEcdsa) hwi;
 

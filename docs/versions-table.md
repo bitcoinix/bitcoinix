@@ -26,3 +26,4 @@
 | `nbxplorer` | [2.6.17](https://github.com/btcpayserver/NBXplorer/releases/tag/v2.6.17) | unstable |
 | `rtl` | [0.15.16](https://github.com/Ride-The-Lightning/RTL/releases/tag/v0.15.16) | unstable |
 | `trustedcoin` | [0.8.7](https://github.com/nbd-wtf/trustedcoin/releases/tag/v0.8.7) | unstable |
+| `unbeholden-wallet` | [0.3.0](https://github.com/unbeholdendev/unbeholden-wallet/releases/tag/v0.3.0) | local |

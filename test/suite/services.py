@@ -297,6 +297,19 @@ def test_mempool():
     assert_full_match("ss -ltnH 'sport = :3306' | awk '{print $4}'", r"127\.0\.0\.1:3306\n")
 
 
+@test("unbeholden-wallet")
+def test_unbeholden_wallet():
+    assert_running("unbeholden-wallet")
+    url = f"{ip('unbeholden-wallet')}:60846"
+    wait_for_open_port(ip("unbeholden-wallet"), 60846)
+    assert_matches(f"curl {url}", "<title>Unbeholden Wallet</title>")
+    # The relay passes an Electrum request on to fulcrum
+    request = '{"jsonrpc":"2.0","id":1,"method":"server.version","params":["test","1.4"]}'
+    machine.wait_until_succeeds(
+        f"echo '{request}' | websocat -n1 ws://{url}/electrum | grep -q Fulcrum"
+    )
+
+
 @test("nodeinfo")
 def test_nodeinfo():
     status, _ = machine.execute("systemctl is-enabled --quiet onion-addresses 2> /dev/null")

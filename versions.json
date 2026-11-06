@@ -94,5 +94,9 @@
   "trustedcoin": {
     "channel": "unstable",
     "version": "0.8.7"
+  },
+  "unbeholden-wallet": {
+    "channel": "local",
+    "version": "0.3.0"
   }
 }

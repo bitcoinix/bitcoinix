@@ -37,6 +37,8 @@ let
         (mkIfTest "lnconnect-clnrest-cert" [ openssl ])
         # Needed to trace the commands run by secret generation
         (mkIfTest "secrets-no-argv" [ strace ])
+        # Talks to the Electrum relay
+        (mkIfTest "unbeholden-wallet" [ websocat ])
       ]);
 
       tests.bitcoind = cfg.bitcoind.enable;
@@ -139,6 +141,9 @@ let
         electrumServer = "fulcrum";
         settings.MEMPOOL.POOLS_JSON_URL = mkIf config.test.noConnections "disable-pool-fetching";
       };
+
+      tests.unbeholden-wallet = cfg.unbeholden-wallet.enable;
+      services.unbeholden-wallet.electrumServer = "fulcrum";
 
       tests.lnd = cfg.lnd.enable;
       tests.lnd-macaroons = cfg.lnd.enable && cfg.lnd.macaroons != {};
@@ -364,6 +369,7 @@ let
       services.lnd.lndconnect = { enable = true; onion = true; };
       services.charge-lnd.enable = true;
       services.mempool.enable = true;
+      services.unbeholden-wallet.enable = true;
       services.electrs.enable = true;
       services.fulcrum.enable = true;
       services.btcpayserver.enable = true;
@@ -409,6 +415,7 @@ let
       test.features.clightningPlugins = true;
       services.rtl.enable = true;
       services.mempool.enable = true;
+      services.unbeholden-wallet.enable = true;
       services.lnd.enable = true;
       services.lnd.lndconnect.enable = true;
       services.charge-lnd.enable = true;

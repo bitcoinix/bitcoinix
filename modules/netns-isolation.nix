@@ -298,6 +298,10 @@ in {
           (if (config.services.mempool.electrumServer == "electrs") then "electrs" else "fulcrum")
         ];
       };
+      unbeholden-wallet = {
+        id = 33;
+        connections = [ config.services.unbeholden-wallet.electrumServer ];
+      };
     };
 
     services.bitcoind = let
@@ -332,6 +336,8 @@ in {
 
     services.mempool.address = netns.mempool.address;
     services.mempool.frontend.address = netns.nginx.address;
+
+    services.unbeholden-wallet.address = netns.unbeholden-wallet.address;
   }
   ]);
 }

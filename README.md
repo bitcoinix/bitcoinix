@@ -139,6 +139,7 @@ NixOS modules ([src](modules/modules.nix))
     [Tor](./docs/services.md#use-zeus-mobile-lightning-wallet-via-tor)
   * [Ride The Lightning (RTL)](https://github.com/Ride-The-Lightning/RTL): web interface for LND and Core Lightning
   * [mempool](https://github.com/mempool/mempool): Bitcoin visualizer, explorer, and API service
+  * [Unbeholden Wallet](https://github.com/unbeholdendev/unbeholden-wallet): watch-only wallet in the browser that signs on an air-gapped device
   * [electrs](https://github.com/romanz/electrs): Electrum server
   * [Fulcrum](https://github.com/cculianu/Fulcrum): Electrum server (see [the module](modules/fulcrum.nix) for a comparison with electrs)
   * [BTCPay Server](https://github.com/btcpayserver/btcpayserver)

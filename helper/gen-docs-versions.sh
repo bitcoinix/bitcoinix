@@ -48,7 +48,8 @@ jq -r '
     "mempool-rust-gbt": gh("mempool/mempool"; "v"),
     "nbxplorer": gh("btcpayserver/NBXplorer"; "v"),
     "rtl": gh("Ride-The-Lightning/RTL"; "v"),
-    "trustedcoin": gh("nbd-wtf/trustedcoin"; "v")
+    "trustedcoin": gh("nbd-wtf/trustedcoin"; "v"),
+    "unbeholden-wallet": gh("unbeholdendev/unbeholden-wallet"; "v")
   } as $links
   | .clightning.version as $cln
   | to_entries[]

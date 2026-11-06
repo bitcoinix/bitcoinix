@@ -17,6 +17,8 @@ configurations keep working.
 
 * Bitcoin Core, with Core Lightning or LND
 * Electrum servers (electrs, Fulcrum), the mempool explorer, BTCPay Server and the RTL web interface
+* [Unbeholden Wallet](services.md#connect-to-unbeholden-wallet), a watch-only browser wallet for
+  air-gapped signers
 * Mobile wallet connections, e.g. ZEUS via [Tor](services.md#use-zeus-mobile-lightning-wallet-via-tor)
   or [WireGuard](services.md#use-zeus-mobile-lightning-wallet-via-wireguard)
 * Helpers: [nodeinfo](services.md#nodeinfo), backups, and a non-root `operator` user for the

@@ -113,6 +113,9 @@ in {
         mempool-frontend = {
           externalPort = 80;
         };
+        unbeholden-wallet = {
+          externalPort = 80;
+        };
       };
     }
   ];

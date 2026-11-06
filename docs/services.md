@@ -176,6 +176,30 @@ Open `http://<onion address>` in Tor Browser, using the address from
 The password is in `$secretsDir/rtl-password`.
 See: [Secrets dir](./configuration.md#secrets-dir)
 
+### Connect to Unbeholden Wallet
+[Unbeholden Wallet](https://github.com/unbeholdendev/unbeholden-wallet) is a watch-only
+wallet that runs in the browser and hands transactions to an air-gapped signer over QR
+codes. The service serves the wallet and passes its connection on to electrs, or to Fulcrum
+with `services.unbeholden-wallet.electrumServer = "fulcrum"`.
+
+```nix
+services.unbeholden-wallet.enable = true;
+```
+
+It listens on localhost. Connect through an SSH tunnel, then open `http://localhost:60846`
+and press Connect:
+
+```
+ssh -L 60846:127.0.0.1:60846 operator@bitcoin-node
+```
+
+With `netns-isolation`, use the address from `nodeinfo | jq -r '.["unbeholden-wallet"].local_address'`
+instead.
+
+Browsers only allow the camera, which scans the signed transaction, on `localhost` or
+over https. To use the wallet from another device without a tunnel, put an https reverse
+proxy in front of it that passes WebSocket upgrades and the `Host` header through.
+
 ### Use ZEUS (mobile Lightning wallet) via Tor
 1. Install [ZEUS](https://zeusln.app)
 

@@ -24,6 +24,7 @@ TEST_PHASES = (
         "rtl",
         "rtl-credentials",
         "mempool",
+        "unbeholden-wallet",
         "nodeinfo",
         "secure-node",
         "onion-addresses",
