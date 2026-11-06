@@ -36,6 +36,7 @@ TEST_PHASES = (
         "backups",
         "restart-bitcoind",
         "config-replace",
+        "clnrest-admin-rune",
     )),
     ("post-restart", (
         "regtest",

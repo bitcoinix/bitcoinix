@@ -117,6 +117,55 @@ def test_config_replace():
                     succeed(f"rm {orig}", f"{'rm' if target_type == 'file' else 'rmdir'} {target}")
 
 
+# Impure: restarts clightning
+@test("clnrest-admin-rune")
+def test_clnrest_admin_rune():
+    # Earlier versions installed an empty or `null` admin rune when `createrune`
+    # failed, and later starts kept that file. A start must replace such a file,
+    # but never a valid rune.
+    data = test_data["clnrest-admin-rune"]
+    rune_file = data["file"]
+    getinfo = f"https://{ip('clightning')}:{data['port']}/v1/getinfo"
+
+    def clnrest_accepts(rune):
+        status, _ = machine.execute(
+            f"curl -fsS --max-time 5 --insecure --header 'rune: {rune}' -X POST {getinfo}"
+        )
+        return status == 0
+
+    def start_with(contents):
+        """Start clightning with `contents` in the rune file, return the rune afterwards"""
+        succeed("systemctl stop clightning")
+        if contents is not None:
+            succeed(f"printf %s {shlex.quote(contents)} > {rune_file}")
+        # Returns after `postStart`, which creates the rune
+        succeed("systemctl start clightning")
+        rune = succeed(f"cat {rune_file}").rstrip("\n")
+        assert_file_metadata(rune_file, owner=data["user"], mode="640", file_type="regular file")
+        succeed(f"! test -e {rune_file}.tmp")
+        assert clnrest_accepts(rune), f"clnrest rejects the rune in {rune_file}: {rune!r}"
+        return rune
+
+    # The unit might still be restarting after the preceding tests
+    succeed("systemctl start clightning")
+    machine.wait_for_unit("clightning")
+    # Otherwise, `clnrest_accepts` wouldn't check the rune
+    assert not clnrest_accepts("null"), "clnrest accepts the rune 'null'"
+
+    rune = succeed(f"cat {rune_file}").rstrip("\n")
+    assert start_with(None) == rune, f"A start replaced the valid rune in {rune_file}"
+    # The files that earlier versions installed when `createrune` failed
+    for contents in ("\n", "null\n"):
+        with machine.nested(f"rune file contents: {contents!r}"):
+            rune = start_with(contents)
+
+    if rtl_file := data["rtlFile"]:
+        # RTL only `wants` clightning, so the restarts above left RTL running.
+        # The upgrade that replaces a bad rune also restarts RTL, after clightning.
+        succeed("systemctl restart rtl")
+        assert_full_match(f"cat {rtl_file}", re.escape(f'LIGHTNING_RUNE="{rune}"\n'))
+
+
 # Impure: restarts lnd. Runs after `regtest`, so lnd is synced.
 @test("lnd-restart-on-clean-exit")
 def test_lnd_restart_on_clean_exit():
