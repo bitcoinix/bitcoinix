@@ -250,6 +250,22 @@ let
     systemd.services.firewall.path = lib.mkBefore [ pkgs.iptables ];
     networking.nftables.ruleset = "table inet extra { }";
   };
+  torEnforced = evaluate {
+    imports = [ ../modules/presets/enable-tor.nix ];
+    services.electrs.enable = true;
+  };
+  torEnforcedNetns = evaluate {
+    imports = [ ../modules/presets/enable-tor.nix ];
+    services.electrs.enable = true;
+    services.charge-lnd.enable = true;
+    nix-bitcoin.netns-isolation = { enable = true; addressblock = 7; };
+  };
+  getNetworkRestriction = config: service: let
+    serviceConfig = config.systemd.services.${service}.serviceConfig;
+  in {
+    allow = serviceConfig.IPAddressAllow;
+    inaccessible = serviceConfig.InaccessiblePaths or [];
+  };
   customMempoolUser = evaluate {
     services.mempool = { enable = true; user = "mempool-custom"; };
   };
@@ -834,6 +850,82 @@ let
       expected = {
         undefined = true; current = true; currentFails = [ true ]; defined = false; disabled = true;
       };
+    };
+    testTorEnforceAllowsOnlyLocalhost = {
+      expr = getNetworkRestriction torEnforced "electrs";
+      expected = {
+        allow = [ "127.0.0.1/32" "::1/128" ];
+        inaccessible = [ "/run/nscd" "/run/systemd/resolve" "/run/dbus" "-/run/avahi-daemon" ];
+      };
+    };
+    testTorEnforceAllowsOnlyNetnsAddresses = {
+      expr = map (getNetworkRestriction torEnforcedNetns) [ "electrs" "charge-lnd" ];
+      expected = lib.replicate 2 {
+        allow = [ "127.0.0.1/32" "::1/128" "169.254.7.0/24" ];
+        inaccessible = [ "/run/nscd" "/run/systemd/resolve" "/run/dbus" "-/run/avahi-daemon" ];
+      };
+    };
+    testNoTorEnforceKeepsNetwork = {
+      expr = getNetworkRestriction bitcoin "bitcoind";
+      expected = { allow = "any"; inaccessible = []; };
+    };
+    testResolverDirsCreated = {
+      # The fail-closed masks have no `-` prefix, so each directory must exist or
+      # the unit won't start; they're created independently of their resolver.
+      expr = with torEnforced; map (rule: builtins.elem rule systemd.tmpfiles.rules) [
+        "d /run/nscd 0755 nscd nscd -"
+        "d /run/systemd/resolve 0755 root root -"
+        "d /run/dbus 0755 root root -"
+      ];
+      expected = [ true true true ];
+    };
+    testResolverDirCreatedForResolved = {
+      # With resolved enabled the resolve dir is created under resolved's user
+      expr = builtins.elem "d /run/systemd/resolve 0755 systemd-resolve systemd-resolve -"
+        (evaluate {
+          imports = [ ../modules/presets/enable-tor.nix ];
+          services.electrs.enable = true;
+          services.resolved.enable = true;
+        }).systemd.tmpfiles.rules;
+      expected = true;
+    };
+    testNscdKeepsRuntimeDirectory = {
+      expr = with torEnforced; {
+        preserve = systemd.services.nscd.serviceConfig.RuntimeDirectoryPreserve or null;
+        # Only charge-lnd/tor.enforce hosts get the lifecycle change
+        untouched = (evaluate { services.bitcoind.enable = true; })
+          .systemd.services.nscd.serviceConfig.RuntimeDirectoryPreserve or null;
+      };
+      expected = { preserve = true; untouched = null; };
+    };
+    testNbxplorerGatedOnBtcpayserver = {
+      # The nbxplorer unit is created by btcpayserver.enable, so its resolver
+      # dirs must be created even when the internal nbxplorer.enable is false.
+      expr = builtins.elem "d /run/dbus 0755 root root -" (evaluate {
+        imports = [ ../modules/presets/enable-tor.nix ];
+        services.btcpayserver.enable = true;
+        services.btcpayserver.tor.enforce = false;
+        services.nbxplorer.enable = lib.mkForce false;
+      }).systemd.tmpfiles.rules;
+      expected = true;
+    };
+    testNetnsRejectsMetadataAddressblock = {
+      expr = map (block: builtins.any (lib.hasInfix "must not be 169 or 170") (failedAssertions (evaluate {
+        services.bitcoind.enable = true;
+        nix-bitcoin.netns-isolation = { enable = true; addressblock = block; };
+      }))) [ 1 169 170 ];
+      expected = [ false true true ];
+    };
+    testTorEnforceMigration = {
+      expr = map (module: (builtins.tryEval (evaluate {
+        imports = [ module ];
+        nix-bitcoin.configVersion = "0.1.5";
+      }).system.stateVersion).success) [
+        { services.bitcoind.enable = true; }
+        { services.charge-lnd.enable = true; }
+        { imports = [ ../modules/presets/enable-tor.nix ]; services.bitcoind.enable = true; }
+      ];
+      expected = [ true false false ];
     };
     testMempoolCustomUser = {
       expr = with customMempoolUser; {

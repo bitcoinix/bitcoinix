@@ -214,6 +214,30 @@ If you lose the authenticator, delete `RTL-Config.json` in RTL's data dir
 secret and is now readable only by RTL's user. Before, members of group `rtl`
 could read it too.
 
+#### Tor enforcement allows only local addresses
+
+Services with Tor enforcement (`services.<service>.tor.enforce`, set by the
+secure-node preset and `enable-tor.nix`) and charge-lnd have a narrower network
+restriction:
+
+- Without [network namespace isolation](./configuration.md#network-namespace-isolation)
+  they reach localhost only. With it, they also reach the namespace subnet
+  `169.254.<addressblock>.0/24`. To let a service reach a further address, allow it
+  for that service, for example for electrs:
+  ```nix
+  systemd.services.electrs.serviceConfig.IPAddressAllow = [ "10.10.0.2" ];
+  ```
+  With netns-isolation, services with `tor.enforce` are also limited by the
+  namespace firewall, so `IPAddressAllow` alone doesn't widen them there; see that
+  section. charge-lnd has no `tor.enforce` and no such namespace firewall, so
+  `IPAddressAllow` does widen it, with or without netns-isolation.
+- They can't use the local name-resolution sockets (nscd, systemd-resolved, D-Bus,
+  Avahi). glibc resolves names itself, from `/etc/hosts`. If a service connects to
+  an allowed address by host name, use the address directly or add the name to
+  `networking.hosts`.
+- A resolver on `127.0.0.1` or `::1` stays reachable without netns-isolation; see
+  [Services](services.md) for what that means and how to avoid it.
+
 After migrating your configuration, set `nix-bitcoin.configVersion = "0.1.6";`.
 
 ## Upgrading to config version 0.1.5

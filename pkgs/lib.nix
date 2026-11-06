@@ -63,13 +63,32 @@ let self = {
     SystemCallFilter = self.defaultHardening.SystemCallFilter ++ [ "@pkey" ];
   };
 
+  # Local name-resolution helpers reachable over a Unix socket. The systemd IP
+  # filter covers IP sockets only, so a service restricted to local addresses
+  # must not use these: it then resolves names in-process, where `/etc/hosts`
+  # still works and queries to IP resolvers meet the filter.
+  #   /run/nscd              nscd / nsncd
+  #   /run/systemd/resolve   systemd-resolved varlink socket
+  #   /run/dbus              D-Bus system bus
+  #   /run/avahi-daemon      Avahi (mDNS), only when the user enables it
+  # `security.nix` creates the first three, so their masks fail closed: without
+  # a `-` prefix a missing path stops the unit from starting. Avahi is opt-in
+  # and owns its runtime directory, so its mask is `-` (skipped when absent)
+  # rather than creating that directory for it.
+  localResolverPaths = [ "/run/nscd" "/run/systemd/resolve" "/run/dbus" "-/run/avahi-daemon" ];
+
   # Allow takes precedence over Deny.
-  allowLocalIPAddresses = {
+  allowLocalIPAddresses = let
+    netns = config.nix-bitcoin.netns-isolation;
+  in {
     IPAddressAllow = [
       "127.0.0.1/32"
       "::1/128"
-      "169.254.0.0/16"
-    ];
+    ]
+    # The namespaces of the service and its peers, and the bridge with the
+    # Tor SOCKS and i2pd SAM proxies
+    ++ optional netns.enable "169.254.${toString netns.addressblock}.0/24";
+    InaccessiblePaths = self.localResolverPaths;
   };
   allowAllIPAddresses = { IPAddressAllow = "any"; };
   allowTor = self.allowLocalIPAddresses;
@@ -89,7 +108,11 @@ let self = {
       default = false;
       description = ''
         Whether to enforce Tor on this service by only allowing connections
-        from and to localhost and link-local addresses.
+        from and to localhost and, with netns-isolation, the network namespace
+        addresses `169.254.<addressblock>.0/24`. The service also can't reach
+        the local name-resolution sockets (nscd, systemd-resolved, D-Bus,
+        Avahi), so glibc resolves names itself: from `/etc/hosts`, and through
+        a resolver only if one listens on an allowed address.
       '';
     };
   };

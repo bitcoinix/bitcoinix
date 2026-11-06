@@ -116,6 +116,12 @@ let
       in mapAttrs (_: service: toList (service.serviceConfig.ReadOnlyPaths or []))
         (filterAttrs (_: usesDefaultHardening) config.systemd.services);
 
+      # Services restricted to local addresses (`nix-bitcoin.lib.allowLocalIPAddresses`)
+      tests.tor-enforce = true;
+      test.data.tor-enforce = attrNames (filterAttrs (_: service:
+        elem "127.0.0.1/32" (toList (service.serviceConfig.IPAddressAllow or []))
+      ) config.systemd.services);
+
       tests.rtl = cfg.rtl.enable;
       tests.rtl-credentials = cfg.rtl.enable;
       tests.rtl-backend-certs = cfg.rtl.enable;

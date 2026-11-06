@@ -336,6 +336,26 @@ These examples don't apply when using `netns-isolation`.
 `tor.enforce = false` lifts the Tor-only network restriction for the whole service, not
 just the REST server. With `tor.proxy`, outgoing connections still use Tor.
 
+With `tor.enforce`, a service reaches only localhost and, with
+[network namespace isolation](./configuration.md#network-namespace-isolation), its
+namespace subnet. It can't use the local name-resolution sockets (nscd,
+systemd-resolved, D-Bus, Avahi), so glibc resolves names itself, from `/etc/hosts`.
+
+The restriction covers IP connections and these sockets, not every local service:
+
+- Without netns-isolation, a resolver that listens on `127.0.0.1` or `::1`, such as a
+  local `dnsmasq` or `unbound`, or `networking.nameservers = [ "127.0.0.1" ]`, stays
+  reachable, because localhost is allowed and the restriction can't tell ports apart.
+  The service can still send it DNS queries, which it may forward over clearnet. With
+  netns-isolation each service has its own loopback, so a host resolver there is out of
+  reach, unless the host firewall opens the resolver's port on all interfaces: the
+  service can reach the bridge address on any port the firewall allows. Bind the
+  resolver to an address outside the allow list if you don't want these services to
+  use it.
+- Another daemon you run that the service can reach over a Unix socket, and that makes
+  network requests for its clients, isn't covered. Keep such daemons off nodes that
+  rely on `tor.enforce`, or restrict access to their sockets.
+
 ##### For LND
 ```nix
 services.lnd = {
