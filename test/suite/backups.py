@@ -38,3 +38,20 @@ def test_backups():
         succeed("zgrep -q 'CREATE TABLE public.nbxv1_metadata' /var/backup/postgresql/nbxplorer.sql.gz")
 
     assert_file_exists("secrets/lnd-wallet-password")
+
+    if "btcpayserver" in enabled_tests:
+        # A failed database dump fails the backup, but all other files are still backed up
+        psql = "runuser -u postgres -- psql -c"
+        succeed(f"{psql} 'ALTER DATABASE btcpaydb WITH ALLOW_CONNECTIONS false'")
+        machine.fail("systemctl start duplicity")
+        succeed(f"{psql} 'ALTER DATABASE btcpaydb WITH ALLOW_CONNECTIONS true'")
+        succeed(log_has_string("duplicity", "postgresqlBackup-btcpaydb.service"))
+        actual_files = succeed(f"{run_duplicity} list-current-files file:///var/lib/localBackups")
+        if "var/backup/postgresql/btcpaydb.sql.gz" in actual_files:
+            raise Exception("Backup includes a btcpaydb dump although the dump failed.")
+        assert_file_exists("secrets/lnd-wallet-password")
+
+        # The next backup includes the database again
+        succeed("systemctl start duplicity")
+        actual_files = succeed(f"{run_duplicity} list-current-files file:///var/lib/localBackups")
+        assert_file_exists("var/backup/postgresql/btcpaydb.sql.gz")
