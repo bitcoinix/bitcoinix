@@ -40,8 +40,8 @@ class RunnerTests(unittest.TestCase):
     def test_phase_order_preserves_service_dependencies(self):
         expected = [
             "electrs", "stop-electrs", "netns-isolation", "hardening-ro-paths",
-            "backups", "restart-bitcoind", "config-replace", "regtest",
-            "lnd-restart-on-clean-exit", "trustedcoin", "setup-secrets",
+            "backups", "restart-bitcoind", "config-replace", "clnrest-admin-rune",
+            "regtest", "lnd-restart-on-clean-exit", "trustedcoin", "setup-secrets",
             "setup-secrets-supplied",
         ]
         self.context["enabled_tests"] = set(expected)

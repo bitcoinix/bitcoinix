@@ -64,6 +64,16 @@ let
 
       tests.clightning = cfg.clightning.enable;
       test.data.clightning-replication = cfg.clightning.replication.enable;
+      tests.clnrest-admin-rune = with cfg.clightning.plugins.clnrest; enable && createAdminRune;
+      test.data.clnrest-admin-rune = {
+        file = "${cfg.clightning.networkDir}/admin-rune";
+        inherit (cfg.clightning) user;
+        inherit (cfg.clightning.plugins.clnrest) port;
+        # RTL's copy of the rune
+        rtlFile = if cfg.rtl.enable && cfg.rtl.nodes.clightning.enable
+          then "${cfg.rtl.dataDir}/clightning-admin-rune"
+          else null;
+      };
       tests.trustedcoin = cfg.clightning.plugins.trustedcoin.enable;
 
       # TODO-EXTERNAL:
