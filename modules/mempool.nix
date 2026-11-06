@@ -121,6 +121,10 @@ let
           Mempool backend settings.
           See here for available options:
           https://github.com/mempool/mempool/blob/master/backend/src/config.ts
+
+          `CORE_RPC.PASSWORD` can't be set here because these settings are copied
+          to the world-readable Nix store. mempool reads the password at startup from
+          `bitcoin-rpcpassword-public` in the secrets dir (`nix-bitcoin.secretsDir`).
         '';
       };
       database = {
@@ -243,6 +247,18 @@ in {
   inherit options;
 
   config = mkIf cfg.enable {
+    assertions = [
+      { assertion = cfg.settings.CORE_RPC.PASSWORD or null == null;
+        message = ''
+          `services.mempool.settings.CORE_RPC.PASSWORD` would be copied to the
+          world-readable Nix store. Remove it. mempool reads the bitcoind RPC password
+          from `${secretsDir}/bitcoin-rpcpassword-public` at startup. To use another
+          password, e.g. for a remote bitcoind, save it to this file.
+          See docs/configuration.md, "Secrets dir".
+        '';
+      }
+    ];
+
     services.bitcoind.txindex = true;
     # Called by mempool's block indexer when bitcoind has `coinstatsindex` enabled
     services.bitcoind.rpc.users.public.rpcwhitelist = [ "gettxoutsetinfo" ];
@@ -309,17 +325,15 @@ in {
     systemd.services.mempool = rec {
       wantedBy = [ "multi-user.target" ];
       requires = [ "mysql.service" ];
-      wants = [ "${cfg.electrumServer}.service" ];
+      wants = [ "${cfg.electrumServer}.service" "nix-bitcoin-secrets.target" ];
       after = requires ++ wants;
       preStart = ''
         mkdir -p '${cacheDir}/cache'
         # jq reads the password from the file itself. A sed program would carry
         # the password in its argv, readable by every local user through
         # /proc/<pid>/cmdline while it runs. jq also escapes it as JSON.
-        # Only the default (null) is filled in; an explicit
-        # `settings.CORE_RPC.PASSWORD` stays as configured.
         conf=$(${pkgs.jq}/bin/jq --rawfile pw '${secretsDir}/bitcoin-rpcpassword-public' \
-          '.CORE_RPC.PASSWORD |= (if . == null then ($pw | sub("\n+$"; "")) else . end)' ${configFile})
+          '.CORE_RPC.PASSWORD = ($pw | sub("\n+$"; ""))' ${configFile})
         # config.json holds the public RPC password. Replace it in one step with mode 600,
         # also when an earlier version left a file with laxer permissions.
         install -T -m 600 <(echo "$conf") '${cacheDir}/config.json'
