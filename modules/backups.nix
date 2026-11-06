@@ -77,7 +77,13 @@ let
   '';
 
   postgresqlBackupDir = config.services.postgresqlBackup.location;
-  postgresqlBackupPaths = map (db: "${postgresqlBackupDir}/${db}.sql.gz") cfg.postgresqlDatabases;
+  # File name suffixes used by the NixOS postgresqlBackup module
+  postgresqlBackupSuffix = {
+    none = "";
+    gzip = ".gz";
+    zstd = ".zstd";
+  }.${config.services.postgresqlBackup.compression};
+  postgresqlBackupPaths = map (db: "${postgresqlBackupDir}/${db}.sql${postgresqlBackupSuffix}") cfg.postgresqlDatabases;
   postgresqlBackupServices = map (db: "postgresqlBackup-${db}.service") cfg.postgresqlDatabases;
 in {
   inherit options;
