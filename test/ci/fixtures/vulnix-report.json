@@ -1,0 +1,227 @@
+[
+ {
+  "name": "brotli-1.2.0",
+  "pname": "brotli",
+  "version": "1.2.0",
+  "derivation": "/nix/store/imj8k40hz32xyii3l9db2h4nw33ynxf4-brotli-1.2.0.drv",
+  "affected_by": [
+   "CVE-2026-111497"
+  ],
+  "whitelisted": [],
+  "known_exploited": [],
+  "known_exploited_due_date": {},
+  "cvssv3_basescore": {
+   "CVE-2026-111497": 9.8
+  },
+  "description": {
+   "CVE-2026-111497": "A buffer overflow vulnerability in the Brotli decoder (c/dec/decode.c) in Google Brotli versions 1.0.3 through 1.2.0 on all platforms allows a remote unauthenticated attacker to corrupt adjacent decoder state memory, disclose sensitive memory contents, cause a denial of service, or potentially execute arbitrary code using a crafted Brotli-compressed stream.\n\n\n\n\n\nUsers need to update any Brotli libraries or binaries between 1.0.3 through 1.2.0 to the latest available version: 1.0.10 or 1.1.1 or 1.2.1."
+  }
+ },
+ {
+  "name": "brotli-1.2.1",
+  "pname": "brotli",
+  "version": "1.2.1",
+  "derivation": "/nix/store/8k6znj6k1gsc03g9fp0amicfrwhhw39k-brotli-1.2.1.drv",
+  "affected_by": [
+   "CVE-2026-111497"
+  ],
+  "whitelisted": [],
+  "known_exploited": [],
+  "known_exploited_due_date": {},
+  "cvssv3_basescore": {
+   "CVE-2026-111497": 9.8
+  },
+  "description": {
+   "CVE-2026-111497": "A buffer overflow vulnerability in the Brotli decoder (c/dec/decode.c) in Google Brotli versions 1.0.3 through 1.2.0 on all platforms allows a remote unauthenticated attacker to corrupt adjacent decoder state memory, disclose sensitive memory contents, cause a denial of service, or potentially execute arbitrary code using a crafted Brotli-compressed stream.\n\n\n\n\n\nUsers need to update any Brotli libraries or binaries between 1.0.3 through 1.2.0 to the latest available version: 1.0.10 or 1.1.1 or 1.2.1."
+  }
+ },
+ {
+  "name": "dhcpcd-10.3.1",
+  "pname": "dhcpcd",
+  "version": "10.3.1",
+  "derivation": "/nix/store/mmiycvjr4qqiqmv99h3ypnlchnxwvp8y-dhcpcd-10.3.1.drv",
+  "affected_by": [
+   "CVE-2026-56113",
+   "CVE-2026-56114",
+   "CVE-2026-56116",
+   "CVE-2026-56117"
+  ],
+  "whitelisted": [],
+  "known_exploited": [],
+  "known_exploited_due_date": {},
+  "cvssv3_basescore": {
+   "CVE-2026-56116": 6.5,
+   "CVE-2026-56117": 4.7,
+   "CVE-2026-56113": 5.3,
+   "CVE-2026-56114": 5.3
+  },
+  "description": {
+   "CVE-2026-56116": "dhcpcd through 10.3.2, fixed in commit 708b4a5, contains a memory leak vulnerability in the IPv6 Router Advertisement route information handling that allows an unauthenticated same-link attacker to cause denial of service by sending crafted Router Advertisements. Attackers can repeatedly send Router Advertisements containing Route Information options with a lifetime of zero, triggering unfreed allocations in routeinfo_findalloc() that cause linear memory exhaustion and eventual daemon crash.",
+   "CVE-2026-56117": "dhcpcd through 10.3.2, fixed in commit 78ea09e, contains a heap use-after-free vulnerability in the control socket handling within src/control.c that allows local unprivileged attackers to trigger memory corruption when privilege separation is disabled. Attackers can connect to the control socket and send a privileged command such as -x, causing control_recvdata() to free the client object while the same READ+HANGUP event subsequently reaches control_hangup() with the stale pointer, resulting in a use-after-free condition exploitable in deployments using --disable-privsep or where privsep initialization has failed with the control socket operating in mode 0666.",
+   "CVE-2026-56113": "dhcpcd through 10.3.2, fixed in commit 5733d3c, contains a heap use-after-free vulnerability that allows unauthenticated same-link attackers to crash the daemon by sending a crafted DHCPv6 RENEW reply with RFC6603 OPTION_PD_EXCLUDE and both preferred and valid lifetimes set to zero. Attackers acting as or impersonating a DHCPv6 server can trigger dhcp6_deprecatedele() to free a delegated child address while an outer TAILQ_FOREACH_SAFE iterator in dhcp6_deprecateaddrs() still holds the freed pointer, causing a use-after-free when TAILQ_REMOVE is reached.",
+   "CVE-2026-56114": "dhcpcd through 10.3.2, fixed in commit 2f00c7b, contains a one-byte stack out-of-bounds write vulnerability in dhcp6_makemessage() in src/dhcp6.c that allows unauthenticated same-link attackers to write beyond a fixed local buffer by serializing an oversized RFC6603 OPTION_PD_EXCLUDE option body. Attackers can send a crafted DHCPv6 ADVERTISE message containing an IA_PD IAPREFIX /0 with a valid OPTION_PD_EXCLUDE using an exclude prefix length of /121 through /128 to trigger the out-of-bounds write and potentially corrupt adjacent stack memory."
+  }
+ },
+ {
+  "name": "glib-2.88.3",
+  "pname": "glib",
+  "version": "2.88.3",
+  "derivation": "/nix/store/sxfcjc91f8nqvm88hhqpacw7wkqy1wx2-glib-2.88.3.drv",
+  "affected_by": [
+   "CVE-2026-58016"
+  ],
+  "whitelisted": [],
+  "known_exploited": [],
+  "known_exploited_due_date": {},
+  "cvssv3_basescore": {
+   "CVE-2026-58016": 7.5
+  },
+  "description": {
+   "CVE-2026-58016": "A flaw was found in GLib. A state confusion issue exists in g_dbus_node_info_new_for_xml() in the gio/gdbusintrospection.c file when processing malformed D-Bus introspection XML, specifically with a `node` element nested within other elements like `method`, `signal`, `property` or `arg`. This issue can cause an unsigned integer overflow and lead to an out-of-bounds read, resulting in a denial of service."
+  }
+ },
+ {
+  "name": "glib-2.88.3",
+  "pname": "glib",
+  "version": "2.88.3",
+  "derivation": "/nix/store/fvpkp0mykql6qbsnhrn2wy7i9zipjxx5-glib-2.88.3.drv",
+  "affected_by": [
+   "CVE-2026-58016"
+  ],
+  "whitelisted": [],
+  "known_exploited": [],
+  "known_exploited_due_date": {},
+  "cvssv3_basescore": {
+   "CVE-2026-58016": 7.5
+  },
+  "description": {
+   "CVE-2026-58016": "A flaw was found in GLib. A state confusion issue exists in g_dbus_node_info_new_for_xml() in the gio/gdbusintrospection.c file when processing malformed D-Bus introspection XML, specifically with a `node` element nested within other elements like `method`, `signal`, `property` or `arg`. This issue can cause an unsigned integer overflow and lead to an out-of-bounds read, resulting in a denial of service."
+  }
+ },
+ {
+  "name": "jq-1.8.2",
+  "pname": "jq",
+  "version": "1.8.2",
+  "derivation": "/nix/store/f1gn2clqsz826a3jnh1pvw41x9pfsy7z-jq-1.8.2.drv",
+  "affected_by": [
+   "CVE-2026-44777"
+  ],
+  "whitelisted": [],
+  "known_exploited": [],
+  "known_exploited_due_date": {},
+  "cvssv3_basescore": {
+   "CVE-2026-44777": 5.5
+  },
+  "description": {
+   "CVE-2026-44777": "jq is a command-line JSON processor. In 1.8.2rc1 and earlier, the ordinary module loader recurses without cycle detection when two\notherwise valid modules include each other."
+  }
+ },
+ {
+  "name": "libusb-1.0.29",
+  "pname": "libusb",
+  "version": "1.0.29",
+  "derivation": "/nix/store/jmd6wnmhjyj0q5a2hlpnz3939cxnda3f-libusb-1.0.29.drv",
+  "affected_by": [
+   "CVE-2026-23679",
+   "CVE-2026-47104"
+  ],
+  "whitelisted": [],
+  "known_exploited": [],
+  "known_exploited_due_date": {},
+  "cvssv3_basescore": {
+   "CVE-2026-23679": 6.2,
+   "CVE-2026-47104": 4.0
+  },
+  "description": {
+   "CVE-2026-23679": "libusb before version 1.0.30 contains a NULL pointer dereference vulnerability that allows attackers to crash applications by supplying a malformed USB configuration descriptor where an interface claims bNumEndpoints greater than zero but is followed by a class-specific descriptor whose bLength exceeds the remaining buffer size, causing parse_interface() to return early without allocating the endpoint array. Attackers can exploit this flaw through libusb_get_active_config_descriptor or libusb_get_config_descriptor by providing crafted descriptors via virtualized USB passthrough, file-based descriptor parsing, or network sources, causing any application iterating over endpoints to dereference a NULL endpoint pointer and crash.",
+   "CVE-2026-47104": "libusb before version 1.0.30 contains a one-byte out-of-bounds read vulnerability in parse_iad_array() in descriptor.c that allows attackers to trigger a denial of service by supplying a malformed USB descriptor whose bLength equals size minus one, causing the bounds check to use the original buffer size instead of the remaining size. Attackers in virtualized environments with USB passthrough can supply crafted descriptors through libusb_get_active_interface_association_descriptors or libusb_get_interface_association_descriptors to read one byte past the end of the malloc allocation, resulting in a denial of service."
+  }
+ },
+ {
+  "name": "patch-2.8",
+  "pname": "patch",
+  "version": "2.8",
+  "derivation": "/nix/store/6gmncc6j682m7gbj2kvd3lwr5m6bj766-patch-2.8.drv",
+  "affected_by": [
+   "CVE-2026-56288",
+   "CVE-2026-56289"
+  ],
+  "whitelisted": [],
+  "known_exploited": [],
+  "known_exploited_due_date": {},
+  "cvssv3_basescore": {
+   "CVE-2026-56289": 5.5,
+   "CVE-2026-56288": 5.5
+  },
+  "description": {
+   "CVE-2026-56289": "GNU patch is vulnerable to a denial of service (DoS) due to improper validation of hunk (single block of changes in diff) line offsets in unified-diff input. A specially crafted patch can specify an extremely large line number, causing the application to enter an effectively infinite processing loop while attempting to locate the requested position.\nThis results in excessive CPU consumption and prevents the process from completing.\nAn attacker can trigger this behavior by supplying a malicious patch file, causing the utility to become unresponsive and require manual termination.\n\n\n\nThis issue has been fixed in the commit faba04ef4f2b410257f76c1b9dc85e350929c4b9",
+   "CVE-2026-56288": "GNU patch is vulnerable to a NULL pointer dereference when processing a specially crafted unified-diff patch file. Improper handling of consecutive end-of-file newline markers can corrupt internal hunk (single block of changes in diff) data structures, causing the application to pass a NULL pointer to fwrite() during patch processing.\nAn attacker can trigger this condition with a malicious patch file, causing the utility to crash and resulting in a denial of service.\n\n\n\nThis issue has been fixed in the commit e6d6a4e021660679d7fc9150f981d4920f722313"
+  }
+ },
+ {
+  "name": "rsync-3.5.0",
+  "pname": "rsync",
+  "version": "3.5.0",
+  "derivation": "/nix/store/xaiqm3ipm2bmzgay7n5d8vnb047khn7q-rsync-3.5.0.drv",
+  "affected_by": [
+   "CVE-2026-119741"
+  ],
+  "whitelisted": [],
+  "known_exploited": [],
+  "known_exploited_due_date": {},
+  "cvssv3_basescore": {
+   "CVE-2026-119741": 7.5
+  },
+  "description": {
+   "CVE-2026-119741": "rsync before 3.5.2 contains a denial of service vulnerability in the delta-transfer sender's hash_search() in match.c that allows malicious receivers to trigger unbounded strong-checksum work at consecutive offsets. Unauthenticated attackers pulling from a public daemon module can supply weak checksums colliding with consecutive rolling windows plus non-matching strong checksums, exhausting sender CPU across concurrent connections."
+  }
+ },
+ {
+  "name": "sqlite-3.53.3",
+  "pname": "sqlite",
+  "version": "3.53.3",
+  "derivation": "/nix/store/5dcphnl25njibh46bbabx7h6wjjwlz1x-sqlite-3.53.3.drv",
+  "affected_by": [
+   "CVE-2026-119371",
+   "CVE-2026-119372",
+   "CVE-2026-119373",
+   "CVE-2026-119374",
+   "CVE-2026-119375",
+   "CVE-2026-119376",
+   "CVE-2026-119377",
+   "CVE-2026-119378",
+   "CVE-2026-119379",
+   "CVE-2026-119586",
+   "CVE-2026-119591"
+  ],
+  "whitelisted": [],
+  "known_exploited": [],
+  "known_exploited_due_date": {},
+  "cvssv3_basescore": {
+   "CVE-2026-119378": 5.5,
+   "CVE-2026-119374": 7.8,
+   "CVE-2026-119373": 7.8,
+   "CVE-2026-119591": 5.5,
+   "CVE-2026-119371": 5.5,
+   "CVE-2026-119376": 5.5,
+   "CVE-2026-119377": 2.5,
+   "CVE-2026-119372": 5.5,
+   "CVE-2026-119379": 7.8,
+   "CVE-2026-119586": 7.8,
+   "CVE-2026-119375": 5.5
+  },
+  "description": {
+   "CVE-2026-119378": "SQLite before 3.54.0 contains a use-after-free vulnerability in the R-Tree extension that allows attackers to make applications use freed heap memory by manipulating the %_node shadow table. Attackers can supply a database declaring %_node WITHOUT ROWID or with a RAISE(IGNORE) trigger so nodeWrite() hashes nodes as 0, crashing the process after node splits.",
+   "CVE-2026-119374": "SQLite before 3.54.0 built with FTS5 contains a heap buffer overflow in fts5DoSecureDelete() that allows attackers to write past the leaf page buffer via crafted footer key offsets. Attackers can supply a database file with a corrupted FTS5 index that, when deleted from with secure-delete enabled, corrupts heap memory and crashes the application.",
+   "CVE-2026-119373": "SQLite before 3.54.0 built with FTS5 contains a heap buffer overflow in fts5MergeRowidLists() that undersizes the output buffer when merging detail=none prefix doclists. Attackers who can populate a detail=none FTS5 table with negative rowids and run a prefix MATCH query can write past the allocation, corrupting heap memory and crashing the process.",
+   "CVE-2026-119591": "SQLite before 3.54.0 contains a stack exhaustion vulnerability in countOfViewOptimization() that allows attackers to crash the host process via count(*) over a large multi-row VALUES clause. Attackers supplying SQL or a database file with a crafted view can trigger deeply nested TK_PLUS expressions whose recursive freeing in sqlite3ExprDeleteNN() exhausts the C stack, causing denial of service.",
+   "CVE-2026-119371": "SQLite before 3.54.0 contains a stack exhaustion vulnerability that allows attackers to bypass the SQLITE_LIMIT_EXPR_DEPTH nesting limit because common table expressions are not counted against it. Attackers can supply a WITH clause chaining tens of thousands of CTEs, via plain SQL or a view in an untrusted database file, causing unbounded selectExpander() recursion that crashes the process.",
+   "CVE-2026-119376": "SQLite before 3.54.0 contains a stack exhaustion vulnerability that allows attackers to bypass the SQLITE_LIMIT_EXPR_DEPTH limit by chaining COLLATE postfix operators. Attackers can supply roughly 175,000 chained COLLATE operators in SQL or an untrusted database view to trigger unbounded recursion in sqlite3WalkExprNN() and crash the process.",
+   "CVE-2026-119377": "SQLite before 3.54.0 contains an authorization bypass vulnerability in lookupName() that invokes the authorizer only for the first joined table's USING column. Attackers able to submit SQL can query a shared USING column in a RIGHT or FULL JOIN to read columns denied via sqlite3_set_authorizer() SQLITE_READ restrictions.",
+   "CVE-2026-119372": "SQLite before 3.54.0 built with FTS3/FTS4 and SQLITE_ENABLE_FTS3_PARENTHESIS contains a use-after-free vulnerability in fts3BestSnippet() caused by dangling cached position-list pointers. Attackers can run a full-text MATCH query combining OR and NEAR operators with snippet() to read freed heap memory and crash the process.",
+   "CVE-2026-119379": "SQLite before 3.54.0 built with the session extension contains a heap buffer overflow vulnerability in sqlite3changeset_apply() that allows attackers to corrupt heap memory by supplying crafted changesets. Attackers can repeat a table name in a second changeset block with a larger column count, causing sessionUpdateFind() to memset past the undersized aUpdateMask allocation.",
+   "CVE-2026-119586": "SQLite command-line shell through 3.54.1 contains a command injection vulnerability in the .recover command that emits attacker-planted dot-commands stored in sqlite_schema.sql values verbatim. Attackers can craft a database whose schema holds a valid CREATE statement followed by a .shell or .system line, executing OS commands when victims pipe .recover output into sqlite3.",
+   "CVE-2026-119375": "SQLite before 3.54.0 contains an information disclosure vulnerability that allows attackers to read uninitialized page-cache memory by supplying a WAL file with an undersized page size. Attackers can craft a database and WAL file whose oversized record payload makes queries like substr() return stale bytes, disclosing other table rows and internal pointers."
+  }
+ }
+]
