@@ -76,6 +76,11 @@ let
     services.lnd = { port = 9736; restAddress = "10.0.0.2"; };
     services.clightning.plugins.clnrest.address = "10.0.0.3";
   };
+  backupsWithCompression = compression: evaluate {
+    services.btcpayserver.enable = true;
+    services.backups.enable = true;
+    services.postgresqlBackup.compression = compression;
+  };
   netns = evaluate {
     imports = [ lightning ];
     services.lnd.port = 9736;
@@ -325,6 +330,20 @@ let
         { version = null; settings = password; }
       ];
       expected = [ false true true true ];
+    };
+    testBackupsFollowPostgresqlCompression = let
+      includes = compression: let
+        list = builtins.readFile (backupsWithCompression compression).services.duplicity.includeFileList;
+      in file: lib.hasInfix "/var/backup/postgresql/${file}\n" list;
+    in {
+      expr = {
+        zstd = map (includes "zstd") [ "btcpaydb.sql.zstd" "nbxplorer.sql.zstd" "btcpaydb.sql.gz" ];
+        none = map (includes "none") [ "btcpaydb.sql" "nbxplorer.sql" "btcpaydb.sql.gz" ];
+      };
+      expected = {
+        zstd = [ true true false ];
+        none = [ true true false ];
+      };
     };
     testMempoolCustomUser = {
       expr = with customMempoolUser; {
