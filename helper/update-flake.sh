@@ -74,9 +74,12 @@ echo
 nix eval --raw -f update-flake.nix --argstr prevVersions "$versions" showUpdates; echo
 
 pinned=../pkgs/pinned.nix
-pinnedSrc=$(nix eval --raw -f update-flake.nix --argstr prevVersions "$versions" pinnedFile)
-if [[ $pinnedSrc != $(cat "$pinned") ]]; then
-    echo "$pinnedSrc" > "$pinned"
+# Compare the raw eval output byte for byte, like test/ci/check-versions.sh
+pinnedNew=$(mktemp)
+trap 'rm -f "$pinnedNew"' EXIT
+nix eval --raw -f update-flake.nix --argstr prevVersions "$versions" pinnedFile > "$pinnedNew"
+if ! cmp -s "$pinnedNew" "$pinned"; then
+    cp "$pinnedNew" "$pinned"
     echo
     echo "Updated pinned.nix"
 fi

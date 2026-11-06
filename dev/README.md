@@ -166,8 +166,9 @@ The second command regenerates the package versions table that
 `versions.json`, add its release link to `helper/gen-docs-versions.sh`; the script fails
 without it.
 
-CI checks that `versions.json` matches the locked inputs and local packages, and that
-the docs table matches `versions.json`. Run
+CI checks that `pkgs/pinned.nix` matches what `helper/update-flake.sh` generates, that
+`versions.json` matches the locked inputs and local packages, and that the docs table
+matches `versions.json`. Run
 `./test/ci/check-versions.sh` to check it locally without updating dependencies.
 
 ## Switching to a new NixOS release
