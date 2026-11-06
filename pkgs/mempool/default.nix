@@ -50,6 +50,8 @@ rec {
   mempool-backend = mkDerivationMempool {
     pname = "mempool-backend";
 
+    disallowedReferences = [ nodejs ];
+
     patches = [
       ./0001-allow-disabling-mining-pool-fetching.patch
       # Stock mempool listens on all interfaces; bind to `MEMPOOL.HTTP_HOST`
@@ -70,6 +72,10 @@ rec {
     installPhase = ''
       mkdir -p $out/lib/mempool-backend
       ${sync} package/ $out/lib/mempool-backend
+
+      # Build-time shebang patching selects full Node, which also retains npm.
+      # Use the slim runtime for scripts shipped with the backend instead.
+      PATH=${nodejsRuntime}/bin:$PATH patchShebangs --update $out/lib/mempool-backend/node_modules
 
       makeWrapper ${nodejsRuntime}/bin/node $out/bin/mempool-backend \
         --add-flags $out/lib/mempool-backend/index.js
