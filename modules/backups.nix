@@ -11,6 +11,8 @@ let
         This uses the NixOS duplicity service.
         To further configure the backup, you can set NixOS options `services.duplicity.*`.
         The `services.duplicity.cleanup.*` options are particularly useful.
+        If a database dump fails, the `duplicity` unit still backs up all other
+        files and then fails.
       '';
     };
     with-bulk-data = mkOption {
@@ -77,7 +79,13 @@ let
   '';
 
   postgresqlBackupDir = config.services.postgresqlBackup.location;
-  postgresqlBackupPaths = map (db: "${postgresqlBackupDir}/${db}.sql.gz") cfg.postgresqlDatabases;
+  # File name suffixes used by the NixOS postgresqlBackup module
+  postgresqlBackupSuffix = {
+    none = "";
+    gzip = ".gz";
+    zstd = ".zstd";
+  }.${config.services.postgresqlBackup.compression};
+  postgresqlBackupPaths = map (db: "${postgresqlBackupDir}/${db}.sql${postgresqlBackupSuffix}") cfg.postgresqlDatabases;
   postgresqlBackupServices = map (db: "postgresqlBackup-${db}.service") cfg.postgresqlDatabases;
 in {
   inherit options;
@@ -95,8 +103,29 @@ in {
       };
 
       systemd.services.duplicity = {
-        wants = postgresqlBackupServices;
-        after = postgresqlBackupServices ++ [ "nix-bitcoin-secrets.target" ];
+        after = [ "nix-bitcoin-secrets.target" ];
+        # Dump the databases before each backup.
+        # A failed dump fails the unit, but only after all other files have been
+        # backed up, so that a database problem doesn't block e.g. channel backups.
+        preStart = ''
+          for unit in ${toString postgresqlBackupServices}; do
+            if ! ${config.systemd.package}/bin/systemctl start "$unit"; then
+              echo "$unit" >> "$RUNTIME_DIRECTORY/failed-dumps"
+            fi
+          done
+        '';
+        postStart = ''
+          if [[ -e $RUNTIME_DIRECTORY/failed-dumps ]]; then
+            echo "The backup has no current dump of these databases:"
+            cat "$RUNTIME_DIRECTORY/failed-dumps"
+            exit 1
+          fi
+        '';
+        serviceConfig = {
+          # Run postStart after the backup has finished
+          Type = "oneshot";
+          RuntimeDirectory = "duplicity";
+        };
       };
 
       services.postgresqlBackup = {

@@ -76,6 +76,11 @@ let
     services.lnd = { port = 9736; restAddress = "10.0.0.2"; };
     services.clightning.plugins.clnrest.address = "10.0.0.3";
   };
+  zstdBackups = evaluate {
+    services.btcpayserver.enable = true;
+    services.backups.enable = true;
+    services.postgresqlBackup.compression = "zstd";
+  };
   netns = evaluate {
     imports = [ lightning ];
     services.lnd.port = 9736;
@@ -293,6 +298,12 @@ let
     testNetnsRESTAddresses = {
       expr = getRestAddresses netns;
       expected = with netns.nix-bitcoin.netns-isolation.netns; [ lnd.address clightning.address ];
+    };
+    testBackupsFollowPostgresqlCompression = {
+      expr = map (file: lib.hasInfix "/var/backup/postgresql/${file}\n"
+        (builtins.readFile zstdBackups.services.duplicity.includeFileList))
+        [ "btcpaydb.sql.zstd" "nbxplorer.sql.zstd" "btcpaydb.sql.gz" ];
+      expected = [ true true false ];
     };
     testMempoolCustomUser = {
       expr = with customMempoolUser; {
