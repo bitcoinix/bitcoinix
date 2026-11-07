@@ -154,5 +154,22 @@ makeTestVM {
           client.fail(f"runuser -u bitcoin -- ls {replica_db}")
           # A gocryptfs has been created on the server
           server.succeed("ls /var/backup/nb-replication/writable/lightningd-db/gocryptfs.conf")
+
+      with subtest("the mounts stop cleanly"):
+          client.succeed("systemctl stop clightning-replication-mounts")
+          state = client.succeed("systemctl show -P ActiveState clightning-replication-mounts").strip()
+          assert state == "inactive", f"the mounts unit is {state} after a stop"
+          client.fail("grep -q ' /var/cache/clightning-replication/' /proc/mounts")
+          client.succeed("systemctl start clightning")
+          client.succeed("systemctl is-active clightning-replication-mounts")
+          client.wait_until_succeeds(f"runuser -u clightning -- ls {replica_db}")
+
+      with subtest("clightning restarts after a crash"):
+          # Kill only lightningd, like a crash, and leave its plugins to exit
+          client.succeed("systemctl kill --kill-whom=main --signal=SIGKILL clightning")
+          client.wait_until_fails("systemctl is-active clightning")
+          client.wait_for_unit("clightning.service")
+          client.succeed("systemctl is-active clightning-replication-mounts")
+          client.wait_until_succeeds(f"runuser -u clightning -- ls {replica_db}")
   '';
 }
