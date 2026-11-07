@@ -28,8 +28,20 @@ run `fetch-release.sh` with `releaseVersion=<version>` and write its output to `
 bitcoinix now bases its systems and packages on unstable nixpkgs only. The single
 `nixpkgs` input tracks `nixpkgs-unstable`; remove any follows declarations targeting
 `bitcoinix/nixpkgs-unstable`. Continue following `bitcoinix/nixpkgs` for your node.
+The system itself must be evaluated with unstable nixpkgs, regardless of
+`nix-bitcoin.useVersionLockedPkgs`. NixOS 26.05 evaluation fails before migration
+assertions run, even without I2P or namespace isolation, with an error such as
+``The option `services.i2pd.checkConfig' does not exist``.
+Switch your system's nixpkgs input to unstable before evaluating this release.
+If your system follows `bitcoinix/nixpkgs`, as the deployment examples do, updating
+bitcoinix moves the whole OS from NixOS 26.05 to unstable, not only service packages.
+
 `nix-bitcoin.useVersionLockedPkgs` now defaults to `true`, including for local
-package builds. If you disable it, use unstable nixpkgs for your system too.
+package builds. Your system's `nixpkgs.overlays` and `nixpkgs.config` no longer
+apply to the pinned service packages, including bitcoind, lnd and clightning.
+Review any security patches or other customizations supplied through overlays:
+set `nix-bitcoin.useVersionLockedPkgs = false` to use your system's customized
+unstable package set, or explicitly override the affected service's package.
 Keep your existing `system.stateVersion`: it controls state compatibility and does
 not select the nixpkgs channel.
 
@@ -43,9 +55,10 @@ For custom i2pd configuration, replace `services.i2pd.proto.sam` with
 bitcoinix still enables SAM automatically for `services.bitcoind.i2p` and
 sets its address for namespace isolation.
 
-Core Lightning now requires memory-locking syscalls to keep its signing keys out
-of swap. For a custom NixOS/systemd-nspawn container, add this to the **host**
-configuration, replacing `node` with the container name:
+On the unstable package/system base, Core Lightning in systemd-nspawn needs
+memory-locking syscalls allowed to keep its signing keys out of swap. For a custom
+NixOS/systemd-nspawn container, add this to the **host** configuration, replacing
+`node` with the container name:
 
 ```nix
 containers.node.extraFlags = [ "--system-call-filter=@memlock" ];

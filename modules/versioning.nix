@@ -460,8 +460,13 @@ let
         bitcoinix now uses only unstable nixpkgs via the `nixpkgs` flake input.
         Remove follows declarations for the removed `nixpkgs-unstable` input.
         `nix-bitcoin.useVersionLockedPkgs` now defaults to true, so service
-        packages use bitcoinix's locked unstable revision. If you disable it,
-        use unstable nixpkgs for your system too.
+        packages use bitcoinix's locked unstable revision. Your system's
+        nixpkgs.overlays and nixpkgs.config no longer apply to these packages;
+        set this option to false to retain your system's package customizations.
+        The system itself must use unstable nixpkgs regardless of this option.
+        Systems following bitcoinix/nixpkgs move the whole OS to unstable.
+        NixOS 26.05 fails before this notice with an error such as
+        "The option `services.i2pd.checkConfig' does not exist".
         Custom calls to `lib.mkNbPkgs` or `pkgs/default.nix` must drop
         `pkgsUnstable`; `pinned` now contains only `pkgs` and the package entries.
         See docs/upgrading.md, "Upgrading to config version 0.1.5".
@@ -471,7 +476,8 @@ let
       version = "0.1.5";
       condition = config.boot.isNspawnContainer && config.services.clightning.enable;
       message = ''
-        Core Lightning now requires memory-locking syscalls for its signing keys.
+        On the unstable package/system base, Core Lightning in systemd-nspawn
+        needs memory-locking syscalls allowed for its signing keys.
         For custom systemd-nspawn containers, add
         `containers.<name>.extraFlags = [ "--system-call-filter=@memlock" ];`
         to the host configuration. Without this, lightning_hsmd aborts at startup.
