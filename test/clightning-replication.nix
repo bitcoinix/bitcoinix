@@ -113,6 +113,35 @@ makeTestVM {
         cmd = f"{systems[system]}/bin/switch-to-configuration test >&2"
         client.succeed(cmd)
 
+    def check_mount_lifecycle(*mountpoints):
+        with subtest("the mounts stop cleanly and stop clightning"):
+            client.succeed("systemctl stop clightning-replication-mounts")
+            for unit in ["clightning", "clightning-replication-mounts"]:
+                client.succeed(f"test $(systemctl show -P ActiveState {unit}) = inactive")
+            for mountpoint in mountpoints:
+                client.fail(f"findmnt --mountpoint {mountpoint}")
+            client.succeed("systemctl start clightning")
+            client.wait_for_unit("clightning.service")
+            client.succeed("runuser -u clightning -- lightning-cli getinfo")
+            for mountpoint in mountpoints:
+                client.succeed(f"findmnt --mountpoint {mountpoint}")
+
+        with subtest("clightning restarts after a crash"):
+            old_pid = int(client.succeed("systemctl show -P MainPID clightning"))
+            assert old_pid > 0
+            # Kill only lightningd, leaving its plugins to exit as after a crash.
+            client.succeed("systemctl kill --kill-whom=main --signal=SIGKILL clightning")
+            client.wait_until_succeeds(
+                "pid=$(systemctl show -P MainPID clightning); "
+                f"test $pid -gt 0 && test $pid -ne {old_pid}",
+                timeout=60,
+            )
+            client.wait_for_unit("clightning.service")
+            client.succeed("runuser -u clightning -- lightning-cli getinfo")
+            client.succeed("systemctl is-active clightning-replication-mounts")
+            for mountpoint in mountpoints:
+                client.succeed(f"findmnt --mountpoint {mountpoint}")
+
     client = replicationLocal
 
     if not "is_interactive" in vars():
@@ -135,6 +164,7 @@ makeTestVM {
           client.fail(f"runuser -u bitcoin -- ls {replica_db}")
           # A gocryptfs has been created
           client.succeed("ls /var/backup/clightning/lightningd-db/gocryptfs.conf")
+          check_mount_lifecycle("/var/cache/clightning-replication/plaintext")
 
       switch_to_system("replicationRemote")
       server.wait_for_unit("sshd.service")
@@ -145,6 +175,7 @@ makeTestVM {
           client.fail(f"runuser -u bitcoin -- ls {replica_db}")
           # A clighting db exists on the server
           server.succeed("ls /var/backup/nb-replication/writable/lightningd.sqlite3")
+          check_mount_lifecycle("/var/cache/clightning-replication/sshfs")
 
       switch_to_system("replicationRemoteEncrypted")
       with subtest("remote replication encrypted"):
@@ -154,5 +185,9 @@ makeTestVM {
           client.fail(f"runuser -u bitcoin -- ls {replica_db}")
           # A gocryptfs has been created on the server
           server.succeed("ls /var/backup/nb-replication/writable/lightningd-db/gocryptfs.conf")
+          check_mount_lifecycle(
+              "/var/cache/clightning-replication/plaintext",
+              "/var/cache/clightning-replication/sshfs",
+          )
   '';
 }
