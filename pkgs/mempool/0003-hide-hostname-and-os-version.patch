@@ -1,0 +1,45 @@
+diff --git a/backend/src/api/backend-info.ts b/backend/src/api/backend-info.ts
+--- a/backend/src/api/backend-info.ts
++++ b/backend/src/api/backend-info.ts
+@@ -1,6 +1,5 @@
+ import fs from 'fs';
+ import path from 'path';
+-import os from 'os';
+ import { IBackendInfo } from '../mempool.interfaces';
+ import config from '../config';
+ import bitcoinClient from './bitcoin/bitcoin-client';
+@@ -24,13 +23,13 @@ class BackendInfo {
+       };
+     }
+     this.backendInfo = {
+-      hostname: os.hostname(),
++      hostname: '',
+       version: versionInfo.version,
+       gitCommit: versionInfo.gitCommit,
+       lightning: config.LIGHTNING.ENABLED,
+       backend: config.MEMPOOL.BACKEND,
+       coreVersion: '?',
+-      osVersion: `${os.type()} ${os.release()}`,
++      osVersion: '',
+     };
+ 
+     this.timer = setInterval(async () => {
+diff --git a/backend/src/replication/replicator.ts b/backend/src/replication/replicator.ts
+--- a/backend/src/replication/replicator.ts
++++ b/backend/src/replication/replicator.ts
+@@ -1,5 +1,6 @@
+ import config from '../config';
+ import backendInfo from '../api/backend-info';
++import os from 'os';
+ import axios, { AxiosResponse } from 'axios';
+ import { SocksProxyAgent } from 'socks-proxy-agent';
+ import * as https from 'https';
+@@ -12,7 +13,7 @@ export async function $sync(path): Promise<{ data?: any, exists: boolean, server
+   for (let i = 0; i < config.REPLICATION.SERVERS.length; i++) {
+     const server = config.REPLICATION.SERVERS[(i + offset) % config.REPLICATION.SERVERS.length];
+     // don't query ourself
+-    if (server === backendInfo.getBackendInfo().hostname) {
++    if (server === os.hostname()) {
+       continue;
+     }
+ 

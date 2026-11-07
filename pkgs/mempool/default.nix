@@ -56,6 +56,8 @@ rec {
       ./0001-allow-disabling-mining-pool-fetching.patch
       # Stock mempool listens on all interfaces; bind to `MEMPOOL.HTTP_HOST`
       ./0002-bind-backend-to-HTTP_HOST.patch
+      # Don't show the hostname and kernel version in `backend-info`
+      ./0003-hide-hostname-and-os-version.patch
     ];
 
     buildPhase = ''

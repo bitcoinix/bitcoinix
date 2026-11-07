@@ -268,6 +268,8 @@ def test_mempool():
     headers = succeed(f"curl -sI -H 'If-Modified-Since: Thu, 01 Jan 1970 00:00:01 GMT' {ip('nginx')}:60845")
     assert headers.startswith("HTTP/1.1 200"), headers
     assert not re.search(r"(?im)^(etag|last-modified):", headers), headers
+    info = succeed_json(f"curl -s {ip('nginx')}:60845/api/v1/backend-info")
+    assert info["hostname"] == info["osVersion"] == "", info
     # Malformed JSON gets the production error page, without a stack trace
     assert_matches(
         f"curl -s -H 'Content-Type: application/json' -d '{{' {ip('nginx')}:60845/api/v1/prevouts",
