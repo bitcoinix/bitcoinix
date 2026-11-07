@@ -264,6 +264,11 @@ def test_mempool():
         current_run_log_has_string("mempool", "Mempool Server is running on port 8999")
     )
     assert_matches(f"curl -L {ip('nginx')}:60845", "mempool - Bitcoin Explorer")
+    # Malformed JSON gets the production error page, without a stack trace
+    assert_matches(
+        f"curl -s -H 'Content-Type: application/json' -d '{{' {ip('nginx')}:60845/api/v1/prevouts",
+        "<pre>Bad Request</pre>",
+    )
     # Check the backend listener in its own namespace when isolation is enabled.
     netns = "ip netns exec nb-mempool " if "netns-isolation" in enabled_tests else ""
     assert_full_match(

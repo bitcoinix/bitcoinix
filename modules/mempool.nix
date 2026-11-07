@@ -320,6 +320,8 @@ in {
         install -T -m 600 <(echo "$conf") '${cacheDir}/config.json'
       '';
       environment.MEMPOOL_CONFIG_FILE = "${cacheDir}/config.json";
+      # Outside production mode, Express error pages show stack traces with /nix/store paths
+      environment.NODE_ENV = "production";
       serviceConfig = nbLib.defaultHardening // {
         ExecStart = "${cfg.package}/bin/mempool-backend";
         CacheDirectory = "mempool";
