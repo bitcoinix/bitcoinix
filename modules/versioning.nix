@@ -467,6 +467,18 @@ let
         See docs/upgrading.md, "Upgrading to config version 0.1.5".
       '';
     }
+    {
+      version = "0.1.5";
+      condition = config.boot.isNspawnContainer && config.services.clightning.enable;
+      message = ''
+        Core Lightning now requires memory-locking syscalls for its signing keys.
+        For custom systemd-nspawn containers, add
+        `containers.<name>.extraFlags = [ "--system-call-filter=@memlock" ];`
+        to the host configuration. Without this, lightning_hsmd aborts at startup.
+        The bitcoinix container examples and test runner already allow these calls.
+        See docs/upgrading.md, "Upgrading to config version 0.1.5".
+      '';
+    }
   ];
 
   clightningRestUsed = options.services.clightning-rest.isDefined
