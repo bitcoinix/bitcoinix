@@ -3,28 +3,28 @@ set -euo pipefail
 
 # This script does the following:
 # - When called without arguments, update all flake inputs, including nixpkgs.
-# - When called with a version argument, set input `nixpkgs` in `flake.nix` to the
-#   specified version and only update this input.
+# - With --refresh, resolve input changes and regenerate files without updating inputs.
 # - Print version updates of pinned pkgs like so:
 #     Pkg updates in nixpkgs unstable:
 #     bitcoin: 0.20.0 -> 0.21.1
 #     btcpayserver: 1.1.0 -> 1.1.2
-# - Write ../pkgs/pinned.nix:
-#     Packages for which the stable und unstable versions are identical are
-#     pinned to stable.
-#     All other pkgs are pinned to unstable.
+# - Write ../pkgs/pinned.nix with packages from unstable nixpkgs.
 # - Write ../versions.json with pinned and local package versions and channels.
 # - Write ../docs/versions-table.md, the package versions table of the docs.
 
 forceRun=
-nixosVersion=
+refreshOnly=
 for arg in "$@"; do
     case $arg in
         -f)
             forceRun=1
             ;;
+        --refresh)
+            refreshOnly=1
+            ;;
         *)
-            nixosVersion=$arg
+            echo "Usage: $0 [-f] [--refresh]" >&2
+            exit 1
             ;;
     esac
 done
@@ -43,31 +43,19 @@ if [[ ! $forceRun ]] && ! git diff --quiet ../flake.{nix,lock}; then
     exit 1
 fi
 
-if [[ ! $nixosVersion ]]; then
-    echo "Updating flake 'nixos-search'"
-    nix flake update --flake ../test/nixos-search
-    echo
-fi
-
 versions=$(nix eval --json -f update-flake.nix versions)
 
 ## Uncomment the following to generate a version change message for testing
 # versions=$(echo "$versions" | sed 's|1|0|g')
 
-setVersion() {
-    sed -Ei "s|($1)[0-9.]+|\1$nixosVersion|" "$2"
-}
-
-echo "Updating main flake"
-if [[ $nixosVersion ]]; then
-    setVersion 'nixpkgs.url = .*?nixos-' ../flake.nix
-    setVersion 'system.stateVersion = "' ../examples/configuration.nix
-    setVersion 'system.stateVersion = "' ../examples/flakes/flake.nix
-    setVersion 'system.stateVersion = "' ../examples/colmena/configs/fullnode/configuration.nix
-    setVersion 'update-flake.sh ' ../dev/README.md
-    nix flake update nixpkgs --flake ..
-else
+if [[ ! $refreshOnly ]]; then
+    echo "Updating flake 'nixos-search'"
+    nix flake update --flake ../test/nixos-search
+    echo "Updating main flake"
     nix flake update --flake ..
+else
+    # Resolve input changes while retaining existing locks wherever possible.
+    nix flake lock ..
 fi
 
 echo

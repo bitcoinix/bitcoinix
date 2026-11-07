@@ -88,10 +88,9 @@ echo "Building the bitcoinix node"
 nix-build --out-link "$tmpDir/store-paths" -E '
 let
   system = (import <nixpkgs/nixos> { configuration = <krops-vm-configuration.nix>; }).system;
-  pkgsUnstable = (import <nix-bitcoin/pkgs/nixpkgs-pinned.nix>).nixpkgs-unstable;
   pkgs = import <nixpkgs> {};
 in
-  pkgs.closureInfo { rootPaths = [ system pkgsUnstable ]; }
+  pkgs.closureInfo { rootPaths = [ system ]; }
 ' > /dev/null
 
 vmWaitForSSH
