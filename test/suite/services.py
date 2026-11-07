@@ -151,6 +151,13 @@ def test_lnd():
     assert_str_matches(cert_alt_names, 'example.com')
     assert_full_match("</secrets/lnd-cert openssl x509 -noout -subject", "subject=CN=localhost\n")
 
+    # lnd announces its public onion address with the port that Tor forwards
+    onion = test_data["lnd-public-onion"]
+    if onion:
+        address = succeed(f"cat {onion['addressFile']}").strip()
+        uri = f"{info['identity_pubkey']}@{address}:{onion['port']}"
+        assert uri in info["uris"], info["uris"]
+
     # Go 1.24 listens with Multipath TCP by default. The lnd unit turns that
     # off, so no lnd socket may show up as an MPTCP listener. Look in lnd's
     # namespace, and check that ss sees lnd there at all, so the test can't

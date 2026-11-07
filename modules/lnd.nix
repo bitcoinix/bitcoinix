@@ -189,6 +189,19 @@ let
   '';
 
   zmqHandleSpecialAddress = builtins.replaceStrings [ "0.0.0.0" "[::]" ] [ "127.0.0.1" "[::1]" ];
+
+  # lnd adds port 9735 to an external address without a port, but a public
+  # onion service forwards its own port. Custom addresses stay as they are,
+  # because they may carry a port of their own.
+  onionPortSuffix = optionalString
+    ((config.nix-bitcoin.onionServices.lnd.enable or false)
+      && config.nix-bitcoin.onionServices.lnd.public
+      && onionPeerMapping != null)
+    ":${toString onionPeerMapping.port}";
+  # The onion mapping to lnd's peer port. Other mappings may come first.
+  # A mapping without a target forwards to its own port.
+  onionPeerMapping = findFirst (mapping: (mapping.target.port or mapping.port) == cfg.port) null
+    (config.services.tor.relay.onionServices.lnd.map or []);
 in {
 
   inherit options;
@@ -252,7 +265,7 @@ in {
           cat ${configFile}
           echo "bitcoind.rpcpass=$(cat ${secretsDir}/bitcoin-rpcpassword-public)"
           ${optionalString (cfg.getPublicAddressCmd != "") ''
-            echo "externalip=$(${cfg.getPublicAddressCmd})"
+            echo "externalip=$(${cfg.getPublicAddressCmd})${onionPortSuffix}"
           ''}
         )
         install -T -m 600 <(echo "$conf") '${cfg.dataDir}/lnd.conf'

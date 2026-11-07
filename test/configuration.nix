@@ -81,6 +81,15 @@ let
     services.backups.enable = true;
     services.postgresqlBackup.compression = compression;
   };
+  # What lnd's config appends to the announced address
+  lndAddressSuffix = module: let
+    config = evaluate {
+      imports = [ module ];
+      services.lnd = { enable = true; port = 9736; };
+    };
+    externalip = lib.findFirst (lib.hasInfix "externalip=") ""
+      (lib.splitString "\n" config.systemd.services.lnd.preStart);
+  in lib.head (builtins.match ''.*externalip=\$\(.*\)(.*)"'' externalip);
   netns = evaluate {
     imports = [ lightning ];
     services.lnd.port = 9736;
@@ -288,6 +297,20 @@ let
     testLndconnectKeepsCustomAddresses = {
       expr = getRestAddresses customLightning;
       expected = [ "10.0.0.2" "10.0.0.3" ];
+    };
+    testLndAnnouncesOnionPort = {
+      expr = map lndAddressSuffix [
+        { nix-bitcoin.onionServices.lnd.public = true; }
+        { nix-bitcoin.onionServices.lnd = { public = true; externalPort = 9735; }; }
+        # Another mapping before lnd's peer port
+        {
+          nix-bitcoin.onionServices.lnd.public = true;
+          services.tor.relay.onionServices.lnd.map = lib.mkBefore [ { port = 8443; target.port = 8080; } ];
+        }
+        # A custom address may carry its own port
+        { services.lnd.getPublicAddressCmd = "echo 203.0.113.10:19735"; }
+      ];
+      expected = [ ":9736" ":9735" ":9736" "" ];
     };
     testNetnsRESTAllowed = { expr = failedAssertions netns; expected = []; };
     testNetnsRejectsNftables = {

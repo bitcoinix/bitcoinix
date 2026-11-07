@@ -153,6 +153,12 @@ let
       };
 
       nix-bitcoin.onionServices.lnd.public = true;
+      test.data.lnd-public-onion = let
+        onion = config.nix-bitcoin.onionServices.lnd;
+      in if cfg.lnd.enable && onion.enable && onion.public then {
+        addressFile = "${config.nix-bitcoin.onionAddresses.dataDir}/services/lnd";
+        port = (head config.services.tor.relay.onionServices.lnd.map).port;
+      } else null;
 
       tests.onion-addresses = config.nix-bitcoin.onionAddresses.access != {};
       test.data.onion-addresses = let
