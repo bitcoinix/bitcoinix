@@ -39,11 +39,9 @@ nix-build --out-link "$tmpDir/vm" - <<'EOF'
 }).config.system.build.vm
 EOF
 
-vmNumCPUs=4
-vmMemoryMiB=2048
 sshPort=60734
 # Start the VM in the background
-runVM "$tmpDir/vm" "$vmNumCPUs" "$vmMemoryMiB" "$sshPort"
+runVM "$tmpDir/vm" "$sshPort"
 
 # Build the krops deploy script
 export sshPort
