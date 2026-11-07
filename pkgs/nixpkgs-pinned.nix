@@ -16,5 +16,4 @@ let
 in
 {
   nixpkgs = fetch lockedInputs.nixpkgs;
-  nixpkgs-unstable = fetch lockedInputs.nixpkgs-unstable;
 }

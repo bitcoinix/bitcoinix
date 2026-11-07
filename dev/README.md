@@ -150,7 +150,7 @@ be covered by the [checks without a VM](../test/README.md#checks-without-a-vm).
 Run `helper/update-flake.sh` to update all flake inputs. It also regenerates
 [`pkgs/pinned.nix`](../pkgs/pinned.nix) and
 [`versions.json`](../versions.json), which maps each pinned package name to its
-selected `version` and nixpkgs `channel` (`stable` or `unstable`). Versioned local
+selected `version` and nixpkgs `channel` (`unstable`). Versioned local
 packages exported by the flake are also included, with `channel` set to `local`.
 
 After changing a local package version, regenerate the manifest without updating
@@ -171,9 +171,12 @@ CI checks that `pkgs/pinned.nix` matches what `helper/update-flake.sh` generates
 matches `versions.json`. Run
 `./test/ci/check-versions.sh` to check it locally without updating dependencies.
 
-## Switching to a new NixOS release
-- Run command `update-flake.sh 26.05`
-- Treewide: check if any `TODO-EXTERNAL` comments can be resolved
+To regenerate after changing input declarations without updating other locked inputs,
+run `helper/update-flake.sh -f --refresh`.
+
+After updating unstable nixpkgs, check treewide whether any `TODO-EXTERNAL`
+comments can be resolved. Keep existing `system.stateVersion` values when upgrading;
+they control state compatibility, not the package channel.
 
 ## Cutting a release
 

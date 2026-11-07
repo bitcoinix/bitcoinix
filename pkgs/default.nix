@@ -2,12 +2,7 @@ let
   nixpkgsPinned = import ./nixpkgs-pinned.nix;
 in
 # Set default values for use without flakes
-{ pkgs ? import <nixpkgs> { config = {}; overlays = []; }
-, pkgsUnstable ? import nixpkgsPinned.nixpkgs-unstable {
-    inherit (pkgs.stdenv.hostPlatform) system;
-    config = {};
-    overlays = [];
-  }
+{ pkgs ? import nixpkgsPinned.nixpkgs { config = {}; overlays = []; }
 }:
 let self = {
   clightning-plugins = pkgs.lib.recurseIntoAttrs (
@@ -35,7 +30,7 @@ let self = {
   # Internal pkgs
   krops = import ./krops { inherit pkgs; };
 
-  pinned = import ./pinned.nix pkgs pkgsUnstable;
+  pinned = import ./pinned.nix pkgs;
 
   modulesPkgs = self // self.pinned;
 }; in self

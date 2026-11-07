@@ -13,7 +13,6 @@
     bitcoinix.url = "github:bitcoinix/bitcoinix/v0.1.3";
 
     nixpkgs.follows = "bitcoinix/nixpkgs";
-    nixpkgs-unstable.follows = "bitcoinix/nixpkgs-unstable";
   };
 
   outputs = { self, nixpkgs, bitcoinix, ... }: {
@@ -46,14 +45,9 @@
             # operator instead:
             # operator.name = "<your main user>";
 
-            # If you use a custom nixpkgs version for evaluating your system
-            # (instead of `bitcoinix.inputs.nixpkgs` like in this example),
-            # consider setting `useVersionLockedPkgs = true` to use the exact pkgs
-            # versions for bitcoinix services that are tested by bitcoinix.
-            # The downsides are increased evaluation times and increased system
-            # closure size.
-            #
-            # useVersionLockedPkgs = true;
+            # Services use bitcoinix's locked unstable packages by default.
+            # Set useVersionLockedPkgs = false to use your own unstable nixpkgs.
+
           };
 
           services = {

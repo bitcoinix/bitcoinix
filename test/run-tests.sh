@@ -283,7 +283,15 @@ nixosSearch() {
 
 persistentContainerExample() {
     . "$scriptDir/lib/extra-container-check-version.sh"
-    nix run "$scriptDir/../examples/container" --override-input nix-bitcoin "$scriptDir/.." -- --run c systemctl status electrs
+    makeTmpDir
+    local example="$tmpDir/container-example"
+    local configVersion
+    configVersion=$(sed -n 's/^ *version = "\([0-9.]*\)";$/\1/p' "$scriptDir/../modules/versioning.nix" | sort -V | tail -1)
+    # The example pins a released configVersion. Test the checkout's version
+    # along with its source, without modifying the user's example or lock file.
+    cp -r "$scriptDir/../examples/container" "$example"
+    sed -i "s/configVersion = \"[0-9.]*\";/configVersion = \"$configVersion\";/" "$example/flake.nix"
+    nix run "$example" --override-input nix-bitcoin "$scriptDir/.." --no-write-lock-file -- --run c systemctl status electrs
 }
 
 # A basic subset of tests to keep the total runtime within
@@ -305,6 +313,8 @@ buildable=(
     hardened
     clightning-replication
     lndPruned
+    i2p
+    i2pLocal
     wireguard-lndconnect
     trustedcoin
 )

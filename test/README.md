@@ -99,6 +99,10 @@ The required `ci_gate` waits for all jobs and requires them to succeed; only
 Permissions, secrets, namespace isolation, backups, and service restarts still
 need the VM tests.
 
+The `i2pLocal` and `i2p` VM scenarios check the I2P SAM handshake on localhost
+and from Bitcoin's network namespace. The latter uses a custom bridge address
+and SAM port. Both scenarios run in CI and in `./run-tests.sh buildable`.
+
 ### Tutorial
 #### Running tests
 ```bash

@@ -146,6 +146,7 @@ in {
       Pin the server's host key with `programs.ssh.knownHosts` instead.
     '';
 
+    programs.fuse.enable = mkIf useMounts true;
     environment.systemPackages = optionals cfg.encrypt [ pkgs.gocryptfs ];
 
     systemd.tmpfiles.rules = optional (localDir != null && cfg.local.setupDirectory)
@@ -176,9 +177,12 @@ in {
       before = [ "clightning.service" ];
       wants = [ "nix-bitcoin-secrets.target" ];
       after = [ "nix-bitcoin-secrets.target" ];
+      # Keep mounts alive when clightning stops or crashes. StopPropagatedFrom
+      # would stop them after a crash, propagating a stop back through clightning's
+      # Requires/BindsTo dependencies and cancelling its automatic restart.
       path = [
         # Includes
-        # - The SUID-wrapped `fusermount` binary which enables FUSE
+        # - The SUID-wrapped `fusermount3` binary which enables FUSE
         #   for non-root users
         # - The SUID-wrapped `mount` binary, used for unmounting
         "/run/wrappers"
@@ -207,16 +211,22 @@ in {
           "''${gocryptfs[@]}" "$cipherDir" ${plaintextDir}
         '';
 
-      postStop =
+      postStop = ''
+        unmount() {
+          # FUSE daemons may already have unmounted when systemd stopped them.
+          if ${pkgs.util-linux}/bin/findmnt --mountpoint "$1" > /dev/null; then
+            umount "$1"
+          fi
+        }
+      '' +
         optionalString cfg.encrypt ''
-          umount ${plaintextDir} || true
+          unmount ${plaintextDir}
         '' +
         optionalString useSshfs ''
-          umount ${sshfsDir}
+          unmount ${sshfsDir}
         '';
 
       serviceConfig = {
-        StopPropagatedFrom = [ "clightning.service" ];
         CacheDirectory = "clightning-replication";
         CacheDirectoryMode = "770";
         User = user;

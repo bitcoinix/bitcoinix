@@ -219,7 +219,8 @@ let
         { version = "0.1.5"; enable = true; }
         { version = null; enable = true; }
       ];
-      expected = [ false true true true ];
+      # The unstable-only migration also affects configurations without plugins.
+      expected = [ false false true true ];
     }) [ "currencyrate" "rebalance" "clnrest" ]);
   # The preset's preStart lines, run by the check below against a scratch data dir
   remoteRpcUser = "rpc$USER'$(id)";
@@ -236,6 +237,55 @@ let
     expr = restAllowed case.args;
     inherit (case) expected;
   }) restCases // extraConfigTests // pluginsConfigTests // pluginMigrationTests // {
+    testLockedPackagesDefault = {
+      expr = bitcoin.nix-bitcoin.useVersionLockedPkgs;
+      expected = true;
+    };
+    testI2pSAM = {
+      expr = let
+        cfg = evaluate { services.bitcoind = { enable = true; i2p = true; }; };
+      in cfg.services.i2pd.settings.sam;
+      expected = { enabled = true; address = "127.0.0.1"; port = 7656; };
+    };
+    testI2pExposureDefaults = {
+      expr = let
+        cfg = evaluate { services.bitcoind = { enable = true; i2p = true; }; };
+      in with cfg.services.i2pd.settings; [
+        http.enabled httpproxy.enabled socksproxy.enabled ntcp2.published ssu2.published
+      ];
+      expected = [ false false false false false ];
+    };
+    testI2pExposureOverrides = {
+      expr = let
+        cfg = evaluate {
+          services.bitcoind = { enable = true; i2p = true; };
+          services.i2pd.settings = {
+            http.enabled = true;
+            httpproxy.enabled = true;
+            socksproxy.enabled = true;
+            ntcp2.published = true;
+            ssu2.published = true;
+          };
+        };
+      in with cfg.services.i2pd.settings; [
+        http.enabled httpproxy.enabled socksproxy.enabled ntcp2.published ssu2.published
+      ];
+      expected = [ true true true true true ];
+    };
+    testI2pSAMNetns = {
+      expr = let
+        cfg = evaluate {
+          services.bitcoind = { enable = true; i2p = true; };
+          nix-bitcoin.netns-isolation.enable = true;
+        };
+      in {
+        inherit (cfg.services.i2pd.settings.sam) enabled address port;
+        inherit (cfg.services.i2pd) checkConfig;
+        firewall = builtins.elem cfg.services.i2pd.settings.sam.port
+          cfg.networking.firewall.interfaces.nb-br.allowedTCPPorts;
+      };
+      expected = { enabled = true; address = "169.254.1.10"; port = 7656; firewall = true; checkConfig = false; };
+    };
     testBitcoinDefaults = {
       expr = getBitcoinDefaults bitcoin;
       expected = {
