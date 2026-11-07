@@ -425,6 +425,47 @@ let
       '';
     };
 
+    # The WireGuard preset with iptables-legacy next to nftables, as docs/services.md
+    # describes. The default kernel lacks legacy xtables, so use one that has them.
+    wireguardIptablesLegacy = { config, pkgs, ... }: {
+      imports = [ ../modules/presets/wireguard.nix ];
+      boot.kernelPackages = pkgs.linuxPackages_6_12;
+      services.lnd = { enable = true; lndconnect.enable = true; };
+      networking.nftables = {
+        enable = true;
+        # Setting `ruleset` turns on `flushRuleset`
+        ruleset = "table inet extra { }";
+      };
+      networking.firewall = {
+        backend = "iptables";
+        package = pkgs.iptables-legacy;
+      };
+      tests = mkForce { wireguard-iptables-legacy = true; };
+      test.extraTestScript = let
+        iptables = "${pkgs.iptables-legacy}/bin/iptables -w";
+      in ''
+        @test("wireguard-iptables-legacy")
+        def test_wireguard_iptables_legacy():
+            def assert_rules():
+                assert_running("firewall.service")
+                rules = succeed("${iptables} -S nixos-fw").splitlines()
+                rest_port = "--dport ${toString config.services.lnd.restPort}"
+                assert any("-i wg-nb" in r and rest_port in r for r in rules), "\n".join(rules)
+                assert "-j REJECT" in rules[1], f"restrictPeer rule is not first: {rules[1]}"
+                machine.fail("nft list ruleset | grep -q nixos-fw")
+
+            assert_running("nftables.service")
+            assert_rules()
+            for action in ["reload", "restart"]:
+                # The flush deletes this table, so its absence shows that the flush ran
+                succeed("nft add table inet probe")
+                succeed(f"systemctl {action} nftables.service")
+                machine.fail("nft list table inet probe")
+                succeed("nft list table inet extra")
+                assert_rules()
+      '';
+    };
+
     # Test the special bitcoin RPC setup that lnd uses when bitcoin is pruned
     lndPruned = {
       services.lnd.enable = true;

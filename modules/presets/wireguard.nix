@@ -39,6 +39,21 @@ let
 
   lndconnect = lnd.enable && lnd.lndconnect.enable;
   lnconnect-clnrest = clnrest.enable && clnrest.lnconnect.enable;
+  # The firewall rules below guard these REST APIs and enforce `restrictPeer`.
+  needsFirewallRules = lndconnect || lnconnect-clnrest || cfg.restrictPeer;
+  iptablesTablesInNftables = mapAttrsToList (_: t: "${t.family} ${t.name}")
+    (filterAttrs (_: t: t.enable && t.name == "filter" && elem t.family [ "ip" "ip6" ])
+      config.networking.nftables.tables);
+  # `pkgs.iptables-legacy` keeps its rules in the legacy xtables, outside the
+  # nftables ruleset. It ships `bin/iptables`, so it's the iptables the firewall
+  # runs when its bin comes first on the service's PATH, after only nftables' bin,
+  # which has no iptables. Anything else, such as a renamed or wrapped build,
+  # counts as iptables-nft.
+  firewallUsesIptablesLegacy =
+    findFirst (dir: dir != "${pkgs.nftables}/bin") null
+      (splitString ":" (toString (config.systemd.services.firewall.environment.PATH or null)))
+    == "${pkgs.iptables-legacy}/bin";
+  iptablesUsesNftables = !firewallUsesIptablesLegacy;
 
   serverAddress = "${wgSubnet}.1";
   peerAddress = "${wgSubnet}.2";
@@ -110,9 +125,45 @@ in {
         # `extraCommands` rules, which also enforce `restrictPeer`. `extraCommands`
         # run only with the iptables backend: NixOS rejects a non-empty
         # `extraCommands` under nftables, and firewalld silently ignores them.
-        assertion = !(lndconnect || lnconnect-clnrest || cfg.restrictPeer)
-                    || (config.networking.firewall.enable && config.networking.firewall.backend == "iptables");
-        message = "`nix-bitcoin.wireguard` protects the REST API of the enabled `*connect` helpers (bound to 0.0.0.0) and enforces `restrictPeer` only through `networking.firewall.extraCommands`, which run only with the iptables backend. Enable `networking.firewall` and disable `networking.nftables` and `services.firewalld`, so that the firewall defaults to the iptables backend.";
+        # The backend alone is not enough: `networking.firewall.package` defaults
+        # to `pkgs.nftables` whenever `networking.nftables` is enabled, whatever
+        # the backend says, and the firewall service's PATH holds only that
+        # package plus `networking.firewall.extraPackages`. Without an `iptables`
+        # binary on it the service fails at its first rule and the box runs with
+        # no firewall at all, so check what the rules run with. An iptables
+        # package next to nftables, as the package or in extraPackages, is fine.
+        # This catches the default that `networking.nftables` sets, not every
+        # package whose iptables doesn't work on the running kernel.
+        assertion = !needsFirewallRules
+                    || (config.networking.firewall.enable
+                        && config.networking.firewall.backend == "iptables"
+                        && (lib.getName config.networking.firewall.package != "nftables"
+                            || lib.any (p: lib.getName p == "iptables") config.networking.firewall.extraPackages));
+        message = "`nix-bitcoin.wireguard` protects the REST API of the enabled `*connect` helpers (bound to 0.0.0.0) and enforces `restrictPeer` only through `networking.firewall.extraCommands`, which run only with the iptables backend and need `iptables` on the firewall service's PATH (`networking.firewall.package` is ${lib.getName config.networking.firewall.package}). Enable `networking.firewall` and disable `networking.nftables` and `services.firewalld`, or keep `networking.firewall.backend = \"iptables\"` and provide `iptables` through `networking.firewall.package` or `networking.firewall.extraPackages`.";
+      }
+      {
+        # `pkgs.iptables` is iptables-nft, so the rules above live in the nftables
+        # ruleset. With `flushRuleset`, every start or reload of `nftables.service`
+        # runs `flush ruleset` and deletes them while `firewall.service` stays
+        # active. NixOS turns it on by default when `ruleset` or `rulesetFile` is
+        # set or `system.stateVersion` is older than 23.11. Rules in
+        # `networking.nftables.tables` don't need it. iptables-legacy is exempt:
+        # its rules aren't part of the nftables ruleset, so a flush keeps them.
+        assertion = !needsFirewallRules || !iptablesUsesNftables
+                    || !(config.networking.nftables.enable && config.networking.nftables.flushRuleset);
+        message = "`nix-bitcoin.wireguard` needs its `networking.firewall.extraCommands` rules to stay in place, but `networking.nftables.flushRuleset` deletes them whenever `nftables.service` starts or reloads. It's on by default when `networking.nftables.ruleset` or `networking.nftables.rulesetFile` is set or `system.stateVersion` is older than 23.11. Move your nftables rules to `networking.nftables.tables` and set `networking.nftables.flushRuleset = false`. Restart `firewall.service` once after deploying, since the first reload still runs the old flush.";
+      }
+      {
+        # iptables-nft keeps the firewall in the `filter` tables of the `ip` and
+        # `ip6` families. `nftables.service` deletes and recreates every table in
+        # `networking.nftables.tables`, so a table with the same family and name
+        # would replace the firewall. Raw `flush` or `delete` commands in
+        # `ruleset`, `rulesetFile` or `extraDeletions` aren't checked.
+        # iptables-legacy doesn't use these tables, so it's exempt.
+        assertion = !needsFirewallRules || !iptablesUsesNftables
+                    || !config.networking.nftables.enable
+                    || iptablesTablesInNftables == [];
+        message = "`nix-bitcoin.wireguard` needs its `networking.firewall.extraCommands` rules, which iptables-nft keeps in the `ip filter` and `ip6 filter` tables, but `networking.nftables.tables` replaces ${concatStringsSep " and " iptablesTablesInNftables} on every start or reload of `nftables.service`. Rename the table or use the `inet` family, then restart `firewall.service` once after deploying, since the first reload still deletes the old table.";
       }
     ];
 
