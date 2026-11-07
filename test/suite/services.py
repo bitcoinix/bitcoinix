@@ -149,6 +149,7 @@ def test_lnd():
     assert_str_matches(cert_alt_names, '10.0.0.1')
     assert_str_matches(cert_alt_names, '20.0.0.1')
     assert_str_matches(cert_alt_names, 'example.com')
+    assert_full_match("</secrets/lnd-cert openssl x509 -noout -subject", "subject=CN=localhost\n")
 
     # Go 1.24 listens with Multipath TCP by default. The lnd unit turns that
     # off, so no lnd socket may show up as an MPTCP listener.
