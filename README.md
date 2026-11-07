@@ -60,9 +60,6 @@ running bitcoinix does not require any previous experience with the Nix ecosyste
 
 Project direction
 ---
-This is a summary of the proposal and community discussion on [issue #12](https://github.com/bitcoinix/bitcoinix/issues/12) regarding
-the project's direction, supported features, and hardware.
-
 * **Upstream first:** Most packages should move upstream to [nixpkgs](https://github.com/NixOS/nixpkgs).
   Ideally, bitcoinix serves solely as a collection of securely cooperating service modules
   (see [issue #7](https://github.com/bitcoinix/bitcoinix/issues/7)).
