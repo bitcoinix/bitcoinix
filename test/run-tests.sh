@@ -60,7 +60,7 @@
 #
 #     This allows you to continue editing the nix-bitcoin sources while tests are running
 #     and reading source files.
-#     Files are copied to /tmp, a caching scheme helps minimizing copies.
+#     Files are copied to a fresh private directory in /tmp, which is removed afterwards.
 #
 #   Add custom scenarios from a file
 #   ./run-tests.sh --extra-scenarios ~/my/scenarios.nix ...
