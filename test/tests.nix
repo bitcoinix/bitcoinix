@@ -143,7 +143,7 @@ let
       };
 
       tests.unbeholden-wallet = cfg.unbeholden-wallet.enable;
-      services.unbeholden-wallet.electrumServer = "fulcrum";
+      test.data.unbeholden-wallet.electrumServer = cfg.unbeholden-wallet.electrumServer;
 
       tests.lnd = cfg.lnd.enable;
       tests.lnd-macaroons = cfg.lnd.enable && cfg.lnd.macaroons != {};
@@ -370,6 +370,7 @@ let
       services.charge-lnd.enable = true;
       services.mempool.enable = true;
       services.unbeholden-wallet.enable = true;
+      services.unbeholden-wallet.electrumServer = "fulcrum";
       services.electrs.enable = true;
       services.fulcrum.enable = true;
       services.btcpayserver.enable = true;
@@ -416,6 +417,7 @@ let
       services.rtl.enable = true;
       services.mempool.enable = true;
       services.unbeholden-wallet.enable = true;
+      services.unbeholden-wallet.electrumServer = "fulcrum";
       services.lnd.enable = true;
       services.lnd.lndconnect.enable = true;
       services.charge-lnd.enable = true;
@@ -525,6 +527,24 @@ let
         clightning = true;
         lnconnect-onion-clnrest = true;
       };
+    };
+
+    unbeholden-wallet-electrs = {
+      imports = [ scenarios.regtestBase ];
+      services.unbeholden-wallet.enable = true;
+    };
+
+    unbeholden-wallet-fulcrum = {
+      imports = [ scenarios.unbeholden-wallet-electrs ];
+      services.unbeholden-wallet.electrumServer = "fulcrum";
+    };
+
+    unbeholden-wallet-electrs-netns = {
+      imports = with scenarios; [ unbeholden-wallet-electrs netnsBase ];
+    };
+
+    unbeholden-wallet-fulcrum-netns = {
+      imports = with scenarios; [ unbeholden-wallet-fulcrum netnsBase ];
     };
 
     # Test the special bitcoin RPC setup that lnd uses when bitcoin is pruned

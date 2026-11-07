@@ -303,10 +303,10 @@ def test_unbeholden_wallet():
     url = f"{ip('unbeholden-wallet')}:60846"
     wait_for_open_port(ip("unbeholden-wallet"), 60846)
     assert_matches(f"curl {url}", "<title>Unbeholden Wallet</title>")
-    # The relay passes an Electrum request on to fulcrum
+    backend = test_data["unbeholden-wallet"]["electrumServer"]
     request = '{"jsonrpc":"2.0","id":1,"method":"server.version","params":["test","1.4"]}'
     machine.wait_until_succeeds(
-        f"echo '{request}' | websocat -n1 ws://{url}/electrum | grep -q Fulcrum"
+        f"echo '{request}' | websocat -n1 ws://{url}/electrum | grep -qi {backend}"
     )
 
 
