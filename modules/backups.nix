@@ -112,8 +112,10 @@ in {
         fi
       '';
 
-      services.backups.postgresqlDatabases = mkIf config.services.btcpayserver.enable (
-        [ "btcpaydb" ] ++ optional cfg.with-bulk-data "nbxplorer"
-      );
+      # The nbxplorer database holds the private keys of BTCPay hot wallets
+      services.backups.postgresqlDatabases = mkIf config.services.btcpayserver.enable [
+        "btcpaydb"
+        "nbxplorer"
+      ];
     };
 }

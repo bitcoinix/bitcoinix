@@ -15,20 +15,26 @@ def test_backups():
         "no sync needed",
     )
     # Backup should include important files
-    files = {
-        "bitcoind": "var/lib/bitcoind/test/wallet.dat",
-        "clightning": "var/lib/clightning/bitcoin/hsm_secret",
-        "lnd": "var/lib/lnd/lnd-seed-mnemonic",
-        "btcpayserver": "var/backup/postgresql/btcpaydb.sql.gz",
-    }
+    files = [
+        ("bitcoind", "var/lib/bitcoind/test/wallet.dat"),
+        ("clightning", "var/lib/clightning/bitcoin/hsm_secret"),
+        ("lnd", "var/lib/lnd/lnd-seed-mnemonic"),
+        ("btcpayserver", "var/backup/postgresql/btcpaydb.sql.gz"),
+        # Holds the private keys of BTCPay hot wallets
+        ("btcpayserver", "var/backup/postgresql/nbxplorer.sql.gz"),
+    ]
     actual_files = succeed(f"{run_duplicity} list-current-files file:///var/lib/localBackups")
 
     def assert_file_exists(file):
         if file not in actual_files:
             raise Exception(f"Backup file '{file}' is missing.")
 
-    for test, file in files.items():
+    for test, file in files:
         if test in enabled_tests:
             assert_file_exists(file)
+
+    if "btcpayserver" in enabled_tests:
+        # The dump includes the table where NBXplorer stores hot wallet keys
+        succeed("zgrep -q 'CREATE TABLE public.nbxv1_metadata' /var/backup/postgresql/nbxplorer.sql.gz")
 
     assert_file_exists("secrets/lnd-wallet-password")

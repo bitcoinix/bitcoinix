@@ -271,6 +271,10 @@ Some services require extra steps:
   # Restore (on the bitcoinix node)
   sudo -u postgres psql btcpaydb < export.sql
   ```
+  This doesn't copy the private keys of hot wallets. NBXplorer stores them in its own
+  database (`nbxplorer` on bitcoinix). Without them, hot wallets come back watch-only.
+  Before you migrate, make sure you have the recovery phrase of each hot wallet, so you
+  can import it again in BTCPay Server.
 
 # Use bitcoind from another node
 
