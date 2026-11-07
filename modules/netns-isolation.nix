@@ -164,11 +164,23 @@ in {
           echo 1 > /proc/sys/net/ipv6/conf/${peer}/disable_ipv6
           ${ip} link set ${peer} up
           ${ip} link set ${peer} master nb-br
+          # net.mptcp.enabled is per network namespace, and a new one starts at
+          # the kernel default. Pass the host's value in, so turning MPTCP off
+          # on the host (like presets/hardened-extended does) covers the
+          # services in their namespaces too. The copy is made when the netns
+          # is set up, so a later change on the host needs a reboot.
+          if [ -e /proc/sys/net/mptcp/enabled ]; then
+            hostMptcp=$(cat /proc/sys/net/mptcp/enabled)
+            export hostMptcp
+          fi
           exec ${nsenter} --net=/run/netns/${netnsName} ${script "in-netns" setupInNetns}
         '';
 
         setupInNetns = ''
           ${ip} link set lo up
+          if [ -n "''${hostMptcp:-}" ]; then
+            echo "$hostMptcp" > /proc/sys/net/mptcp/enabled
+          fi
           # The iptables rules below cover IPv4 only. Without this, the link
           # gets an IPv6 link-local address and other netns can reach it over
           # the bridge unfiltered.
@@ -189,8 +201,15 @@ in {
           set -e
           ${src}
         '';
+        setupScript = script "setup" setup;
       in {
-        "${n}".serviceConfig.NetworkNamespacePath = "/var/run/netns/${netnsName}";
+        "${n}" = {
+          serviceConfig.NetworkNamespacePath = "/var/run/netns/${netnsName}";
+          # A changed setup script restarts netns-${n}, which stops this
+          # service because it requires netns-${n}. Restart this service
+          # too, so that a switch starts it again.
+          restartTriggers = [ setupScript ];
+        };
 
         "netns-${n}" = rec {
           requires = [ "nb-netns-bridge.service" ];
@@ -200,7 +219,7 @@ in {
           serviceConfig = {
             Type = "oneshot";
             RemainAfterExit = true;
-            ExecStart = script "setup" setup;
+            ExecStart = setupScript;
           };
           # Link deletion is implicit in netns deletion, but it sometimes only happens
           # after `netns delete` finishes. Add an extra `link del` to ensure that

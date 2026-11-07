@@ -225,6 +225,9 @@ in its own network namespace. With it enabled:
 - With `tor.enforce`, a namespace also drops outgoing connections except to these
   addresses.
 - IPv6 is disabled on the namespace interfaces.
+- Each namespace copies the host's `net.mptcp.enabled` setting when it is created.
+  A later change of the host setting doesn't reach existing namespaces, and a switch
+  that only changes this setting doesn't recreate them. Reboot after you change this setting.
 - On the host, connect to a service at its namespace address,
   `config.nix-bitcoin.netns-isolation.netns.<service>.address`, not at `127.0.0.1`.
 - It can't be combined with a [bitcoind on another node](#use-bitcoind-from-another-node),
