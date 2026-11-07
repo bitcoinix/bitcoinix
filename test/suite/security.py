@@ -241,7 +241,7 @@ def test_rtl_credentials():
                              mode="640", file_type="regular file")
         succeed(f"cmp {dest} <({expected_content_cmd})")
 
-    def check(script, owner, src, dest, expected_content_cmd):
+    def check(script, owner, src, dest, expected_content_cmd, invalid_contents=("",)):
         as_owner = f"runuser -u {owner} --"
 
         # Destination is a symlink to a root-only file
@@ -262,17 +262,18 @@ def test_rtl_credentials():
         machine.fail(f"grep -q canary {dest}")
         assert_canary_untouched()
 
-        # Source is empty.
+        # Source is empty or holds another invalid credential.
         # The script must fail with a clear error and keep the current destination.
-        succeed(
-            f"{as_owner} mv -T {src} {src}.orig",
-            f"{as_owner} cp /dev/null {src}",
-        )
-        status, output = machine.execute(f"{script} 2>&1")
-        succeed(f"{as_owner} mv -T {src}.orig {src}")
-        if status == 0 or f"Error: '{src}' is empty" not in output:
-            raise Exception(f"Unexpected result when reading empty {src}: {status}, '{output}'")
-        assert_dest_ok(dest, expected_content_cmd)
+        for contents in invalid_contents:
+            succeed(
+                f"{as_owner} mv -T {src} {src}.orig",
+                f"printf %s {shlex.quote(contents)} | {as_owner} tee {src} >/dev/null",
+            )
+            status, output = machine.execute(f"{script} 2>&1")
+            succeed(f"{as_owner} mv -T {src}.orig {src}")
+            if status == 0 or f"Error: '{src}' is empty" not in output:
+                raise Exception(f"Unexpected result when reading {src} with {contents!r}: {status}, '{output}'")
+            assert_dest_ok(dest, expected_content_cmd)
 
         succeed(script)
         assert_dest_ok(dest, expected_content_cmd)
@@ -310,8 +311,10 @@ def test_rtl_credentials():
     if cln := data["clightning"]:
         script = get_script("rtl-create-clnrest-rune-file")
         admin_rune = f"{cln['networkDir']}/admin-rune"
+        # Earlier versions installed a `null` rune when `createrune` failed
         check(script, cln["user"], admin_rune, f"{data_dir}/clightning-admin-rune",
-              f"printf 'LIGHTNING_RUNE=\"%s\"\\n' \"$(cat {admin_rune})\"")
+              f"printf 'LIGHTNING_RUNE=\"%s\"\\n' \"$(cat {admin_rune})\"",
+              invalid_contents=("", "null\n"))
 
     succeed(f"rm -r {canary} {canary_dir}")
 

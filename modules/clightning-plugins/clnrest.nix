@@ -71,9 +71,21 @@ in
 
     systemd.services.clightning.postStart = mkAfter (
       optionalString cfg.createAdminRune ''
-        if [[ ! -e '${runePath}' ]]; then
-          rune=$(${clightning.cli}/bin/lightning-cli createrune | ${pkgs.jq}/bin/jq -r .rune)
-          install -m 640 <(echo "$rune") '${runePath}'
+        runeFile='${runePath}'
+        # Earlier versions installed an empty or `null` rune when `createrune`
+        # failed. Replace such a file like a missing one, but keep any other file.
+        if [[ ! -e $runeFile ]] ||
+           [[ -f $runeFile && -r $runeFile && $(< "$runeFile") =~ ^(null)?$ ]]; then
+          # Fail the start instead of installing a bad rune.
+          # `Restart=on-failure` then tries again.
+          if ! response=$(${clightning.cli}/bin/lightning-cli createrune) ||
+             ! rune=$(${pkgs.jq}/bin/jq -er .rune <<< "$response") || [[ ! $rune ]]; then
+            echo "Error: Can't create the admin rune: $response" >&2
+            exit 1
+          fi
+          # Replace the file in one step, so that a crash can't leave a partial rune
+          install -T -m 640 <(echo "$rune") "$runeFile.tmp"
+          mv -fT "$runeFile.tmp" "$runeFile"
         fi
       '' +
       # Wait until the clnrest server is listening.

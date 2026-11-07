@@ -248,8 +248,10 @@ in {
           (nbLib.rootScript "rtl-create-clnrest-rune-file" ''
             ${installAsRtl}
             rune=$(${runuser} -u ${clightning.user} -- head -c 65536 '${clightning.networkDir}/admin-rune')
-            if [[ ! $rune ]]; then
-              echo "Error: '${clightning.networkDir}/admin-rune' is empty" >&2
+            # Earlier versions installed an empty or `null` rune when `createrune` failed.
+            # clightning replaces it on its next start, and `Restart=on-failure` tries again.
+            if [[ ! $rune || $rune == null ]]; then
+              echo "Error: '${clightning.networkDir}/admin-rune' is empty or null" >&2
               exit 1
             fi
             printf 'LIGHTNING_RUNE="%s"\n' "$rune" > "$tmpFile"
