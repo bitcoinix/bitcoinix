@@ -237,6 +237,9 @@ restriction:
   `networking.hosts`.
 - A resolver on `127.0.0.1` or `::1` stays reachable without netns-isolation; see
   [Services](services.md) for what that means and how to avoid it.
+- netns-isolation no longer accepts `addressblock` 169 or 170, because those
+  subnets hold cloud metadata addresses. Evaluation fails with a message. Pick
+  another block, and update any addresses you derived from it.
 
 After migrating your configuration, set `nix-bitcoin.configVersion = "0.1.6";`.
 

@@ -10,6 +10,7 @@ let
       default = 1;
       description = ''
         The address block N in 169.254.N.0/24, used as the prefix for netns addresses.
+        169 and 170 aren't allowed, because those blocks hold cloud metadata addresses.
       '';
     };
 

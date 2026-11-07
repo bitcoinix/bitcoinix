@@ -72,10 +72,12 @@ let self = {
   #   /run/dbus              D-Bus system bus
   #   /run/avahi-daemon      Avahi (mDNS), only when the user enables it
   # `security.nix` creates the first three, so their masks fail closed: without
-  # a `-` prefix a missing path stops the unit from starting. Avahi is opt-in
-  # and owns its runtime directory, so its mask is `-` (skipped when absent)
-  # rather than creating that directory for it.
-  localResolverPaths = [ "/run/nscd" "/run/systemd/resolve" "/run/dbus" "-/run/avahi-daemon" ];
+  # a `-` prefix a missing path stops the unit from starting. Avahi's module
+  # creates its directory with tmpfiles, so it's masked only when Avahi is
+  # enabled. Enabling Avahi then changes the restricted units, and the switch
+  # restarts them with the mask.
+  localResolverPaths = [ "/run/nscd" "/run/systemd/resolve" "/run/dbus" ]
+    ++ optional config.services.avahi.enable "/run/avahi-daemon";
 
   # Allow takes precedence over Deny.
   allowLocalIPAddresses = let

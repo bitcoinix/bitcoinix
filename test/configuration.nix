@@ -260,6 +260,11 @@ let
     services.charge-lnd.enable = true;
     nix-bitcoin.netns-isolation = { enable = true; addressblock = 7; };
   };
+  torEnforcedAvahi = evaluate {
+    imports = [ ../modules/presets/enable-tor.nix ];
+    services.electrs.enable = true;
+    services.avahi.enable = true;
+  };
   getNetworkRestriction = config: service: let
     serviceConfig = config.systemd.services.${service}.serviceConfig;
   in {
@@ -855,15 +860,19 @@ let
       expr = getNetworkRestriction torEnforced "electrs";
       expected = {
         allow = [ "127.0.0.1/32" "::1/128" ];
-        inaccessible = [ "/run/nscd" "/run/systemd/resolve" "/run/dbus" "-/run/avahi-daemon" ];
+        inaccessible = [ "/run/nscd" "/run/systemd/resolve" "/run/dbus" ];
       };
     };
     testTorEnforceAllowsOnlyNetnsAddresses = {
       expr = map (getNetworkRestriction torEnforcedNetns) [ "electrs" "charge-lnd" ];
       expected = lib.replicate 2 {
         allow = [ "127.0.0.1/32" "::1/128" "169.254.7.0/24" ];
-        inaccessible = [ "/run/nscd" "/run/systemd/resolve" "/run/dbus" "-/run/avahi-daemon" ];
+        inaccessible = [ "/run/nscd" "/run/systemd/resolve" "/run/dbus" ];
       };
+    };
+    testTorEnforceMasksAvahiWhenEnabled = {
+      expr = (getNetworkRestriction torEnforcedAvahi "electrs").inaccessible;
+      expected = [ "/run/nscd" "/run/systemd/resolve" "/run/dbus" "/run/avahi-daemon" ];
     };
     testNoTorEnforceKeepsNetwork = {
       expr = getNetworkRestriction bitcoin "bitcoind";
