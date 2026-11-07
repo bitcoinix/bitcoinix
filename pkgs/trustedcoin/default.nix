@@ -15,6 +15,8 @@ buildGoModule rec {
 
   subPackages = [ "." ];
 
+  patches = [ ./wait-for-initialization.patch ];
+
   preCheck = ''
     ln -s $TMP/go/bin/trustedcoin .
   '';
