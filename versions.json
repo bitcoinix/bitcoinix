@@ -17,7 +17,7 @@
   },
   "clightning": {
     "channel": "unstable",
-    "version": "26.06.9"
+    "version": "26.06.10"
   },
   "clightning-plugins/clnrest": {
     "channel": "local",
