@@ -47,4 +47,5 @@ env --chdir "$dataDir" -i \
     TMPDIR="$dataDir" \
     QEMU_OPTS="-nographic ${QEMU_OPTS:-}"  \
     QEMU_NET_OPTS="${QEMU_NET_OPTS:-}" \
-    "$testDriver/bin/nixos-test-driver" <(echo "$tests") "$@"
+    testScript="$testDriver/test-script" \
+    "$testDriver/bin/nixos-test-driver" --test-script <(echo "$tests") "$@"
