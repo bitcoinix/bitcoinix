@@ -3,6 +3,9 @@
 , fetchFromGitHub
 }:
 
+# Upstream: https://github.com/NixOS/nixpkgs/pull/584673 (rbitcoin: init at 0.9.0).
+# Once it lands in the pinned nixpkgs, drop this file and take rbitcoin from
+# nixpkgs in pkgs/default.nix.
 rustPlatform.buildRustPackage (finalAttrs: {
   pname = "rbitcoin";
   # 0.9.0 is the first tag with the scripthash reorg fix (rbitcoin#1021).
