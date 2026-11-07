@@ -537,7 +537,7 @@ services.clightning.plugins.trustedcoin.tor.proxy = false;
 
 # rbitcoin
 
-[rbitcoin](https://github.com/reardencode/rbitcoin) is an **experimental**
+[rbitcoin](https://github.com/rbitcoin-org/rbitcoin) is an **experimental**
 Bitcoin full node written in Rust, with built-in Electrum and Esplora servers.
 It is a separate implementation of the consensus rules, not a build of Bitcoin
 Core. Run it as an extra node, or as mempool's node in place of bitcoind:

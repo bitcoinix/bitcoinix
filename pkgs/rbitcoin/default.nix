@@ -5,21 +5,19 @@
 
 rustPlatform.buildRustPackage (finalAttrs: {
   pname = "rbitcoin";
-  # Unreleased master: v0.8.0 predates the scripthash reorg fix
-  # (reardencode/rbitcoin#1018, fixed in #1021), which on mainnet stalls the
-  # node for hours and leaks hundreds of GB on any one-block reorg.
-  # This rev runs a mainnet node (SCHEMA_VERSION 26). Move to the next tag
-  # once it includes that fix.
-  version = "0.8.99-unstable-2026-10-24";
+  # 0.9.0 is the first tag with the scripthash reorg fix (rbitcoin#1021).
+  # SCHEMA_VERSION is still 26, so a data directory from the earlier
+  # unstable pin opens unchanged.
+  version = "0.9.0";
 
   src = fetchFromGitHub {
-    owner = "reardencode";
+    owner = "rbitcoin-org";
     repo = "rbitcoin";
-    rev = "f76514151421db4c1b155871fd222783549f13dc";
-    hash = "sha256-vxI/ulD7ghZ+6sysFbER1vaB1uU8wFSm3i9sklzFhl8=";
+    rev = "v${finalAttrs.version}";
+    hash = "sha256-xLvGL1W6DQatGvYOQzHyHLSms1iuNFWiQRRr5byfpUQ=";
   };
 
-  cargoHash = "sha256-em4GOljXerUFnbCisQhF39oNG0nTaOtrIu63VWPI3c8=";
+  cargoHash = "sha256-MCt5EJ1MYOD3JrfMpqXxw60d7Q1Ny2IPX3ZctgEPqPk=";
 
   cargoBuildFlags = [ "-p" "rbitcoin-node" "-p" "rbitcoin-cli" ];
 
@@ -29,7 +27,7 @@ rustPlatform.buildRustPackage (finalAttrs: {
 
   meta = {
     description = "Experimental Bitcoin full node in Rust with built-in Electrum and Esplora servers";
-    homepage = "https://github.com/reardencode/rbitcoin";
+    homepage = "https://github.com/rbitcoin-org/rbitcoin";
     license = with lib.licenses; [ mit asl20 ];
     mainProgram = "rbitcoin-node";
     platforms = lib.platforms.linux;
