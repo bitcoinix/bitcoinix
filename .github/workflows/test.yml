@@ -14,17 +14,51 @@ on:
 permissions:
   contents: read
 
+# Superseded PR revisions can be cancelled; each master push keeps its own run.
+concurrency:
+  group: tests-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 # Strategy:
 # Job `build_test_drivers` evals all VM tests and builds all test drivers in a single Nix build.
 # Compared to launching a separate build job for each VM test, this avoids duplicated
-# builds of derivations that the test drivers have in common.
+# builds of derivations that the test drivers have in common, when a signing key
+# is available to share those builds through Cachix. Otherwise scenarios build directly.
 #
 # The job matrix `test_scenario` runs the VM tests.
 # When job `build_test_drivers` determines that all tests have already been built successfully,
 # job `test_scenario` is skipped via output variable `run_scenario_tests`.
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: read
+    outputs:
+      # The API caps file listings at 3000. Empty or potentially truncated lists
+      # conservatively run all checks, as do all master pushes.
+      docs_only: >-
+        ${{ github.event_name == 'pull_request'
+            && steps.paths.outputs.all == 'true'
+            && steps.paths.outputs.all_count < 3000
+            && steps.paths.outputs.docs_count == steps.paths.outputs.all_count }}
+    steps:
+      # Uses the PR files API, including both sides of renames; no checkout needed.
+      - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
+        id: paths
+        if: github.event_name == 'pull_request'
+        with:
+          predicate-quantifier: every
+          filters: |
+            # With 'every', no predicates matches every path, including newlines
+            # that a '**' glob can miss. Skip only if all paths also match docs.
+            all: []
+            docs:
+              - '{docs/**,theme/**,assets/**,README.md,dev/README.md,book.toml}'
+
   # VM integration tests
   build_test_drivers:
+    needs: changes
+    if: needs.changes.outputs.docs_only == 'false'
     runs-on: ubuntu-latest
     env:
       CACHIX_SIGNING_KEY: ${{ secrets.CACHIX_SIGNING_KEY }}
@@ -84,15 +118,12 @@ jobs:
 
   # NixOS package and option extraction
   nixos_search:
+    needs: changes
+    if: needs.changes.outputs.docs_only == 'false'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: cachix/install-nix-action@448cde739abec1eaf0646249e3d25bb8d9bc7702 # v31.11.2
-      - name: Configure flake-info caches
-        run: |
-          nix shell --inputs-from . nixpkgs#cachix -c cachix use bitcoinix
-          # Upstream caches the patched Nix dependency used by flake-info.
-          nix shell --inputs-from . nixpkgs#cachix -c cachix use nixos-search
       # `ci-test.sh` runs flake-info, a third-party binary, outside the Nix build
       # sandbox. This job has no signing key, so that binary cannot sign store paths.
       - name: Check package and option extraction
@@ -136,6 +167,8 @@ jobs:
   # checkout, one step per example. A new deployment example must be added to
   # test/ci/deployment-examples.sh and get a step here.
   deployment_examples:
+    needs: changes
+    if: needs.changes.outputs.docs_only == 'false'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -156,6 +189,7 @@ jobs:
   # Add new jobs to its `needs`.
   ci_gate:
     needs:
+      - changes
       - build_test_drivers
       - test_scenario
       - check_flake
@@ -171,6 +205,10 @@ jobs:
     steps:
       - name: Require successful checks
         env:
+          CHANGES: ${{ needs.changes.result }}
+          DOCS_ONLY: ${{ needs.changes.outputs.docs_only }}
+          RUN_SCENARIOS: ${{ needs.build_test_drivers.outputs.run_scenario_tests }}
+          EVENT_NAME: ${{ github.event_name }}
           BUILD_TEST_DRIVERS: ${{ needs.build_test_drivers.result }}
           TEST_SCENARIO: ${{ needs.test_scenario.result }}
           CHECK_FLAKE: ${{ needs.check_flake.result }}
@@ -188,13 +226,30 @@ jobs:
           echo "cache_flake_info: $CACHE_FLAKE_INFO"
           echo "release_tooling: $RELEASE_TOOLING"
           echo "deployment_examples: $DEPLOYMENT_EXAMPLES"
-          [[ $BUILD_TEST_DRIVERS == success &&
+          [[ $CHANGES == success &&
              $CHECK_FLAKE == success &&
              $SHELLCHECK == success &&
-             $NIXOS_SEARCH == success &&
-             $RELEASE_TOOLING == success &&
-             $DEPLOYMENT_EXAMPLES == success ]]
-          # `test_scenario` is skipped when all tests have already been built successfully
-          [[ $TEST_SCENARIO == success || $TEST_SCENARIO == skipped ]]
-          # `cache_flake_info` runs only on pushes to master
-          [[ $CACHE_FLAKE_INFO == success || $CACHE_FLAKE_INFO == skipped ]]
+             $RELEASE_TOOLING == success ]]
+          if [[ $DOCS_ONLY == true ]]; then
+              [[ $EVENT_NAME == pull_request &&
+                 $BUILD_TEST_DRIVERS == skipped &&
+                 $TEST_SCENARIO == skipped &&
+                 $NIXOS_SEARCH == skipped &&
+                 $DEPLOYMENT_EXAMPLES == skipped ]]
+          else
+              [[ $DOCS_ONLY == false &&
+                 $BUILD_TEST_DRIVERS == success &&
+                 $NIXOS_SEARCH == success &&
+                 $DEPLOYMENT_EXAMPLES == success ]]
+              # A skip is valid only when all scenario results were cached.
+              if [[ $RUN_SCENARIOS == true ]]; then
+                  [[ $TEST_SCENARIO == success ]]
+              else
+                  [[ $RUN_SCENARIOS == false && $TEST_SCENARIO == skipped ]]
+              fi
+          fi
+          if [[ $EVENT_NAME == push ]]; then
+              [[ $CACHE_FLAKE_INFO == success ]]
+          else
+              [[ $CACHE_FLAKE_INFO == skipped ]]
+          fi

@@ -94,9 +94,10 @@ The `deployment_examples` job runs [ci/deployment-examples.sh](./ci/deployment-e
 them to the checkout and sets the checkout's latest `configVersion`.
 The `shellcheck` and `nixos_search` jobs run independently, so shell linting and
 fast checks can finish while package and option extraction is still running.
-The required `ci_gate` waits for all jobs and requires them to succeed; only
-`test_scenario` may be skipped when the VM tests are already cached, and
-`cache_flake_info` is skipped on pull requests.
+The required `ci_gate` waits for all jobs and validates both successes and expected
+skips (see [CI scheduling and caching](#ci-scheduling-and-caching)).
+[ci/workflow-tests.py](./ci/workflow-tests.py), exposed as `ci-workflows`, checks
+gate failures and driver caching without network access.
 Permissions, secrets, namespace isolation, backups, and service restarts still
 need the VM tests.
 
@@ -194,3 +195,25 @@ After changing `nixos-search/flake.lock` or the offline patches, the first run m
 need to build `flake-info`. A successful master upload lets subsequent runs fetch
 that build. To verify the cache after an upload, rerun `nixos_search` on a fresh CI
 runner and check that it downloads `flake-info` instead of compiling it.
+
+## CI scheduling and caching
+
+PRs that change only `docs/`, `theme/`, `assets/`, `README.md`, `dev/README.md`
+or `book.toml` skip VM scenarios, deployment examples and nixos-search extraction.
+Fast checks, including generated-version checks, still run. Changes to any other
+path and all pushes to master run the full test workflow. The required `ci_gate`
+checks that jobs succeed or are skipped for the expected reason.
+
+The `changes` job uses a commit-pinned `dorny/paths-filter` action with job-scoped
+`pull-requests: read` permission. It reads changed paths from the PR files API,
+including both sides of renames, without checking out the repository. Empty lists
+and lists reaching the API's 3000-file limit conservatively run the full checks.
+
+New commits cancel older test and docs runs for the same PR. Master test runs and
+docs deployments are preserved. Docs PRs build their own documentation; the latest
+release's documentation is built only for deployment.
+
+The VM preparation job evaluates scenarios and checks Cachix for successful test
+results. It builds and uploads shared drivers only when a Cachix signing key is
+available. Without a key (for example, on fork PRs), each scenario builds its own
+dependencies immediately after evaluation, avoiding an unshared prerequisite build.

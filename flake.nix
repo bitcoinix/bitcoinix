@@ -85,6 +85,14 @@
         nbPkgs = self.lib.mkNbPkgs { inherit system pkgs; };
       in rec {
         checks = {
+          ci-workflows = pkgs.runCommand "nix-bitcoin-ci-workflows" {
+            nativeBuildInputs = [ pkgs.bash pkgs.coreutils
+              (pkgs.python3.withPackages (ps: [ ps.pyyaml ])) ];
+          } ''
+            python ${./test/ci/workflow-tests.py} ${./.github/workflows/test.yml} ${./test/ci}
+            touch "$out"
+          '';
+
           module-config = import ./test/configuration.nix {
             inherit pkgs;
             nixBitcoinModule = self.nixosModules.default;
