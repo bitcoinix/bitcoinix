@@ -6,9 +6,9 @@
 | `btcpayserver` | [2.4.7](https://github.com/btcpayserver/btcpayserver/releases/tag/v2.4.7) | unstable |
 | `charge-lnd` | [0.3.1](https://github.com/accumulator/charge-lnd/releases/tag/v0.3.1) | stable |
 | `clboss` | [0.17.2](https://github.com/ksedgwic/clboss/releases/tag/v0.17.2) | unstable |
-| `clightning` | [26.06.9](https://github.com/ElementsProject/lightning/releases/tag/v26.06.9) | unstable |
-| `clightning-plugins/clnrest` | [0.2.0](https://github.com/ElementsProject/lightning/tree/v26.06.9/plugins/rest-plugin) | local |
-| `clightning-plugins/currencyrate` | [0.1.0](https://github.com/ElementsProject/lightning/tree/v26.06.9/plugins/currencyrate-plugin) | local |
+| `clightning` | [26.06.10](https://github.com/ElementsProject/lightning/releases/tag/v26.06.10) | unstable |
+| `clightning-plugins/clnrest` | [0.2.0](https://github.com/ElementsProject/lightning/tree/v26.06.10/plugins/rest-plugin) | local |
+| `clightning-plugins/currencyrate` | [0.1.0](https://github.com/ElementsProject/lightning/tree/v26.06.10/plugins/currencyrate-plugin) | local |
 | `clightning-plugins/feeadjuster` | [0.1.0-f0d33fd](https://github.com/lightningd/plugins/tree/f0d33fd/feeadjuster) | local |
 | `clightning-plugins/monitor` | [0.1.0-f0d33fd](https://github.com/lightningd/plugins/tree/f0d33fd/monitor) | local |
 | `clightning-plugins/rebalance` | [0.1.0-f0d33fd](https://github.com/lightningd/plugins/tree/f0d33fd/rebalance) | local |

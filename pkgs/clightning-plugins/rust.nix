@@ -3,7 +3,7 @@
 let
   commonAttrs = {
     inherit (clightning) src;
-    cargoHash = "sha256-iNW/aB3uZxAUvjhq5rIAFzj1tP/F1K/mjdvmTUfmz6s=";
+    cargoHash = "sha256-9XUW3exDOJ2WrtMXQysOI1R+jl6unLPHAO4pox8wUoA=";
 
     depsExtraArgs = {
       nativeBuildInputs = [ unzip ];
