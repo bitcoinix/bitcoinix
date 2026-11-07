@@ -22,9 +22,7 @@ chmod 0600 "$identityFile"
 
 runVM() {
     vm=$1
-    vmNumCPUs=$2
-    vmMemoryMiB=$3
-    sshPort=$4
+    sshPort=$2
 
     export NIX_DISK_IMAGE="$tmpDir/img"
     # Bind the SSH forward to loopback only. The demo VM authorizes the
@@ -32,7 +30,7 @@ runVM() {
     # on the network log in as root while the VM runs.
     export QEMU_NET_OPTS="hostfwd=tcp:127.0.0.1:${sshPort}-:22"
     # shellcheck disable=SC2211
-    </dev/null "$vm"/bin/run-*-vm -m "$vmMemoryMiB" -smp "$vmNumCPUs" &>/dev/null &
+    </dev/null "$vm"/bin/run-*-vm &>/dev/null &
     qemuPID=$!
 }
 

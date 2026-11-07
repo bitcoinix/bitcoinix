@@ -90,10 +90,10 @@
       };
     };
 
-    journald.extraConfig = ''
-      Storage=persistent
-      SystemMaxUse=500M
-      MaxRetentionSec=1month
-    '';
+    journald.settings.Journal = {
+      Storage = "persistent";
+      SystemMaxUse = "500M";
+      MaxRetentionSec = "1month";
+    };
   };
 }
