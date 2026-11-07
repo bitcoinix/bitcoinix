@@ -456,10 +456,18 @@ in {
 
     services.i2pd = mkIf (cfg.i2p != false) {
       enable = true;
-      settings.sam = {
-        enabled = true;
-        address = mkDefault "127.0.0.1";
-        port = mkDefault 7656;
+      settings = {
+        sam = {
+          enabled = true;
+          address = mkDefault "127.0.0.1";
+          port = mkDefault 7656;
+        };
+        # Override NixOS's mkDefault true without preventing explicit opt-ins.
+        http.enabled = mkOverride 900 false;
+        httpproxy.enabled = mkOverride 900 false;
+        socksproxy.enabled = mkOverride 900 false;
+        ntcp2.published = mkDefault false;
+        ssu2.published = mkDefault false;
       };
     };
 

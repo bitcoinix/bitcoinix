@@ -478,6 +478,31 @@ let
       in cfg.services.i2pd.settings.sam;
       expected = { enabled = true; address = "127.0.0.1"; port = 7656; };
     };
+    testI2pExposureDefaults = {
+      expr = let
+        cfg = evaluate { services.bitcoind = { enable = true; i2p = true; }; };
+      in with cfg.services.i2pd.settings; [
+        http.enabled httpproxy.enabled socksproxy.enabled ntcp2.published ssu2.published
+      ];
+      expected = [ false false false false false ];
+    };
+    testI2pExposureOverrides = {
+      expr = let
+        cfg = evaluate {
+          services.bitcoind = { enable = true; i2p = true; };
+          services.i2pd.settings = {
+            http.enabled = true;
+            httpproxy.enabled = true;
+            socksproxy.enabled = true;
+            ntcp2.published = true;
+            ssu2.published = true;
+          };
+        };
+      in with cfg.services.i2pd.settings; [
+        http.enabled httpproxy.enabled socksproxy.enabled ntcp2.published ssu2.published
+      ];
+      expected = [ true true true true true ];
+    };
     testI2pSAMNetns = {
       expr = let
         cfg = evaluate {
