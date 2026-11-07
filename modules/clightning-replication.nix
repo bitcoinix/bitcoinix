@@ -35,6 +35,12 @@ let
           The SSH server must allow logins via this key.
           I.e., the `authorized_keys` file of `user` must contain
           `$secretsDir/clightning-replication-ssh-key.pub`.
+
+          The host key of the SSH server must be known in advance, e.g. via
+          `programs.ssh.knownHosts`. Otherwise mounting fails.
+          Don't set `StrictHostKeyChecking=no` in `sshOptions`: it allows any
+          host on the network path to impersonate the server and receive the
+          replicated database.
         '';
       };
       port = mkOption {
@@ -97,6 +103,12 @@ let
   useSshfs = cfg.sshfs.destination != null;
   useMounts = useSshfs || cfg.encrypt;
 
+  # SSH option names and values are case-insensitive
+  disablesHostKeyCheck = any (option:
+    elem (toLower (replaceStrings [ " " ] [ "" ] option))
+      [ "stricthostkeychecking=no" "stricthostkeychecking=off" ]
+  ) (concatMap (splitString ",") cfg.sshfs.sshOptions);
+
   localDir = cfg.local.directory;
   mountsDir = "/var/cache/clightning-replication";
   sshfsDir = "${mountsDir}/sshfs";
@@ -126,6 +138,13 @@ in {
         '';
       }
     ];
+
+    warnings = optional (useSshfs && disablesHostKeyCheck) ''
+      services.clightning.replication.sshfs.sshOptions disables SSH host key checking
+      (`StrictHostKeyChecking`). Any host on the network path can impersonate the
+      replication server and receive the Core Lightning database${optionalString (!cfg.encrypt) " in plaintext"}.
+      Pin the server's host key with `programs.ssh.knownHosts` instead.
+    '';
 
     environment.systemPackages = optionals cfg.encrypt [ pkgs.gocryptfs ];
 
