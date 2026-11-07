@@ -13,7 +13,7 @@ nb .#modulesPkgs.trustedcoin
 # A nix-bitcoin python package
 nb .#nbPython3Packages.pyln-client
 
-# A pinned package from nixpkgs(-unstable)
+# A pinned package from nixpkgs
 nb .#pinned.electrs
 # Equivalent
 nb .#modulesPkgs.electrs
@@ -25,9 +25,8 @@ nix eval .#trustedcoin.version
 # Eval derivation. --raw is needed due to a Nix bug (https://github.com/NixOS/nix/issues/5731)
 nix eval --raw .#trustedcoin; echo
 
-# Check the version of a package in the nixpkgs(-unstable) inputs of the nix-bitcoin flake
+# Check the version of a package in the nixpkgs input of the nix-bitcoin flake
 nix eval --inputs-from . nixpkgs#electrs.version
-nix eval --inputs-from . nixpkgs-unstable#electrs.version
 
 #―――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――
 # Inspect test systems

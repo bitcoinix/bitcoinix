@@ -25,6 +25,24 @@ run `fetch-release.sh` with `releaseVersion=<version>` and write its output to `
 
 ## Upgrading to config version 0.1.5
 
+bitcoinix now bases its systems and packages on unstable nixpkgs only. The single
+`nixpkgs` input tracks `nixpkgs-unstable`; remove any follows declarations targeting
+`bitcoinix/nixpkgs-unstable`. Continue following `bitcoinix/nixpkgs` for your node.
+`nix-bitcoin.useVersionLockedPkgs` now defaults to `true`, including for local
+package builds. If you disable it, use unstable nixpkgs for your system too.
+Keep your existing `system.stateVersion`: it controls state compatibility and does
+not select the nixpkgs channel.
+
+Custom calls to `lib.mkNbPkgs` or `pkgs/default.nix` must remove `pkgsUnstable`.
+Use `pinned.pkgs` in place of `pinned.pkgsUnstable`. The deployment shell no longer
+exports `nixpkgsUnstable`; use the `nixpkgs` entry in `NIX_PATH` instead.
+The dependency update helper no longer accepts a NixOS release argument.
+
+For custom i2pd configuration, replace `services.i2pd.proto.sam` with
+`services.i2pd.settings.sam` and rename its `enable` field to `enabled`.
+bitcoinix still enables SAM automatically for `services.bitcoind.i2p` and
+sets its address for namespace isolation.
+
 Currencyrate, rebalance and clnrest each have a migration notice. Review the
 changes for each plugin you enable before updating your config version.
 

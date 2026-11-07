@@ -45,7 +45,6 @@ pkgs.stdenv.mkDerivation {
     export NIX_PATH="nixpkgs=${nixpkgs}:nix-bitcoin=${toString ../.}:."
     ${setPath}
     export NIX_BITCOIN_EXAMPLES_DIR="${cfgDir}"
-    export nixpkgsUnstable="${pinned.nixpkgs-unstable}"
 
     # Set isInteractive=1 if
     # 1. stdout is a TTY, i.e. we're not piping the output

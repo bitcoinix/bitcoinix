@@ -2,9 +2,9 @@
 
 | Package | Version | Channel |
 |---|---|---|
-| `bitcoind` | [32.1](https://bitcoincore.org/en/releases/32.1/) | stable |
+| `bitcoind` | [32.1](https://bitcoincore.org/en/releases/32.1/) | unstable |
 | `btcpayserver` | [2.4.7](https://github.com/btcpayserver/btcpayserver/releases/tag/v2.4.7) | unstable |
-| `charge-lnd` | [0.3.1](https://github.com/accumulator/charge-lnd/releases/tag/v0.3.1) | stable |
+| `charge-lnd` | [0.3.1](https://github.com/accumulator/charge-lnd/releases/tag/v0.3.1) | unstable |
 | `clboss` | [0.17.2](https://github.com/ksedgwic/clboss/releases/tag/v0.17.2) | unstable |
 | `clightning` | [26.06.10](https://github.com/ElementsProject/lightning/releases/tag/v26.06.10) | unstable |
 | `clightning-plugins/clnrest` | [0.2.0](https://github.com/ElementsProject/lightning/tree/v26.06.10/plugins/rest-plugin) | local |
@@ -14,11 +14,11 @@
 | `clightning-plugins/rebalance` | [0.1.0-f0d33fd](https://github.com/lightningd/plugins/tree/f0d33fd/rebalance) | local |
 | `clightning-plugins/zmq` | [0.1.0-f0d33fd](https://github.com/lightningd/plugins/tree/f0d33fd/cl-zmq) | local |
 | `electrs` | [0.12.0](https://github.com/romanz/electrs/releases/tag/v0.12.0) | unstable |
-| `extra-container` | [0.17](https://github.com/extra-container/extra-container/releases/tag/v0.17) | stable |
+| `extra-container` | [0.17](https://github.com/extra-container/extra-container/releases/tag/v0.17) | unstable |
 | `fulcrum` | [2.1.4](https://github.com/cculianu/Fulcrum/releases/tag/v2.1.4) | unstable |
-| `hwi` | [3.1.0](https://github.com/bitcoin-core/HWI/releases/tag/3.1.0) | local |
+| `hwi` | [3.2.0](https://github.com/bitcoin-core/HWI/releases/tag/3.2.0) | local |
 | `lnd` | [0.21.6-beta](https://github.com/lightningnetwork/lnd/releases/tag/v0.21.6-beta) | unstable |
-| `lndconnect` | [0.2.1](https://github.com/LN-Zap/lndconnect/releases/tag/v0.2.1) | stable |
+| `lndconnect` | [0.2.1](https://github.com/LN-Zap/lndconnect/releases/tag/v0.2.1) | unstable |
 | `lndinit` | [0.1.38-beta](https://github.com/lightninglabs/lndinit/releases/tag/v0.1.38-beta) | unstable |
 | `mempool-backend` | [3.3.2](https://github.com/mempool/mempool/releases/tag/v3.3.2) | local |
 | `mempool-frontend` | [3.3.2](https://github.com/mempool/mempool/releases/tag/v3.3.2) | local |

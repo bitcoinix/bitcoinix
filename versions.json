@@ -1,6 +1,6 @@
 {
   "bitcoind": {
-    "channel": "stable",
+    "channel": "unstable",
     "version": "32.1"
   },
   "btcpayserver": {
@@ -8,7 +8,7 @@
     "version": "2.4.7"
   },
   "charge-lnd": {
-    "channel": "stable",
+    "channel": "unstable",
     "version": "0.3.1"
   },
   "clboss": {
@@ -48,7 +48,7 @@
     "version": "0.12.0"
   },
   "extra-container": {
-    "channel": "stable",
+    "channel": "unstable",
     "version": "0.17"
   },
   "fulcrum": {
@@ -57,14 +57,14 @@
   },
   "hwi": {
     "channel": "local",
-    "version": "3.1.0"
+    "version": "3.2.0"
   },
   "lnd": {
     "channel": "unstable",
     "version": "0.21.6-beta"
   },
   "lndconnect": {
-    "channel": "stable",
+    "channel": "unstable",
     "version": "0.2.1"
   },
   "lndinit": {

@@ -305,6 +305,7 @@ buildable=(
     hardened
     clightning-replication
     lndPruned
+    i2p
     wireguard-lndconnect
     trustedcoin
 )
