@@ -28,7 +28,11 @@ let self = {
   # Internal pkgs
   krops = import ./krops { inherit pkgs; };
 
-  pinned = import ./pinned.nix pkgs;
+  pinned = (import ./pinned.nix pkgs) // {
+    trustedcoin = pkgs.trustedcoin.overrideAttrs (old: {
+      patches = (old.patches or []) ++ [ ./trustedcoin/wait-for-initialization.patch ];
+    });
+  };
 
   modulesPkgs = self // self.pinned;
 }; in self
