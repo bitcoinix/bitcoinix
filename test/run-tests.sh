@@ -307,6 +307,7 @@ buildable=(
     lndPruned
     lnconnectNoOperatorRole
     i2p
+    i2pLocal
     wireguard-lndconnect
     wireguardIptablesLegacy
     trustedcoin

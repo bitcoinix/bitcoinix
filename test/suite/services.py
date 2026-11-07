@@ -25,6 +25,20 @@ def test_bitcoind():
     )
 
 
+@test("i2pd")
+def test_i2pd():
+    assert_running("i2pd")
+    sam = test_data["i2pd"]
+    namespace = "ip netns exec nb-bitcoind " if sam["netns"] else ""
+    # Verify the SAM protocol from Bitcoin's network namespace, including the
+    # bridge firewall, rather than only connecting from the host namespace.
+    machine.wait_until_succeeds(
+        "printf 'HELLO VERSION MIN=3.1 MAX=3.1\\n' | "
+        f"{namespace}nc -w 3 {shlex.quote(sam['address'])} {sam['port']} | "
+        "grep -F 'HELLO REPLY RESULT=OK VERSION=3.1'"
+    )
+
+
 @test("bitcoind-rest")
 def test_bitcoind_rest():
     data = test_data["bitcoind-rest"]
