@@ -100,6 +100,13 @@ let
     networking.firewall.backend = "iptables";
     networking.firewall.package = pkgs.iptables;
   };
+  mempool = evaluate { services.mempool.enable = true; };
+  mempoolRpcPassword = evaluate {
+    services.mempool = {
+      enable = true;
+      settings.CORE_RPC.PASSWORD = lib.mkForce "literal-password";
+    };
+  };
   customMempoolUser = evaluate {
     services.mempool = { enable = true; user = "mempool-custom"; };
   };
@@ -288,6 +295,31 @@ let
     testNetnsRESTAddresses = {
       expr = getRestAddresses netns;
       expected = with netns.nix-bitcoin.netns-isolation.netns; [ lnd.address clightning.address ];
+    };
+    testMempoolWaitsForSecrets = {
+      expr = with mempool.systemd.services.mempool;
+        map (lib.elem "nix-bitcoin-secrets.target") [ wants after ];
+      expected = [ true true ];
+    };
+    testMempoolDefaultRpcPassword = { expr = failedAssertions mempool; expected = []; };
+    testMempoolRejectsRpcPassword = {
+      expr = map (lib.hasInfix "settings.CORE_RPC.PASSWORD` would be copied")
+        (failedAssertions mempoolRpcPassword);
+      expected = [ true ];
+    };
+    testMempoolRpcPasswordMigration = let
+      password.CORE_RPC.PASSWORD = lib.mkForce "literal-password";
+    in {
+      expr = map (case: (builtins.tryEval (evaluate {
+        nix-bitcoin.configVersion = case.version;
+        services.mempool = { enable = true; inherit (case) settings; };
+      }).system.stateVersion).success) [
+        { version = "0.1.4"; settings = password; }
+        { version = "0.1.4"; settings = {}; }
+        { version = "0.1.5"; settings = password; }
+        { version = null; settings = password; }
+      ];
+      expected = [ false true true true ];
     };
     testMempoolCustomUser = {
       expr = with customMempoolUser; {
