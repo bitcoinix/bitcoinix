@@ -117,6 +117,9 @@ For custom i2pd configuration, replace `services.i2pd.proto.sam` with
 `services.i2pd.settings.sam` and rename its `enable` field to `enabled`.
 bitcoinix still enables SAM automatically for `services.bitcoind.i2p` and
 sets its address for namespace isolation.
+The web console, HTTP proxy and SOCKS proxy remain disabled by default, and
+NTCP2/SSU2 address publication remains disabled. Explicit opt-ins through
+`services.i2pd.settings` still take precedence.
 
 On the unstable package/system base, Core Lightning in systemd-nspawn needs
 memory-locking syscalls allowed to keep its signing keys out of swap. For a custom
