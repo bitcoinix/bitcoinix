@@ -5,6 +5,10 @@ network and RPC client have been initialized before handling requests. Otherwise
 an early regtest getchaininfo request can report a zero tip, causing Core
 Lightning to reject its existing database after a restart.
 
+Upstream tracking: https://github.com/nbd-wtf/trustedcoin/pull/44
+The upstream fix also handles missing tip sources and startup retries. Remove
+this local initialization gate when upgrading to a release containing that fix.
+
 diff --git a/main.go b/main.go
 --- a/main.go
 +++ b/main.go
