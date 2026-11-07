@@ -518,6 +518,19 @@ let
         See docs/upgrading.md, "Upgrading to config version 0.1.6".
       '';
     }
+    {
+      version = "0.1.5";
+      message = ''
+        bitcoinix now uses only unstable nixpkgs via the `nixpkgs` flake input.
+        Remove follows declarations for the removed `nixpkgs-unstable` input.
+        `nix-bitcoin.useVersionLockedPkgs` now defaults to true, so service
+        packages use bitcoinix's locked unstable revision. If you disable it,
+        use unstable nixpkgs for your system too.
+        Custom calls to `lib.mkNbPkgs` or `pkgs/default.nix` must drop
+        `pkgsUnstable`; `pinned` now contains only `pkgs` and the package entries.
+        See docs/upgrading.md, "Upgrading to config version 0.1.5".
+      '';
+    }
   ];
 
   missingOnionAccessUsers = let

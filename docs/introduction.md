@@ -33,11 +33,11 @@ release notes, tag or source directory:
 
 {{#include versions-table.md}}
 
-Channel `local` packages other than `hwi` are built by bitcoinix from sources it pins and always
-have this version. `unstable` packages come by default from the `nixpkgs-unstable` input that
-bitcoinix locks. `stable` packages, and `hwi`, which bitcoinix only wraps, come from your system's
-nixpkgs, so their version matches the table only if your nixpkgs is the one that bitcoinix locks or
-if you set `nix-bitcoin.useVersionLockedPkgs = true`.
+All nixpkgs packages come from the single `nixpkgs` input, which tracks `nixpkgs-unstable`.
+Channel `local` packages are built by bitcoinix from pinned sources, except `hwi`, which wraps
+nixpkgs' package. By default, services use the locked unstable package set, including local builds.
+If you set `nix-bitcoin.useVersionLockedPkgs = false`, they use your system's nixpkgs instead;
+use unstable there too. The listed versions then depend on your system's nixpkgs revision.
 
 ## Security
 

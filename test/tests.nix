@@ -520,6 +520,20 @@ let
       };
     };
 
+    # Unstable i2pd's build-time check cannot bind the namespace bridge address.
+    # Exercise the actual SAM listener at runtime instead.
+    i2p = {
+      imports = [ scenarios.netnsBase ];
+      services.bitcoind = { enable = true; i2p = true; };
+      tests.i2pd-sam = true;
+      test.extraTestScript = ''
+        @test("i2pd-sam")
+        def test_i2pd_sam():
+            machine.wait_for_unit("i2pd.service")
+            wait_for_open_port("169.254.1.10", 7656)
+      '';
+    };
+
     # Test the special bitcoin RPC setup that lnd uses when bitcoin is pruned
     lndPruned = {
       services.lnd.enable = true;

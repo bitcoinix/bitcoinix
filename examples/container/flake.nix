@@ -14,7 +14,6 @@
     nix-bitcoin.url = "github:bitcoinix/bitcoinix/v0.1.5";
 
     nixpkgs.follows = "nix-bitcoin/nixpkgs";
-    nixpkgs-unstable.follows = "nix-bitcoin/nixpkgs-unstable";
     extra-container.follows = "nix-bitcoin/extra-container";
   };
 
