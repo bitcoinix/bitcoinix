@@ -5,6 +5,8 @@
   '';
 
   inputs = {
+    # TODO-EXTERNAL: Switch to nixos-unstable once it includes Core Lightning
+    # 26.06.10. As of 2026-11-07 it still carries 26.06.9; retain the security fix.
     nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
     flake-utils.url = "github:numtide/flake-utils";
     extra-container = {
@@ -56,7 +58,9 @@
               If this is the case, enabling this option uses the tested package set
               for bitcoinix services.
               The downsides are increased evaluation times and increased system
-              closure size.
+              closure size. The system's nixpkgs.overlays and nixpkgs.config do
+              not apply to these pinned packages. System evaluation requires
+              unstable nixpkgs regardless of this option.
 
               If `false`, the default system pkgs are used. Use an unstable nixpkgs
               for your system; release branches are not supported.
