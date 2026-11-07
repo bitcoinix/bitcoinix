@@ -75,8 +75,9 @@ the project's direction, supported features, and hardware.
   *bitcoinix unstable*. All tests pass before a change is merged, but not every issue may be caught.
   Please report bugs, patches are always welcome.
 * **Deployment examples:** [`examples/flakes`](examples/flakes/flake.nix) (`nixos-rebuild`) and
-  [`examples/colmena`](examples/colmena/README.md) show how to deploy a node. CI builds them on every
-  pull request. Contributions for other tools are welcome.
+  [`examples/colmena`](examples/colmena/README.md) show how to deploy a node. CI builds them on code-changing
+  pull requests and pushes to `master`; documentation-only PRs skip these builds.
+  Contributions for other tools are welcome.
 
 Get started
 ---

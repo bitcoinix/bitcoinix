@@ -15,7 +15,8 @@ scripts = Path(sys.argv.pop(1)).resolve()
 
 class WorkflowTests(unittest.TestCase):
     def test_gate(self):
-        gate = workflow['jobs']['ci_gate']['steps'][0]['run']
+        gate = next(step['run'] for step in workflow['jobs']['ci_gate']['steps']
+                    if step.get('name') == 'Require successful checks')
         normal = dict.fromkeys([
             'CHANGES', 'BUILD_TEST_DRIVERS', 'TEST_SCENARIO', 'CHECK_FLAKE',
             'SHELLCHECK', 'NIXOS_SEARCH', 'RELEASE_TOOLING', 'DEPLOYMENT_EXAMPLES',

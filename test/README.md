@@ -211,7 +211,8 @@ and lists reaching the API's 3000-file limit conservatively run the full checks.
 
 New commits cancel older test and docs runs for the same PR. Master test runs and
 docs deployments are preserved. Docs PRs build their own documentation; the latest
-release's documentation is built only for deployment.
+release's documentation is built for deployment and, without uploading or deploying,
+on PRs that change `.github/workflows/docs.yml`.
 
 The VM preparation job evaluates scenarios and checks Cachix for successful test
 results. It builds and uploads shared drivers only when a Cachix signing key is

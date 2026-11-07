@@ -104,7 +104,7 @@ Run these steps on the computer you deploy from, not on the node.
 
 Your node configuration is a Nix flake that has bitcoinix as an input. You deploy it from your
 computer over SSH with `nixos-rebuild` or [Colmena](https://colmena.cli.rs/). CI builds both
-examples on every change to bitcoinix.
+examples on code-changing pull requests and pushes to `master`; documentation-only PRs skip these builds.
 
 1. Copy an example to a new directory next to the bitcoinix clone
 
