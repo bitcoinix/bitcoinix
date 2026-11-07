@@ -189,6 +189,11 @@ let
     staticContent = ''
       index index.html;
 
+      # Send no cache validators and ignore If-Modified-Since: the ETag holds the Nix
+      # store hash of the build, and Last-Modified the store's 1970 timestamp
+      etag off;
+      add_header Last-Modified "";
+      if_modified_since off;
       add_header Cache-Control "public, no-transform";
       add_header Vary Accept-Language;
       add_header Vary Cookie;
