@@ -96,7 +96,7 @@
             touch "$out"
           '';
           cve-tools = pkgs.runCommand "nix-bitcoin-cve-tools" {
-            nativeBuildInputs = with pkgs; [ bash coreutils gawk gnugrep jq python3 ];
+            nativeBuildInputs = [ pkgs.python3 ];
           } ''
             python ${./test/ci/cve-tests.py} ${./test/ci}
             touch "$out"

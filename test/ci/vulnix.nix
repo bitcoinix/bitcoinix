@@ -1,4 +1,4 @@
-# vulnix for the CVE scan (test/ci/cve-scan.sh).
+# vulnix for the CVE scan (test/ci/cve.py).
 #
 # nixpkgs ships vulnix 1.12.4, which reads `patches` only from the plain
 # derivation environment. Packages built with `__structuredAttrs` keep it in the
@@ -8,7 +8,7 @@
 # and is in no release yet (1.12.5 is from 2026-07-31).
 #
 # This takes the nixpkgs package definition and swaps in the upstream source at
-# a pinned commit. Drop this file and go back to `nixpkgs#vulnix` in cve-scan.sh
+# a pinned commit. Drop this file and go back to `nixpkgs#vulnix` in cve_scan.py
 # once nixpkgs has a vulnix release with the fix.
 #
 # Built with:  nix build --impure -f test/ci/vulnix.nix

@@ -2,7 +2,7 @@
 # services and backups, i.e. the recommended deployment. Hardware wallets are
 # host tooling, not node services.
 #
-# CVE-scan target (test/ci/cve-scan.sh): vulnix scans this system's RUNTIME
+# CVE-scan target (test/ci/cve.py): vulnix scans this system's RUNTIME
 # closure, the software a user actually runs (bitcoind, clightning, lnd,
 # electrs, fulcrum, btcpayserver, nbxplorer, mempool, rtl, kernel, systemd,
 # openssl, ...), NOT build-time dependencies like compilers, which are what a

@@ -65,7 +65,7 @@ nix build --no-link .#checks.x86_64-linux.module-config .#checks.x86_64-linux.te
 # Check CVE scan/report behavior without network access or GitHub writes.
 nix build --no-link .#checks.x86_64-linux.cve-tools
 # Run the same fixtures on any host with Nix, including macOS.
-nix shell --inputs-from . nixpkgs#{bash,coreutils,gawk,gnugrep,jq,python3} -c python3 test/ci/cve-tests.py test/ci
+nix shell --inputs-from . nixpkgs#python3 -c python3 test/ci/cve-tests.py test/ci
 
 # Evaluate the flake and run checks for the current supported system.
 nix flake check --all-systems
@@ -82,7 +82,8 @@ selection, ordering, registration errors, and interactive dispatch using a
 machine stub. Both checks are exposed for `x86_64-linux` and `aarch64-linux`,
 and the existing CI `check_flake` job runs them through `nix flake check`.
 [ci/cve-tests.py](./ci/cve-tests.py), exposed as the `cve-tools` check, exercises
-scan failures, whitelist filtering, and issue reporting with local command stubs.
+[ci/cve.py](./ci/cve.py) with local nix and gh stubs: scan failures, whitelist
+filtering, and issue reporting.
 The same CI job evaluates [ci/scan-node.nix](./ci/scan-node.nix) without building
 the node or fetching NVD feeds. The scheduled CVE workflow builds and scans it.
 The `deployment_examples` job runs [ci/deployment-examples.sh](./ci/deployment-examples.sh)
