@@ -306,6 +306,7 @@ buildable=(
     clightning-replication
     lndPruned
     i2p
+    i2pLocal
     wireguard-lndconnect
     trustedcoin
 )
