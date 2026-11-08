@@ -25,8 +25,9 @@ run `fetch-release.sh` with `releaseVersion=<version>` and write its output to `
 
 ## Upgrading to config version 0.1.5
 
-Currencyrate, rebalance and clnrest each have a migration notice. Review the
-changes for each plugin you enable before updating your config version.
+Currencyrate, rebalance, clnrest and mempool's `settings.CORE_RPC.PASSWORD` each
+have a migration notice. Review the changes for each one you use before updating
+your config version.
 
 The clnrest package has moved from `nix-bitcoin.pkgs.clnrest` to
 `nix-bitcoin.pkgs.clightning-plugins.clnrest`. Update explicit package references
@@ -71,6 +72,15 @@ configuration before deploying:
   no longer control route selection or hop limits.
 - Update scripts that read `rebalancereport`: its `getroute_method`,
   `maxhops_threshold` and `msatfactor` fields have been removed.
+
+mempool no longer accepts `services.mempool.settings.CORE_RPC.PASSWORD`. Its
+settings are copied to the world-readable Nix store, so evaluation now fails when
+this option is set. Remove it and save the password to `bitcoin-rpcpassword-public`
+in the [secrets dir](./configuration.md#secrets-dir). mempool reads it from there
+at startup, also when it uses
+[bitcoind from another node](./configuration.md#use-bitcoind-from-another-node).
+The old value stays readable in the Nix store until it is garbage-collected, so
+change the password if untrusted users or services run on the node.
 
 After addressing these changes, set `nix-bitcoin.configVersion = "0.1.5";`.
 
