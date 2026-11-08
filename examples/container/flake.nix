@@ -11,7 +11,7 @@
 
   inputs = {
     # Pin the latest release tag listed at https://github.com/bitcoinix/bitcoinix/tags
-    nix-bitcoin.url = "github:bitcoinix/bitcoinix/v0.1.3";
+    nix-bitcoin.url = "github:bitcoinix/bitcoinix/v0.1.5";
 
     nixpkgs.follows = "nix-bitcoin/nixpkgs";
     nixpkgs-unstable.follows = "nix-bitcoin/nixpkgs-unstable";
@@ -55,7 +55,7 @@
 
               # The config version of the pinned release. Bump it together with the
               # release pin above, after reading the notes in docs/upgrading.md.
-              nix-bitcoin.configVersion = "0.1.3";
+              nix-bitcoin.configVersion = "0.1.5";
 
               # Automatically generate all secrets required by services.
               # The secrets are stored in /etc/nix-bitcoin-secrets in the container
