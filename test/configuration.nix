@@ -448,10 +448,11 @@ let
         { version = "0.1.4"; enable = true; }
         { version = "0.1.4"; enable = false; }
         { version = "0.1.5"; enable = true; }
+        { version = "0.1.6"; enable = true; }
         { version = null; enable = true; }
       ];
       # The unstable-only migration also affects configurations without plugins.
-      expected = [ false false true true ];
+      expected = [ false false false true true ];
     }) [ "currencyrate" "rebalance" ]);
   # The preset's preStart lines, run by the check below against a scratch data dir
   remoteRpcUser = "rpc$USER'$(id)";
@@ -697,9 +698,10 @@ let
         { version = "0.1.4"; settings = password; }
         { version = "0.1.4"; settings = {}; }
         { version = "0.1.5"; settings = password; }
+        { version = "0.1.6"; settings = password; }
         { version = null; settings = password; }
       ];
-      expected = [ false true true true ];
+      expected = [ false false false true true ];
     };
     testBackupsFollowPostgresqlCompression = let
       includes = compression: let

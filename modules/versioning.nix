@@ -519,7 +519,7 @@ let
       '';
     }
     {
-      version = "0.1.5";
+      version = "0.1.6";
       message = ''
         bitcoinix now uses only unstable nixpkgs via the `nixpkgs` flake input.
         Remove follows declarations for the removed `nixpkgs-unstable` input.
@@ -533,11 +533,11 @@ let
         "The option `services.i2pd.checkConfig' does not exist".
         Custom calls to `lib.mkNbPkgs` or `pkgs/default.nix` must drop
         `pkgsUnstable`; `pinned` now contains only `pkgs` and the package entries.
-        See docs/upgrading.md, "Upgrading to config version 0.1.5".
+        See docs/upgrading.md, "Upgrading to config version 0.1.6".
       '';
     }
     {
-      version = "0.1.5";
+      version = "0.1.6";
       condition = config.boot.isNspawnContainer && config.services.clightning.enable;
       message = ''
         On the unstable package/system base, Core Lightning in systemd-nspawn
@@ -546,7 +546,7 @@ let
         `containers.<name>.extraFlags = [ "--system-call-filter=@memlock" ];`
         to the host configuration. Without this, lightning_hsmd aborts at startup.
         The bitcoinix container examples and test runner already allow these calls.
-        See docs/upgrading.md, "Upgrading to config version 0.1.5".
+        See docs/upgrading.md, "Upgrading to config version 0.1.6".
       '';
     }
   ];

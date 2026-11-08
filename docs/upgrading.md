@@ -27,6 +27,56 @@ run `fetch-release.sh` with `releaseVersion=<version>` and write its output to `
 
 ## Upgrading to config version 0.1.6
 
+bitcoinix now bases its systems and packages on unstable nixpkgs only. The single
+`nixpkgs` input tracks `nixos-unstable`; remove any follows declarations targeting
+`bitcoinix/nixpkgs-unstable`. Continue following `bitcoinix/nixpkgs` for your node.
+The system itself must be evaluated with unstable nixpkgs, regardless of
+`nix-bitcoin.useVersionLockedPkgs`. NixOS 26.05 evaluation fails before migration
+assertions run, even without I2P or namespace isolation, with an error such as
+``The option `services.i2pd.checkConfig' does not exist``.
+Switch your system's nixpkgs input to unstable before evaluating this release.
+If your system follows `bitcoinix/nixpkgs`, as the deployment examples do, updating
+bitcoinix moves the whole OS from NixOS 26.05 to unstable, not only service packages.
+
+`nix-bitcoin.useVersionLockedPkgs` now defaults to `true`, including for local
+package builds. Your system's `nixpkgs.overlays` and `nixpkgs.config` no longer
+apply to the pinned service packages, including bitcoind, lnd and clightning.
+Review any security patches or other customizations supplied through overlays:
+set `nix-bitcoin.useVersionLockedPkgs = false` to use your system's customized
+unstable package set, or explicitly override the affected service's package.
+Keep your existing `system.stateVersion`: it controls state compatibility and does
+not select the nixpkgs channel.
+
+Custom calls to `lib.mkNbPkgs` or `pkgs/default.nix` must remove `pkgsUnstable`.
+Use `pinned.pkgs` in place of `pinned.pkgsUnstable`. The deployment shell no longer
+exports `nixpkgsUnstable`; use the `nixpkgs` entry in `NIX_PATH` instead.
+The dependency update helper no longer accepts a NixOS release argument.
+
+For custom i2pd configuration, replace `services.i2pd.proto.sam` with
+`services.i2pd.settings.sam` and rename its `enable` field to `enabled`.
+bitcoinix still enables SAM automatically for `services.bitcoind.i2p` and
+sets its address for namespace isolation.
+The web console, HTTP proxy and SOCKS proxy remain disabled by default, and
+NTCP2/SSU2 address publication remains disabled. Explicit opt-ins through
+`services.i2pd.settings` still take precedence.
+
+On the unstable package/system base, Core Lightning in systemd-nspawn needs
+memory-locking syscalls allowed to keep its signing keys out of swap. For a custom
+NixOS/systemd-nspawn container, add this to the **host** configuration, replacing
+`node` with the container name:
+
+```nix
+containers.node.extraFlags = [ "--system-call-filter=@memlock" ];
+```
+
+Without it, `lightning_hsmd` aborts during startup. The bitcoinix container examples
+and test runner already set this flag. The normal memory-lock limit still applies;
+no additional capability is needed.
+
+After addressing these changes, set `nix-bitcoin.configVersion = "0.1.6";`.
+
+## Upgrading to config version 0.1.6
+
 `services.lnd.lndconnect.onion` and
 `services.clightning.plugins.clnrest.lnconnect.onion` now give the operator user
 access to the `lnd-rest` and `clnrest` onion addresses only when
@@ -87,52 +137,6 @@ if the account uses one.
 After migrating your configuration, set `nix-bitcoin.configVersion = "0.1.6";`.
 
 ## Upgrading to config version 0.1.5
-
-bitcoinix now bases its systems and packages on unstable nixpkgs only. The single
-`nixpkgs` input tracks `nixpkgs-unstable`; remove any follows declarations targeting
-`bitcoinix/nixpkgs-unstable`. Continue following `bitcoinix/nixpkgs` for your node.
-The system itself must be evaluated with unstable nixpkgs, regardless of
-`nix-bitcoin.useVersionLockedPkgs`. NixOS 26.05 evaluation fails before migration
-assertions run, even without I2P or namespace isolation, with an error such as
-``The option `services.i2pd.checkConfig' does not exist``.
-Switch your system's nixpkgs input to unstable before evaluating this release.
-If your system follows `bitcoinix/nixpkgs`, as the deployment examples do, updating
-bitcoinix moves the whole OS from NixOS 26.05 to unstable, not only service packages.
-
-`nix-bitcoin.useVersionLockedPkgs` now defaults to `true`, including for local
-package builds. Your system's `nixpkgs.overlays` and `nixpkgs.config` no longer
-apply to the pinned service packages, including bitcoind, lnd and clightning.
-Review any security patches or other customizations supplied through overlays:
-set `nix-bitcoin.useVersionLockedPkgs = false` to use your system's customized
-unstable package set, or explicitly override the affected service's package.
-Keep your existing `system.stateVersion`: it controls state compatibility and does
-not select the nixpkgs channel.
-
-Custom calls to `lib.mkNbPkgs` or `pkgs/default.nix` must remove `pkgsUnstable`.
-Use `pinned.pkgs` in place of `pinned.pkgsUnstable`. The deployment shell no longer
-exports `nixpkgsUnstable`; use the `nixpkgs` entry in `NIX_PATH` instead.
-The dependency update helper no longer accepts a NixOS release argument.
-
-For custom i2pd configuration, replace `services.i2pd.proto.sam` with
-`services.i2pd.settings.sam` and rename its `enable` field to `enabled`.
-bitcoinix still enables SAM automatically for `services.bitcoind.i2p` and
-sets its address for namespace isolation.
-The web console, HTTP proxy and SOCKS proxy remain disabled by default, and
-NTCP2/SSU2 address publication remains disabled. Explicit opt-ins through
-`services.i2pd.settings` still take precedence.
-
-On the unstable package/system base, Core Lightning in systemd-nspawn needs
-memory-locking syscalls allowed to keep its signing keys out of swap. For a custom
-NixOS/systemd-nspawn container, add this to the **host** configuration, replacing
-`node` with the container name:
-
-```nix
-containers.node.extraFlags = [ "--system-call-filter=@memlock" ];
-```
-
-Without it, `lightning_hsmd` aborts during startup. The bitcoinix container examples
-and test runner already set this flag. The normal memory-lock limit still applies;
-no additional capability is needed.
 
 Currencyrate, rebalance and mempool's `settings.CORE_RPC.PASSWORD` each
 have a migration notice. Review the changes for each one you use before updating
