@@ -5,9 +5,7 @@
   '';
 
   inputs = {
-    # TODO-EXTERNAL: Switch to nixos-unstable once it includes Core Lightning
-    # 26.06.10. As of 2026-11-07 it still carries 26.06.9; retain the security fix.
-    nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
     flake-utils.url = "github:numtide/flake-utils";
     extra-container = {
       url = "github:extra-container/extra-container/v1.0.1";

@@ -102,7 +102,7 @@ sudo ./test/run-tests.sh container          # fast container; needs systemd + ro
   dependency** — order matters; register new service modules in the right group.
 - `pkgs/` defines derivations; `pkgs/lib.nix` holds shared security hardening
   (systemd sandboxing, user/isolation helpers) used across services.
-- The single `nixpkgs` input tracks `nixpkgs-unstable`. `nix-bitcoin.useVersionLockedPkgs`
+- The single `nixpkgs` input tracks `nixos-unstable`. `nix-bitcoin.useVersionLockedPkgs`
   defaults to true and selects the flake's pinned unstable nixpkgs for services.
 - Always update `flake.lock` via `helper/update-flake.sh`; never hand-edit it or
   run `nix flake update` / `nix flake lock` directly. The helper keeps
