@@ -114,8 +114,9 @@ apart, don't expose SSH to the internet:
 - Set `services.openssh.openFirewall = false`, and remove any other firewall rule that
   opens the SSH port to the internet. To keep SSH over a VPN, open the port on that
   interface, e.g. `networking.firewall.interfaces.wg0.allowedTCPPorts = [ 22 ];`.
-- Keep your SSH session open until a new login through the onion service works, and
-  keep console access in case Tor fails on the node.
+- Before you deploy the firewall change, open a root SSH session over the IP address.
+  Keep it open until a new root login through the onion service works, and keep
+  console access in case Tor fails on the node.
 
 Or let only your own Tor client reach the onion service with
 [client authorization](https://community.torproject.org/onion-services/advanced/client-auth/)
