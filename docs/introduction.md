@@ -33,7 +33,7 @@ release notes, tag or source directory:
 
 {{#include versions-table.md}}
 
-All nixpkgs packages come from the single `nixpkgs` input, which tracks `nixpkgs-unstable`.
+All nixpkgs packages come from the single `nixpkgs` input, which tracks `nixos-unstable`.
 Channel `local` packages are built by bitcoinix from pinned sources, except `hwi`, which wraps
 nixpkgs' package. By default, services use the locked unstable package set, including local builds.
 If you set `nix-bitcoin.useVersionLockedPkgs = false`, they use your system's nixpkgs instead;
