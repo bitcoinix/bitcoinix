@@ -86,6 +86,8 @@ sudo ./test/run-tests.sh container          # fast container; needs systemd + ro
   scenarios, `nix flake check --all-systems`, `test/nixos-search/ci-test.sh`,
   `test/ci/deployment-examples.sh`, and shellcheck. Builds are cached in the `bitcoinix` Cachix cache. The rulesets on `master`
   and release tags require the `ci_gate` job; add any new CI job to its `needs`.
+- Documentation-only PRs skip VM, deployment-example and nixos-search jobs; see
+  `test/README.md#ci-scheduling-and-caching`. Fast checks still run.
 - Docs (`.github/workflows/docs.yml`) are only build-checked on PRs. https://docs.bitcoinix.net
   is published from the latest verified release tag, after "Verify release tags"
   succeeds for a pushed tag (or manually), never from `master`. Docs changes on `master`
@@ -117,7 +119,7 @@ sudo ./test/run-tests.sh container          # fast container; needs systemd + ro
 
 `examples/flakes` (`nixos-rebuild --flake`) and `examples/colmena` are the supported
 deployment examples; krops (`examples/krops`) is legacy. The CI job `deployment_examples`
-builds each of them with its own tool against the checkout on every PR, via
+builds each of them with its own tool against the checkout on PRs with code changes, via
 `test/ci/deployment-examples.sh` (locally: `./test/run-tests.sh deploymentExamples`).
 The other examples (`examples/deploy-*.sh`, `examples/container`) run only with
 `./test/run-tests.sh examples`, not in CI.

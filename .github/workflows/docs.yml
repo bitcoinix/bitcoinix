@@ -4,8 +4,9 @@ name: bitcoinix docs
 # release tag, never from master. Changes on master appear with the next release.
 #
 # Job `build` checks that the docs of a PR build.
-# Job `build_release` builds the docs of the latest release tag. On PRs it only checks
-# the build, otherwise it uploads the result as a Pages artifact for job `deploy`.
+# Job `build_release` builds the docs of the latest release tag for deployment
+# and uploads the result as a Pages artifact for job `deploy`. PRs changing this
+# workflow also exercise the release build, without uploading or deploying.
 #
 # Deployment runs after "Verify release tags" (release.yml) has verified a pushed tag,
 # or manually. `workflow_run` and `workflow_dispatch` use the workflow file from the
@@ -30,18 +31,33 @@ permissions:
   contents: read
 
 # Runs that can deploy share one group, so a run that selected an older tag can't
-# deploy after a newer one. All other runs (PRs, the daily tag re-check) get their
-# own group: a group holds a single pending run, so they would replace a pending deploy.
+# deploy after a newer one. PRs have their own groups so newer revisions cancel
+# obsolete builds without affecting deployments. Daily tag re-checks have unique groups.
 concurrency:
   group: >-
     ${{ ((github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/master')
          || (github.event_name == 'workflow_run'
              && github.event.workflow_run.conclusion == 'success'
              && github.event.workflow_run.event == 'push'))
-        && 'docs-release' || format('docs-{0}', github.run_id) }}
-  cancel-in-progress: false
+        && 'docs-release' || format('docs-{0}', github.event.pull_request.number || github.run_id) }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: read
+    outputs:
+      release_workflow: ${{ steps.paths.outputs.release_workflow }}
+    steps:
+      - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
+        id: paths
+        if: github.event_name == 'pull_request'
+        with:
+          filters: |
+            release_workflow:
+              - '.github/workflows/docs.yml'
+
   build:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
@@ -52,10 +68,11 @@ jobs:
         run: nix shell --inputs-from . nixpkgs#mdbook -c mdbook build
 
   build_release:
+    needs: changes
     # Deploy only after a tag push has been verified, not after the daily re-check.
     # Keep the deploy conditions in sync with `concurrency` above.
     if: >-
-      github.event_name == 'pull_request'
+      (github.event_name == 'pull_request' && needs.changes.outputs.release_workflow == 'true')
       || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/master')
       || (github.event_name == 'workflow_run'
           && github.event.workflow_run.conclusion == 'success'
@@ -102,6 +119,7 @@ jobs:
           MDBOOK_BOOK__TITLE="bitcoinix v$version" \
               nix shell --inputs-from "path:$trusted" nixpkgs#mdbook -c mdbook build "$src"
           echo "BOOK_DIR=$src/book" >> "$GITHUB_ENV"
+      # Workflow-changing PRs validate the release build but never publish it.
       - if: github.event_name != 'pull_request'
         uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:

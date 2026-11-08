@@ -26,10 +26,18 @@ if nix path-info --store "https://${cachixCache}.cachix.org" "${scenarioTests[@]
     echo
     echo "All tests have already been built successfully:"
     printf '%s\n' "${scenarioTests[@]}"
+    echo "run_scenario_tests=false" >> "$GITHUB_OUTPUT"
     exit 0
 fi
 
 echo "run_scenario_tests=true" >> "$GITHUB_OUTPUT"
+
+# Without a signing key, no other runner can reuse this job's builds.
+# Let the scenario jobs build their own dependencies without waiting for us.
+if [[ -z ${CACHIX_SIGNING_KEY:-} ]]; then
+    echo "No signing key: leaving driver builds to the scenario jobs."
+    exit 0
+fi
 
 ## Build test drivers
 
@@ -47,15 +55,6 @@ if [[ -v GITHUB_ACTIONS ]]; then
     cachix use "$cachixCache"
 fi
 
-if [[ $CACHIX_SIGNING_KEY ]]; then
-    # Speed up task by uploading store paths as soon as they are created
-    buildCmd="cachix watch-exec $cachixCache nix -- build"
-else
-    buildCmd="nix build"
-fi
-
-$buildCmd --no-link --print-build-logs "${driverDrvs[@]}"
-
-if [[ $CACHIX_SIGNING_KEY ]]; then
-    cachix push "$cachixCache" "${drivers[@]}"
-fi
+# Upload store paths as soon as they are created.
+cachix watch-exec "$cachixCache" nix -- build --no-link --print-build-logs "${driverDrvs[@]}"
+cachix push "$cachixCache" "${drivers[@]}"
