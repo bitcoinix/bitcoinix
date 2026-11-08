@@ -318,12 +318,12 @@ let
     imports = [ module ];
     nix-bitcoin.configVersion = version;
   }).system.stateVersion).success;
-  # Whether a 0.1.4 config gets the notice whose message contains `phrase`.
+  # Whether a 0.1.5 config gets the notice whose message contains `phrase`.
   # The versioning throw is a definition of `system`, which the module check
   # forces on any config access, so skip the check here.
   hasNotice = phrase: module: lib.any (lib.hasInfix phrase) (evaluate {
     imports = [ module ];
-    nix-bitcoin.configVersion = "0.1.4";
+    nix-bitcoin.configVersion = "0.1.5";
     _module.check = false;
   }).nix-bitcoin.versioning.incompatibleChanges;
   hasOperatorAccessNotice = hasNotice "lnconnect-clnrest now gives the operator user";
@@ -756,15 +756,15 @@ let
       expr = map (lib.hasInfix "disabled-user") (failedAssertions onionAccessDisabledUser);
       expected = [ true ];
     };
-    # Before 0.1.5, the access could name users that aren't defined or enabled in `users.users`
+    # Before 0.1.6, the access could name users that aren't defined or enabled in `users.users`
     testVersioningOnionAccessUndefinedUser = {
       expr = {
         undefined = hasAccessUsersNotice onionAccessExternalUser;
-        current = passesVersionCheckAt "0.1.5" onionAccessExternalUser;
+        current = passesVersionCheckAt "0.1.6" onionAccessExternalUser;
         currentFails = map (lib.hasInfix "external-user")
           (failedAssertions (evaluate {
             imports = [ onionAccessExternalUser ];
-            nix-bitcoin.configVersion = "0.1.5";
+            nix-bitcoin.configVersion = "0.1.6";
           }));
         defined = hasAccessUsersNotice onionAccessLoginName;
         disabled = hasAccessUsersNotice {

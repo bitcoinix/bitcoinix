@@ -459,8 +459,8 @@ let
       '';
     }
     {
-      version = "0.1.5";
-      # Before 0.1.5, lnconnect-clnrest granted the operator clnrest onion access
+      version = "0.1.6";
+      # Before 0.1.6, lnconnect-clnrest granted the operator clnrest onion access
       # even with the operator role disabled. Only configs that don't grant the
       # access themselves are affected. The operator account may come from outside
       # `users.users` (useradd, LDAP), so don't require it to be defined there.
@@ -494,12 +494,12 @@ let
         `${name}` instead of root, also add "${config.services.clightning.group}" to
         `users.users.${account}.extraGroups`. That group can read the admin rune and use
         the clightning RPC socket.
-        See docs/upgrading.md, "Upgrading to config version 0.1.5".
+        See docs/upgrading.md, "Upgrading to config version 0.1.6".
       '';
     }
     {
-      version = "0.1.5";
-      # Before 0.1.5, access could name users provisioned outside `users.users`
+      version = "0.1.6";
+      # Before 0.1.6, access could name users provisioned outside `users.users`
       # (useradd, LDAP/NSS) or disabled there. Compare login names as
       # onion-addresses.nix does. Both onion access entries can fire, even for the
       # same user, and then both apply.
@@ -515,7 +515,7 @@ let
         account created with useradd, declare its current uid, group, home and shell,
         since NixOS applies its defaults otherwise. Or remove the user from
         `nix-bitcoin.onionAddresses.access`.
-        See docs/upgrading.md, "Upgrading to config version 0.1.5".
+        See docs/upgrading.md, "Upgrading to config version 0.1.6".
       '';
     }
   ];

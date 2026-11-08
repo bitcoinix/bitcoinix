@@ -25,56 +25,7 @@ This fetches the latest release, verifies the signature on its release tag and u
 It refuses to switch to a release older than the one currently pinned. To downgrade on purpose,
 run `fetch-release.sh` with `releaseVersion=<version>` and write its output to `nix-bitcoin-release.nix`.
 
-## Upgrading to config version 0.1.5
-
-Currencyrate, rebalance and mempool's `settings.CORE_RPC.PASSWORD` each
-have a migration notice, and so do the onion address access changes below. Review
-the changes for each one you use, and the onion address access changes if you use
-onion addresses, before updating your config version.
-
-The Python currencyrate plugin has been replaced by Rust `cln-currencyrate`.
-Keep `services.clightning.plugins.currencyrate.enable = true`, but update any
-custom scripts before deploying:
-
-- Replace `currencyrates <currency>` with `listcurrencyrates <currency>`.
-  The response is now `{"currencyrates": [{"source": "…", "amount": 95000.0}, …]}`,
-  with amounts in fiat per BTC, replacing the map of source names to msat per
-  fiat unit. Adapt both parsing and units.
-  `currencyrate <currency>` returns a single median rate in fiat per BTC.
-- `currencyconvert` still takes `amount` and `currency`, for example
-  `lightning-cli currencyconvert 10 USD`, but its `msat` result is now a JSON
-  number rather than a string with an `msat` suffix. The median is now calculated
-  from fiat prices before conversion.
-- Rename `add-source` and `disable-source` in `services.clightning.extraConfig`
-  to `currencyrate-add-source` and `currencyrate-disable-source`. Review them
-  against the [new plugin's README](https://github.com/ElementsProject/lightning/tree/master/plugins/currencyrate-plugin).
-  The plugin follows CLN's configured proxy.
-
-After deploying, check that `lightning-cli help currencyconvert` and
-`lightning-cli help listcurrencyrates` list the new RPCs. A live conversion such
-as `lightning-cli currencyconvert 100 USD` also needs reachable price sources.
-
-The rebalance plugin now uses Core Lightning's `askrene` routing. If you enable
-`services.clightning.plugins.rebalance.enable`, update custom scripts and
-configuration before deploying:
-
-- Remove the `getroute_method` argument from `rebalance` RPC calls; it is no
-  longer accepted.
-- Remove `rebalance-getroute`, `rebalance-maxhops` and `rebalance-msatfactor` from
-  `services.clightning.extraConfig` and any included configuration files. These
-  settings are still accepted with a deprecation warning but are ignored, so they
-  no longer control route selection or hop limits.
-- Update scripts that read `rebalancereport`: its `getroute_method`,
-  `maxhops_threshold` and `msatfactor` fields have been removed.
-
-mempool no longer accepts `services.mempool.settings.CORE_RPC.PASSWORD`. Its
-settings are copied to the world-readable Nix store, so evaluation now fails when
-this option is set. Remove it and save the password to `bitcoin-rpcpassword-public`
-in the [secrets dir](./configuration.md#secrets-dir). mempool reads it from there
-at startup, also when it uses
-[bitcoind from another node](./configuration.md#use-bitcoind-from-another-node).
-The old value stays readable in the Nix store until it is garbage-collected, so
-change the password if untrusted users or services run on the node.
+## Upgrading to config version 0.1.6
 
 `services.lnd.lndconnect.onion` and
 `services.clightning.plugins.clnrest.lnconnect.onion` now give the operator user
@@ -132,6 +83,58 @@ primary `group` and its `users.groups` entry with the current `gid`,
 `extraGroups`, `description`, `home`, `homeMode` and `shell`. With
 `users.mutableUsers = false`, NixOS also manages the password, so declare it too
 if the account uses one.
+
+After migrating your configuration, set `nix-bitcoin.configVersion = "0.1.6";`.
+
+## Upgrading to config version 0.1.5
+
+Currencyrate, rebalance and mempool's `settings.CORE_RPC.PASSWORD` each
+have a migration notice. Review the changes for each one you use before updating
+your config version.
+
+The Python currencyrate plugin has been replaced by Rust `cln-currencyrate`.
+Keep `services.clightning.plugins.currencyrate.enable = true`, but update any
+custom scripts before deploying:
+
+- Replace `currencyrates <currency>` with `listcurrencyrates <currency>`.
+  The response is now `{"currencyrates": [{"source": "…", "amount": 95000.0}, …]}`,
+  with amounts in fiat per BTC, replacing the map of source names to msat per
+  fiat unit. Adapt both parsing and units.
+  `currencyrate <currency>` returns a single median rate in fiat per BTC.
+- `currencyconvert` still takes `amount` and `currency`, for example
+  `lightning-cli currencyconvert 10 USD`, but its `msat` result is now a JSON
+  number rather than a string with an `msat` suffix. The median is now calculated
+  from fiat prices before conversion.
+- Rename `add-source` and `disable-source` in `services.clightning.extraConfig`
+  to `currencyrate-add-source` and `currencyrate-disable-source`. Review them
+  against the [new plugin's README](https://github.com/ElementsProject/lightning/tree/master/plugins/currencyrate-plugin).
+  The plugin follows CLN's configured proxy.
+
+After deploying, check that `lightning-cli help currencyconvert` and
+`lightning-cli help listcurrencyrates` list the new RPCs. A live conversion such
+as `lightning-cli currencyconvert 100 USD` also needs reachable price sources.
+
+The rebalance plugin now uses Core Lightning's `askrene` routing. If you enable
+`services.clightning.plugins.rebalance.enable`, update custom scripts and
+configuration before deploying:
+
+- Remove the `getroute_method` argument from `rebalance` RPC calls; it is no
+  longer accepted.
+- Remove `rebalance-getroute`, `rebalance-maxhops` and `rebalance-msatfactor` from
+  `services.clightning.extraConfig` and any included configuration files. These
+  settings are still accepted with a deprecation warning but are ignored, so they
+  no longer control route selection or hop limits.
+- Update scripts that read `rebalancereport`: its `getroute_method`,
+  `maxhops_threshold` and `msatfactor` fields have been removed.
+
+mempool no longer accepts `services.mempool.settings.CORE_RPC.PASSWORD`. Its
+settings are copied to the world-readable Nix store, so evaluation now fails when
+this option is set. Remove it and save the password to `bitcoin-rpcpassword-public`
+in the [secrets dir](./configuration.md#secrets-dir). mempool reads it from there
+at startup, also when it uses
+[bitcoind from another node](./configuration.md#use-bitcoind-from-another-node).
+The old value stays readable in the Nix store until it is garbage-collected, so
+change the password if untrusted users or services run on the node.
 
 After addressing these changes, set `nix-bitcoin.configVersion = "0.1.5";`.
 
