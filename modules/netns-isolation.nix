@@ -300,7 +300,7 @@ in {
       };
       unbeholden-wallet = {
         id = 33;
-        connections = [ config.services.unbeholden-wallet.electrumServer ];
+        connections = [ config.services.unbeholden-wallet.electrumServer "nginx" ];
       };
     };
 

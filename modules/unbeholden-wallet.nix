@@ -29,6 +29,16 @@ let
       default = 60846; # A random private port
       description = "HTTP server port.";
     };
+    allowedHosts = mkOption {
+      type = with types; listOf str;
+      default = [];
+      example = [ "wallet.example.com" ];
+      description = ''
+        Names under which the server answers, in addition to `localhost` and IP addresses.
+        Add the name of an https reverse proxy in front of the service.
+        Other names are refused, so a website can't reach the Electrum relay through DNS rebinding.
+      '';
+    };
     electrumServer = mkOption {
       type = types.enum [ "electrs" "fulcrum" ];
       default = "electrs";
@@ -77,6 +87,7 @@ in {
       environment = {
         HOST = cfg.address;
         PORT = toString cfg.port;
+        ALLOWED_HOSTS = concatStringsSep "," cfg.allowedHosts;
         ELECTRUM = nbLib.addressWithPort electrumServer.address electrumServer.port;
       };
       serviceConfig = nbLib.defaultHardening // {

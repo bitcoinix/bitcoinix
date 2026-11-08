@@ -198,7 +198,9 @@ instead.
 
 Browsers only allow the camera, which scans the signed transaction, on `localhost` or
 over https. To use the wallet from another device without a tunnel, put an https reverse
-proxy in front of it that passes WebSocket upgrades and the `Host` header through.
+proxy in front of it that passes WebSocket upgrades and the `Host` header through, and add
+its name to `services.unbeholden-wallet.allowedHosts`.
+With `netns-isolation`, nginx reaches the wallet at its `local_address`.
 
 ### Use ZEUS (mobile Lightning wallet) via Tor
 1. Install [ZEUS](https://zeusln.app)

@@ -53,6 +53,7 @@ in
       services.btcpayserver.enable = true;
       services.btcpayserver.lightningBackend = "lnd";
       services.mempool.enable = true;
+      services.unbeholden-wallet.enable = true;
       services.rtl.enable = true;
       # RTL asserts that at least one node interface is enabled
       services.rtl.nodes.clightning.enable = true;
