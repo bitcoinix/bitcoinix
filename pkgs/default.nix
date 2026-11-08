@@ -32,6 +32,12 @@ let self = {
     trustedcoin = pkgs.trustedcoin.overrideAttrs (old: {
       patches = (old.patches or []) ++ [ ./trustedcoin/wait-for-initialization.patch ];
     });
+    # TODO-EXTERNAL: Remove when nixpkgs electrs declares its zstd build inputs.
+    # zstd-sys uses pkg-config to find the system library.
+    electrs = pkgs.electrs.overrideAttrs (old: {
+      nativeBuildInputs = (old.nativeBuildInputs or []) ++ [ pkgs.pkg-config ];
+      buildInputs = (old.buildInputs or []) ++ [ pkgs.zstd ];
+    });
   };
 
   modulesPkgs = self // self.pinned;
