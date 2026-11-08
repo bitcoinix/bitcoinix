@@ -149,6 +149,7 @@ def test_lnd():
     assert_str_matches(cert_alt_names, '10.0.0.1')
     assert_str_matches(cert_alt_names, '20.0.0.1')
     assert_str_matches(cert_alt_names, 'example.com')
+    assert_full_match("</secrets/lnd-cert openssl x509 -noout -subject", "subject=CN=localhost\n")
 
     # Go 1.24 listens with Multipath TCP by default. The lnd unit turns that
     # off, so no lnd socket may show up as an MPTCP listener.
@@ -264,6 +265,17 @@ def test_mempool():
         current_run_log_has_string("mempool", "Mempool Server is running on port 8999")
     )
     assert_matches(f"curl -L {ip('nginx')}:60845", "mempool - Bitcoin Explorer")
+    # No cache validators, and no 304 for the store's 1970 timestamp
+    headers = succeed(f"curl -sI -H 'If-Modified-Since: Thu, 01 Jan 1970 00:00:01 GMT' {ip('nginx')}:60845")
+    assert headers.startswith("HTTP/1.1 200"), headers
+    assert not re.search(r"(?im)^(etag|last-modified):", headers), headers
+    info = succeed_json(f"curl -s {ip('nginx')}:60845/api/v1/backend-info")
+    assert info["hostname"] == info["osVersion"] == "", info
+    # Malformed JSON gets the production error page, without a stack trace
+    assert_matches(
+        f"curl -s -H 'Content-Type: application/json' -d '{{' {ip('nginx')}:60845/api/v1/prevouts",
+        "<pre>Bad Request</pre>",
+    )
     # Check the backend listener in its own namespace when isolation is enabled.
     netns = "ip netns exec nb-mempool " if "netns-isolation" in enabled_tests else ""
     assert_full_match(

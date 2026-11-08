@@ -83,6 +83,15 @@ already deploy with.
    `deployment.targetHost` or krops' `target`. All of them connect through `ssh`, so
    they use the alias.
 
+The onion service and your node's IP address reach the same sshd, with the same host
+keys. Internet scanners index SSH host keys by IP address, so anyone who learns the
+onion address can look up its host key and find your node's IP address. To keep them
+apart, don't expose SSH to the internet: set `services.openssh.openFirewall = false`
+and connect through the onion service or a VPN. Or let only your own Tor client reach
+the onion service with
+[client authorization](https://community.torproject.org/onion-services/advanced/client-auth/)
+(`services.tor.relay.onionServices.sshd.authorizedClients`).
+
 ## Wallets and apps
 
 ### Connect to electrs

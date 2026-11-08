@@ -158,9 +158,10 @@ let
         doMakeCert() {
            # This fn uses global variables `name` and `extraAltNames`
            keyOpts=$1
+           # Keep the subject generic: a service name in it makes the cert stand out
            ${pkgs.openssl}/bin/openssl req -x509 \
              -sha256 -days 3650 $keyOpts -out "$name-cert"  \
-             -subj "/CN=localhost/O=$name" \
+             -subj "/CN=localhost" \
              -addext "subjectAltName=DNS:localhost,IP:127.0.0.1$extraAltNames"
            echo "$extraAltNames" > "$name-cert-alt-names"
         }
