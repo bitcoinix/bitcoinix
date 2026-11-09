@@ -39,7 +39,7 @@ class RunnerTests(unittest.TestCase):
 
     def test_phase_order_preserves_service_dependencies(self):
         expected = [
-            "electrs", "stop-electrs", "netns-isolation", "hardening-ro-paths",
+            "electrs", "stop-electrs", "netns-isolation", "tor-enforce", "hardening-ro-paths",
             "backups", "restart-bitcoind", "config-replace", "clnrest-admin-rune",
             "regtest", "lnd-restart-on-clean-exit", "lnd-macaroon-revocation",
             "trustedcoin", "setup-secrets",

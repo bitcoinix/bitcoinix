@@ -18,7 +18,8 @@
     localhost and, with netns-isolation, the namespace subnet
     169.254.<addressblock>.0/24. They also resolve names in-process from
     `/etc/hosts` instead of through the local resolver sockets (nscd,
-    systemd-resolved, D-Bus, Avahi).
+    systemd-resolved, D-Bus, Avahi). Evaluation can't detect custom units,
+    so check them yourself.
     Before deploying, allow any further address a service must reach with
     `systemd.services.<service>.serviceConfig.IPAddressAllow`. This widens a
     `tor.enforce` service only without netns-isolation (the namespace

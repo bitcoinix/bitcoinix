@@ -108,9 +108,14 @@ def test_netns_isolation():
 def test_tor_enforce():
     data = test_data["tor-enforce"]
     units = data["selected"]
-    # A unit that lost both parts of the restriction isn't selected
+    # The restricted units are exactly the expected ones. A unit that lost both
+    # parts of the restriction isn't selected, and a newly restricted unit must
+    # be added to `expected` in tests.nix.
     missing = set(data["expected"]) - set(units)
-    assert not missing, f"{sorted(missing)} should be restricted: {units}"
+    unexpected = set(units) - set(data["expected"])
+    assert not missing and not unexpected, (
+        f"missing: {sorted(missing)}, unexpected: {sorted(unexpected)}"
+    )
     # A custom unit with the restriction, defined in every scenario (tests.nix)
     custom = "nb-tor-enforce-custom"
 
