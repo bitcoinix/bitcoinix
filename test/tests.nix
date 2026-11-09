@@ -153,6 +153,15 @@ let
       };
 
       nix-bitcoin.onionServices.lnd.public = true;
+      test.data.lnd-public-onion = let
+        onion = config.nix-bitcoin.onionServices.lnd;
+        # The mapping to lnd's peer port, picked as in modules/lnd.nix
+        mapping = findFirst (mapping: (mapping.target.port or mapping.port) == cfg.lnd.port) null
+          (config.services.tor.relay.onionServices.lnd.map or []);
+      in if cfg.lnd.enable && onion.enable && onion.public && mapping != null then {
+        addressFile = "${config.nix-bitcoin.onionAddresses.dataDir}/services/lnd";
+        inherit (mapping) port;
+      } else null;
 
       tests.onion-addresses = config.nix-bitcoin.onionAddresses.access != {};
       test.data.onion-addresses = let
