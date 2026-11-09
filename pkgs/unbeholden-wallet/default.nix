@@ -8,13 +8,13 @@
 }:
 stdenvNoCC.mkDerivation rec {
   pname = "unbeholden-wallet";
-  version = "0.3.0";
+  version = "0.4.0";
 
   src = fetchFromGitHub {
     owner = "unbeholdendev";
     repo = "unbeholden-wallet";
     tag = "v${version}";
-    hash = "sha256-2qAGJxjqs0641OjA3CzNXERNON0G7t/5uA50MizCpYQ=";
+    hash = "sha256-djctSrYAbvbXMgNp/lGzvSmOkWoHsFjj6gvxTyWCcVw=";
   };
 
   nodeModules = stdenvNoCC.mkDerivation {
