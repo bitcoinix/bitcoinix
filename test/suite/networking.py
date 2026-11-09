@@ -107,12 +107,15 @@ def test_netns_isolation():
 @test("tor-enforce")
 def test_tor_enforce():
     units = test_data["tor-enforce"]
+    # A custom unit with the restriction, defined in every scenario (tests.nix)
+    custom = "nb-tor-enforce-custom"
+    assert custom in units, f"{custom} should be restricted: {units}"
     if "secure-node" in enabled_tests:
         assert "bitcoind" in units, f"bitcoind should be restricted: {units}"
-    # Scenarios like `lndPruned` or `-s bitcoind` enable no restricted unit.
-    if not units:
-        machine.log("tor-enforce: no service with the local-only restriction")
-        return
+
+    # The masked directories exist on every node, so a unit with the restriction
+    # starts also when no service enforces Tor.
+    assert_running(custom)
 
     def show(unit, prop):
         return succeed(f"systemctl show -P {prop} {unit}.service").strip()

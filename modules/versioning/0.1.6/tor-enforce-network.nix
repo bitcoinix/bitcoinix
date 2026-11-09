@@ -1,8 +1,9 @@
 { config, lib, ... }:
 
 {
-  # Users of `nix-bitcoin.lib.allowLocalIPAddresses`. The nbxplorer unit
-  # exists when btcpayserver is enabled.
+  # Services that get `nix-bitcoin.lib.allowLocalIPAddresses`: charge-lnd
+  # always, the others when they enforce Tor. The nbxplorer unit is created
+  # by `btcpayserver.enable`, not by the internal `nbxplorer.enable`.
   condition = with config.services;
     charge-lnd.enable
     || (btcpayserver.enable && nbxplorer.tor.enforce)

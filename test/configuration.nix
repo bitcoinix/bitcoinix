@@ -880,13 +880,14 @@ let
     };
     testResolverDirsCreated = {
       # The fail-closed masks have no `-` prefix, so each directory must exist or
-      # the unit won't start; they're created independently of their resolver.
-      expr = with torEnforced; map (rule: builtins.elem rule systemd.tmpfiles.rules) [
+      # the unit won't start; they're created independently of their resolver,
+      # also without `tor.enforce`, for custom units with the restriction.
+      expr = map (config: map (rule: builtins.elem rule config.systemd.tmpfiles.rules) [
         "d /run/nscd 0755 nscd nscd -"
         "d /run/systemd/resolve 0755 root root -"
         "d /run/dbus 0755 root root -"
-      ];
-      expected = [ true true true ];
+      ]) [ torEnforced bitcoin ];
+      expected = lib.replicate 2 [ true true true ];
     };
     testResolverDirCreatedForResolved = {
       # With resolved enabled the resolve dir is created under resolved's user
@@ -899,24 +900,10 @@ let
       expected = true;
     };
     testNscdKeepsRuntimeDirectory = {
-      expr = with torEnforced; {
-        preserve = systemd.services.nscd.serviceConfig.RuntimeDirectoryPreserve or null;
-        # Only charge-lnd/tor.enforce hosts get the lifecycle change
-        untouched = (evaluate { services.bitcoind.enable = true; })
-          .systemd.services.nscd.serviceConfig.RuntimeDirectoryPreserve or null;
-      };
-      expected = { preserve = true; untouched = null; };
-    };
-    testNbxplorerGatedOnBtcpayserver = {
-      # The nbxplorer unit is created by btcpayserver.enable, so its resolver
-      # dirs must be created even when the internal nbxplorer.enable is false.
-      expr = builtins.elem "d /run/dbus 0755 root root -" (evaluate {
-        imports = [ ../modules/presets/enable-tor.nix ];
-        services.btcpayserver.enable = true;
-        services.btcpayserver.tor.enforce = false;
-        services.nbxplorer.enable = lib.mkForce false;
-      }).systemd.tmpfiles.rules;
-      expected = true;
+      # Also without `tor.enforce`, for custom units with the restriction
+      expr = map (config: config.systemd.services.nscd.serviceConfig.RuntimeDirectoryPreserve or null)
+        [ torEnforced bitcoin ];
+      expected = [ true true ];
     };
     testNetnsRejectsMetadataAddressblock = {
       expr = map (block: builtins.any (lib.hasInfix "must not be 169 or 170") (failedAssertions (evaluate {
@@ -933,8 +920,16 @@ let
         { services.bitcoind.enable = true; }
         { services.charge-lnd.enable = true; }
         { imports = [ ../modules/presets/enable-tor.nix ]; services.bitcoind.enable = true; }
+        # Only nbxplorer enforces Tor. Its unit is created by btcpayserver.enable,
+        # even when the internal nbxplorer.enable is false.
+        {
+          imports = [ ../modules/presets/enable-tor.nix ];
+          services.bitcoind.tor.enforce = false;
+          services.btcpayserver.enable = true;
+          services.nbxplorer.enable = lib.mkForce false;
+        }
       ];
-      expected = [ true false false ];
+      expected = [ true false false false ];
     };
     testMempoolCustomUser = {
       expr = with customMempoolUser; {

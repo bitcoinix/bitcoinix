@@ -2,18 +2,6 @@
 
 with lib;
 let
-  # Services that get `nix-bitcoin.lib.allowLocalIPAddresses` (local-only
-  # network access plus the resolver-socket masks): charge-lnd always, the
-  # others when they enforce Tor.
-  # The nbxplorer unit is created by `btcpayserver.enable`, not by the internal
-  # `nbxplorer.enable`, so gate it on the former.
-  usesLocalOnly = with config.services;
-    charge-lnd.enable
-    || (btcpayserver.enable && nbxplorer.tor.enforce)
-    || any (service: service.enable && service.tor.enforce) [
-      bitcoind btcpayserver clightning electrs fulcrum lnd mempool rtl
-    ];
-
   # nscd's `RuntimeDirectory` owns /run/nscd as its service user, so match that
   # when nscd is enabled and fall back to root otherwise.
   nscdDir = path: with config.services.nscd;
@@ -44,9 +32,10 @@ in
   # are denied the local name-resolution sockets via `InaccessiblePaths`. These
   # masks have no `-` prefix, so a missing path makes the unit fail to start
   # rather than run unmasked. Create each directory independently of its
-  # resolver so the units start. Each rule matches the ownership the resolver's
-  # own `RuntimeDirectory` would use, so repeated tmpfiles runs don't fight it.
-  (mkIf usesLocalOnly {
+  # resolver, and on every node, so that any unit with the restriction starts,
+  # including custom units. Each rule matches the ownership the resolver's own
+  # `RuntimeDirectory` would use, so repeated tmpfiles runs don't fight it.
+  {
     systemd.tmpfiles.rules = [
       (nscdDir "/run/nscd")
       (if config.services.resolved.enable
@@ -54,12 +43,12 @@ in
        else "d /run/systemd/resolve 0755 root root -")
       "d /run/dbus 0755 root root -"
     ];
-  })
+  }
 
   # nscd removes its runtime directory when it stops, which detaches the mask in
   # a running local-only service. Keep the directory so the mask survives an nscd
   # restart. `mkDefault` lets a user override the lifecycle if they must.
-  (mkIf (usesLocalOnly && config.services.nscd.enable) {
+  (mkIf config.services.nscd.enable {
     systemd.services.nscd.serviceConfig = {
       RuntimeDirectoryPreserve = mkDefault true;
       # Preserving the directory also keeps a stale pid file from glibc's nscd

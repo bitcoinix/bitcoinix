@@ -121,6 +121,15 @@ let
       test.data.tor-enforce = attrNames (filterAttrs (_: service:
         elem "127.0.0.1/32" (toList (service.serviceConfig.IPAddressAllow or []))
       ) config.systemd.services);
+      # A custom unit with the restriction, which must start on every node,
+      # also when no service enforces Tor
+      systemd.services.nb-tor-enforce-custom = mkIfTest "tor-enforce" {
+        wantedBy = [ "multi-user.target" ];
+        serviceConfig = config.nix-bitcoin.lib.allowLocalIPAddresses // {
+          IPAddressDeny = "any";
+          ExecStart = "${pkgs.coreutils}/bin/sleep infinity";
+        };
+      };
 
       tests.rtl = cfg.rtl.enable;
       tests.rtl-credentials = cfg.rtl.enable;
