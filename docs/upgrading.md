@@ -217,7 +217,8 @@ could read it too.
 #### Tor enforcement allows only local addresses
 
 Services with Tor enforcement (`services.<service>.tor.enforce`, set by the
-secure-node preset and `enable-tor.nix`) and charge-lnd have a narrower network
+secure-node preset and `enable-tor.nix`), charge-lnd, and custom units that use
+`nix-bitcoin.lib.allowLocalIPAddresses` or `allowTor` have a narrower network
 restriction:
 
 - Without [network namespace isolation](./configuration.md#network-namespace-isolation)
@@ -229,8 +230,8 @@ restriction:
   ```
   With netns-isolation, services with `tor.enforce` are also limited by the
   namespace firewall, so `IPAddressAllow` alone doesn't widen them there; see that
-  section. charge-lnd has no `tor.enforce` and no such namespace firewall, so
-  `IPAddressAllow` does widen it, with or without netns-isolation.
+  section. charge-lnd and custom units have no `tor.enforce` and no such namespace
+  firewall, so `IPAddressAllow` does widen them, with or without netns-isolation.
 - They can't use the local name-resolution sockets (nscd, systemd-resolved, D-Bus,
   Avahi). glibc resolves names itself, from `/etc/hosts`. If a service connects to
   an allowed address by host name, use the address directly or add the name to
@@ -240,6 +241,10 @@ restriction:
 - netns-isolation no longer accepts `addressblock` 169 or 170, because those
   subnets hold cloud metadata addresses. Evaluation fails with a message. Pick
   another block, and update any addresses you derived from it.
+
+Evaluation reports this change for services with `tor.enforce` and for charge-lnd,
+but not for custom units. If one of your units uses `allowLocalIPAddresses` or
+`allowTor`, check it against the points above before you deploy.
 
 After migrating your configuration, set `nix-bitcoin.configVersion = "0.1.6";`.
 
