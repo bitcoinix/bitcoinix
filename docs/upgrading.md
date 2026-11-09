@@ -31,6 +31,12 @@ RTL now uses the nixpkgs package. Replace explicit flake references to
 `nix build '.#legacyPackages.aarch64-linux.pinned.rtl'` (or `x86_64-linux`).
 The service still uses `nix-bitcoin.pkgs.rtl` automatically.
 
+TrustedCoin now uses the nixpkgs package. Replace explicit flake references to
+`packages.<system>.trustedcoin` or `legacyPackages.<system>.trustedcoin` with
+`legacyPackages.<system>.pinned.trustedcoin`. For example, build it with
+`nix build '.#legacyPackages.aarch64-linux.pinned.trustedcoin'` (or `x86_64-linux`).
+The plugin still uses `nix-bitcoin.pkgs.trustedcoin` automatically.
+
 ## Upgrading to config version 0.1.5
 
 Currencyrate, rebalance, clnrest and mempool's `settings.CORE_RPC.PASSWORD` each

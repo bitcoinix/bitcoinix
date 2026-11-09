@@ -16,7 +16,8 @@ pkgs: pkgsUnstable:
     lnd
     lndinit
     nbxplorer
-    rtl;
+    rtl
+    trustedcoin;
 
   inherit pkgs pkgsUnstable;
 }

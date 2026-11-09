@@ -21,7 +21,6 @@ let self = {
     mempool-frontend
     mempool-rust-gbt
     mempool-nginx-conf;
-  trustedcoin = pkgs.callPackage ./trustedcoin { };
 
   inherit (self.pyPkgs.nbPython3PackagesWithUnlockedEcdsa) hwi;
 
