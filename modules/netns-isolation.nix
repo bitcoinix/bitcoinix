@@ -137,10 +137,14 @@ in {
           ${ip} link add name nb-br type bridge
           ${ip} link set nb-br up
           ${ip} addr add ${bridgeIp}/24 brd + dev nb-br
-          ${iptables} -w -t nat -A POSTROUTING -s 169.254.${toString cfg.addressblock}.0/24 -j MASQUERADE
+          # Only masquerade traffic that leaves the bridge. With br_netfilter
+          # loaded (e.g. by Docker), traffic between namespaces also passes
+          # this chain and would get the bridge address as its source, which
+          # every namespace accepts.
+          ${iptables} -w -t nat -A POSTROUTING -s 169.254.${toString cfg.addressblock}.0/24 ! -o nb-br -j MASQUERADE
         '';
         preStop = ''
-          ${iptables} -w -t nat -D POSTROUTING -s 169.254.${toString cfg.addressblock}.0/24 -j MASQUERADE
+          ${iptables} -w -t nat -D POSTROUTING -s 169.254.${toString cfg.addressblock}.0/24 ! -o nb-br -j MASQUERADE
           ${ip} link del nb-br
         '';
       };
