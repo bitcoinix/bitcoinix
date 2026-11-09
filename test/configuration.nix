@@ -659,6 +659,20 @@ let
       ];
       expected = [ false true true true ];
     };
+    testEmptySecretsMigration = {
+      expr = map (case: (builtins.tryEval (evaluate {
+        nix-bitcoin.configVersion = case.version;
+        nix-bitcoin.setupSecrets = case.setupSecrets;
+        services.lnd.enable = case.lnd;
+      }).system.stateVersion).success) [
+        { version = "0.1.5"; setupSecrets = true; lnd = false; }
+        { version = "0.1.5"; setupSecrets = false; lnd = true; }
+        { version = "0.1.5"; setupSecrets = false; lnd = false; }
+        { version = "0.1.6"; setupSecrets = true; lnd = true; }
+        { version = null; setupSecrets = true; lnd = true; }
+      ];
+      expected = [ false false true true true ];
+    };
     testBackupsFollowPostgresqlCompression = let
       includes = compression: let
         list = builtins.readFile (backupsWithCompression compression).services.duplicity.includeFileList;

@@ -84,6 +84,47 @@ primary `group` and its `users.groups` entry with the current `gid`,
 `users.mutableUsers = false`, NixOS also manages the password, so declare it too
 if the account uses one.
 
+`setup-secrets` now fails when a declared secret file is empty or isn't a regular
+file, as it does when one is missing. Then services can't read any secret until
+setup succeeds.
+Before deploying, check the [secrets dir](./configuration.md#secrets-dir) for
+empty files, for example with `find /etc/nix-bitcoin-secrets -maxdepth 1 -type f -empty`:
+
+- Write the secret to each empty file that a service needs. With
+  `nix-bitcoin.generateSecrets = true`, setup regenerates empty passwords.
+- Secret generation (`nix-bitcoin.generateSecrets = true`) doesn't replace an
+  empty TLS key (`lnd-key`), WireGuard private key or replication SSH key, or a
+  symlink to a missing file in their place, because a new key breaks the clients
+  that trust the old one. Setup fails and names the file: restore it from a
+  backup, or delete it to generate a new key.
+- For a secret that may be empty, set `nix-bitcoin.secrets.<name>.allowEmpty = true`.
+  bitcoinix sets it for `backup-encryption-env`.
+- With the `bitcoind-remote.nix` preset and `nix-bitcoin.generateSecrets = false`,
+  the local `bitcoin-HMAC-*` files are unused, but setup checks them too. Write
+  the HMAC of the matching password to each one: the `<salt>$<hmac>` part of its
+  `rpcauth=` line, as printed by Bitcoin Core's `share/rpcauth/rpcauth.py`. Or set
+  `allowEmpty` for them.
+
+While lnd has no `wallet.db`, an empty `lnd-seed-mnemonic` in lnd's data dir,
+which a failed seed creation of an earlier version could leave, now stops lnd with
+an error, and so does a symlink there to a missing file. If lnd never ran a wallet
+from that seed, delete the file, and lnd creates a new seed. Otherwise, restore it
+from a backup.
+
+lnd now creates its wallet in a temporary directory. Before, a failed wallet
+creation could leave a partial `wallet.db`, and lnd then never started: every
+start skipped wallet creation, and the lnd log shows an `lndinit` error such as
+`private passphrase may not be empty`. If your node is stuck like this and lnd
+never ran with this wallet, fix the cause, keep `lnd-seed-mnemonic` in lnd's
+data dir, and move the partial wallet aside. lnd then creates the wallet from
+the same seed. With the default data dir on mainnet:
+
+```bash
+systemctl stop lnd
+mv /var/lib/lnd/chain/bitcoin/mainnet/wallet.db /var/lib/lnd/chain/bitcoin/mainnet/wallet.db.failed
+systemctl start lnd
+```
+
 After migrating your configuration, set `nix-bitcoin.configVersion = "0.1.6";`.
 
 ## Upgrading to config version 0.1.5
