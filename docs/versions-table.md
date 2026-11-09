@@ -24,5 +24,5 @@
 | `mempool-frontend` | [3.3.2](https://github.com/mempool/mempool/releases/tag/v3.3.2) | local |
 | `mempool-rust-gbt` | [3.3.2](https://github.com/mempool/mempool/releases/tag/v3.3.2) | local |
 | `nbxplorer` | [2.6.17](https://github.com/btcpayserver/NBXplorer/releases/tag/v2.6.17) | unstable |
-| `rtl` | [0.15.16](https://github.com/Ride-The-Lightning/RTL/releases/tag/v0.15.16) | local |
+| `rtl` | [0.15.16](https://github.com/Ride-The-Lightning/RTL/releases/tag/v0.15.16) | unstable |
 | `trustedcoin` | [0.8.7](https://github.com/nbd-wtf/trustedcoin/releases/tag/v0.8.7) | local |

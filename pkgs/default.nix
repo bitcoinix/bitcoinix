@@ -16,7 +16,6 @@ let self = {
         clnrest currencyrate;
     }
   );
-  rtl = pkgs.callPackage ./rtl { inherit (self) fetchNodeModules; };
   inherit (pkgs.callPackage ./mempool { inherit (self) fetchNodeModules; })
     mempool-backend
     mempool-frontend

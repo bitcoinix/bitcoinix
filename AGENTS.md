@@ -132,7 +132,7 @@ commit no `flake.lock`; the script overrides the `bitcoinix` input and `configVe
 
 Start from an existing module: `modules/electrs.nix` (basic) →
 `modules/clightning.nix` (CLI binary, runtime-composed config with secrets) →
-`modules/rtl.nix` (bundles a custom package under `pkgs/`). Register it in
+`modules/mempool.nix` (bundles custom packages under `pkgs/`). Register it in
 `modules/modules.nix`. Other integration points to wire up:
 
 - `modules/netns-isolation.nix`: unique netns `id` + `connections` to other services.

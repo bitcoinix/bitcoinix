@@ -15,7 +15,8 @@ pkgs: pkgsUnstable:
     fulcrum
     lnd
     lndinit
-    nbxplorer;
+    nbxplorer
+    rtl;
 
   inherit pkgs pkgsUnstable;
 }

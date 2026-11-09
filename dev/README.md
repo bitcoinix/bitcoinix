@@ -131,7 +131,7 @@ It's easiest to use an existing service as a template:
 - [electrs.nix](../modules/electrs.nix): a basic service
 - [clightning.nix](../modules/clightning.nix): simple, but covers a few more features.\
   (A CLI binary and a runtime-composed config to include secrets.)
-- [rtl.nix](../modules/rtl.nix): includes a custom package, defined in [pkgs/rtl](../pkgs/rtl).\
+- [mempool.nix](../modules/mempool.nix): includes custom packages, defined in [pkgs/mempool](../pkgs/mempool).\
   Most other services use packages that are already included in nixpkgs.
 
 For generated configs in writable service directories, use `install -T` with an

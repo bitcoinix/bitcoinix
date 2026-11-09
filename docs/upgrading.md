@@ -23,6 +23,14 @@ This fetches the latest release, verifies the signature on its release tag and u
 It refuses to switch to a release older than the one currently pinned. To downgrade on purpose,
 run `fetch-release.sh` with `releaseVersion=<version>` and write its output to `nix-bitcoin-release.nix`.
 
+## Upgrading to config version 0.1.6
+
+RTL now uses the nixpkgs package. Replace explicit flake references to
+`packages.<system>.rtl` or `legacyPackages.<system>.rtl` with
+`legacyPackages.<system>.pinned.rtl`. For example, build it with
+`nix build '.#legacyPackages.aarch64-linux.pinned.rtl'` (or `x86_64-linux`).
+The service still uses `nix-bitcoin.pkgs.rtl` automatically.
+
 ## Upgrading to config version 0.1.5
 
 Currencyrate, rebalance, clnrest and mempool's `settings.CORE_RPC.PASSWORD` each
