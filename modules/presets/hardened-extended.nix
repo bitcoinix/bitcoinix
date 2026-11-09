@@ -38,6 +38,9 @@
     # every Go daemon on the node (lnd, tailscale, caddy, ...) exposes the MPTCP
     # code paths without being asked. A node does not need MPTCP, and the
     # exploit published for CVE-2026-98432 went through an MPTCP listener.
+    # The setting only applies to new sockets and netns-isolation copies it into
+    # the service namespaces when it sets them up, so reboot once after turning
+    # it on.
     "net.mptcp.enabled" = "0";
 
     # Restrict usage of ptrace to only processes with the CAP_SYS_PTRACE
