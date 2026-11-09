@@ -102,16 +102,17 @@ def test_netns_isolation():
 
 # Services with `tor.enforce`, and charge-lnd, reach only localhost and, with
 # netns-isolation, their namespace subnet, and can't use the local resolver
-# sockets (nscd, systemd-resolved, D-Bus). `test_data["tor-enforce"]` lists the
+# sockets (nscd, systemd-resolved, D-Bus). `test_data["tor-enforce"]` selects the
 # enabled units with this restriction, running or not.
 @test("tor-enforce")
 def test_tor_enforce():
-    units = test_data["tor-enforce"]
+    data = test_data["tor-enforce"]
+    units = data["selected"]
+    # A unit that lost both parts of the restriction isn't selected
+    missing = set(data["expected"]) - set(units)
+    assert not missing, f"{sorted(missing)} should be restricted: {units}"
     # A custom unit with the restriction, defined in every scenario (tests.nix)
     custom = "nb-tor-enforce-custom"
-    assert custom in units, f"{custom} should be restricted: {units}"
-    if "secure-node" in enabled_tests:
-        assert "bitcoind" in units, f"bitcoind should be restricted: {units}"
 
     def show(unit, prop):
         return succeed(f"systemctl show -P {prop} {unit}.service").strip()
@@ -128,7 +129,7 @@ def test_tor_enforce():
         deny = show(unit, "IPAddressDeny")
         assert set(deny.split()) == {"0.0.0.0/0", "::/0"}, f"{unit} IPAddressDeny={deny!r}"
         allow = show(unit, "IPAddressAllow")
-        assert "127.0.0.1/32" in allow.split(), f"{unit} IPAddressAllow={allow!r}"
+        assert set(allow.split()) == set(data["allow"]), f"{unit} IPAddressAllow={allow!r}"
         inaccessible = show(unit, "InaccessiblePaths")
         for m in masks:
             assert m in inaccessible.split(), f"{unit} doesn't mask {m}: {inaccessible!r}"

@@ -52,6 +52,8 @@ let
     rawNegatedInclude = { args.extraConfig = "regtest.noincludeconf=0"; expected = false; };
   };
 
+  # A host that only imports the modules
+  modulesOnly = evaluate {};
   bitcoin = evaluate { services.bitcoind.enable = true; };
   regtest = evaluate { services.bitcoind = { enable = true; regtest = true; }; };
   electrs = evaluate { services.electrs.enable = true; };
@@ -886,8 +888,8 @@ let
         "d /run/nscd 0755 nscd nscd -"
         "d /run/systemd/resolve 0755 root root -"
         "d /run/dbus 0755 root root -"
-      ]) [ torEnforced bitcoin ];
-      expected = lib.replicate 2 [ true true true ];
+      ]) [ torEnforced bitcoin modulesOnly ];
+      expected = lib.replicate 3 [ true true true ];
     };
     testResolverDirCreatedForResolved = {
       # With resolved enabled the resolve dir is created under resolved's user
@@ -902,8 +904,16 @@ let
     testNscdKeepsRuntimeDirectory = {
       # Also without `tor.enforce`, for custom units with the restriction
       expr = map (config: config.systemd.services.nscd.serviceConfig.RuntimeDirectoryPreserve or null)
-        [ torEnforced bitcoin ];
-      expected = [ true true ];
+        [ torEnforced bitcoin modulesOnly ];
+      expected = [ true true true ];
+    };
+    testNscdStalePidRemovedForGlibc = {
+      # Only glibc's nscd keeps a pid file in the preserved directory
+      expr = map (enableNsncd: lib.any (lib.hasInfix "rm -f /run/nscd/nscd.pid") (lib.toList
+        ((evaluate { services.nscd.enableNsncd = enableNsncd; })
+          .systemd.services.nscd.serviceConfig.ExecStartPre or [])))
+        [ true false ];
+      expected = [ false true ];
     };
     testNetnsRejectsMetadataAddressblock = {
       expr = map (block: builtins.any (lib.hasInfix "must not be 169 or 170") (failedAssertions (evaluate {
