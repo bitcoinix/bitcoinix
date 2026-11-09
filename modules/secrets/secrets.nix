@@ -128,13 +128,21 @@ let
         # Writes the output of a command to a temp file first, so that a failed
         # run leaves no empty or partial secret file behind.
         writeSecret() {
-          local out=$1
+          local out=$1 tmp
           shift
-          if ! "$@" > "$out.tmp"; then
-            rm -f "$out.tmp"
+          tmp=$(mktemp -- "$out.XXXXXX")
+          if ! "$@" > "$tmp"; then
+            rm -f -- "$tmp"
             exit 1
           fi
-          mv "$out.tmp" "$out"
+          syncedRename "$tmp" "$out"
+        }
+        # Moves a complete temp file into place, so that it survives a crash
+        syncedRename() {
+          sync -- "$1"
+          # -T: fail instead of moving the file into a directory at "$2"
+          mv -fT -- "$1" "$2"
+          sync -- "$(dirname -- "$2")"
         }
         makePasswordSecret() {
           # Passwords have alphabet {a-z, A-Z, 0-9} and ~119 bits of entropy.

@@ -68,7 +68,8 @@ def test_secrets_no_argv():
     succeed(f"rm {password_file} {hmac_file}", f"mkdir {password_file}")
     status, out = machine.execute(f"{generate} 2>&1")
     assert status != 0 and "IsADirectoryError" in out, out
-    succeed(f"[[ ! -e {hmac_file} && ! -e {hmac_file}.tmp ]]")
+    # No HMAC file and no temp file is left behind
+    succeed(f"[[ ! -e {hmac_file} ]]", f"! ls -d {hmac_file}.* 2>/dev/null")
 
     # An empty HMAC file is regenerated, even when it is newer than the password
     succeed(f"rmdir {password_file}",
@@ -87,7 +88,7 @@ def test_secrets_no_argv():
     succeed(f"rm {hmac_file}", f"echo > {password_file}")
     status, out = machine.execute(f"{generate} 2>&1")
     assert status != 0 and "contains no password" in out, out
-    succeed(f"[[ ! -e {hmac_file} && ! -e {hmac_file}.tmp ]]")
+    succeed(f"[[ ! -e {hmac_file} ]]", f"! ls -d {hmac_file}.* 2>/dev/null")
     succeed(f"rm -rf {gen_dir} {gen_dir}.trace")
 
 
