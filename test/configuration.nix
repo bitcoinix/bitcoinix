@@ -132,6 +132,10 @@ let
       plugins.feeadjuster = { enable = true; adjustDaily = true; };
     };
   };
+  btcpayserverCustomClightningGroup = evaluate {
+    services.btcpayserver = { enable = true; lightningBackend = "clightning"; };
+    services.clightning = { user = "cln-custom"; group = "cln-rpc"; };
+  };
   replicationHostKeyWarnings = replication: builtins.filter
     (lib.hasInfix "disables SSH host key checking")
     (evaluate {
@@ -386,6 +390,10 @@ let
         quotedDataDir = lib.hasInfix "--lightning-dir '/var/lib/cln custom' feeadjust" ExecStart;
       };
       expected = { user = "cln-custom"; quotedDataDir = true; };
+    };
+    testBtcpayserverJoinsClightningGroup = {
+      expr = lib.elem "cln-rpc" btcpayserverCustomClightningGroup.users.users.btcpayserver.extraGroups;
+      expected = true;
     };
     testReplicationWarnsWithoutHostKeyCheck = {
       expr = map (replication: builtins.length (replicationHostKeyWarnings replication)) [
