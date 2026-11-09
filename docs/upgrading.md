@@ -107,8 +107,7 @@ uses electrs as its Electrum server.
 To upgrade, delete the old index before deploying (default data dir shown; for
 regtest, the index is in `regtest` instead of `bitcoin`):
 ```bash
-systemctl stop electrs
-rm -r /var/lib/electrs/bitcoin
+systemctl stop electrs && rm -r /var/lib/electrs/bitcoin
 ```
 Then deploy the new system config to your node and follow the progress with
 `journalctl -u electrs -f`.
