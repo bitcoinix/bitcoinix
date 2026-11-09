@@ -298,7 +298,7 @@ in {
 
     services.bitcoind = let
       allowip = [
-        bridgeIp # For operator user
+        bridgeIp # Every process in the host netns, e.g. the operator user
         netns.bitcoind.address
       ] ++ map (n: netns.${n}.address) netns.bitcoind.availableNetns;
     in {
