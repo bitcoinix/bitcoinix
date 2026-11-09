@@ -23,6 +23,9 @@ The revision is baked into the `nodeinfo` script, so every bitcoinix update prod
 new system generation and boot entry, even when no package changed; no service restarts.
 Set `nix-bitcoin.revision = null;` to opt out.
 
+The entries of bitcoind, clightning, lnd, electrs, fulcrum, btcpayserver, rtl and mempool
+include the `version` of the package the service runs.
+
 Without arguments `nodeinfo` prints all entries. Arguments change that:
 ```shell
 nodeinfo --version           # print only the bitcoinix revision, as a JSON string

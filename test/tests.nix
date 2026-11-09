@@ -254,6 +254,15 @@ let
       services.btcpayserver.lightningBackend = mkDefault "lnd";
 
       tests.nodeinfo = config.nix-bitcoin.nodeinfo.enable;
+      # The version of the package each enabled service runs
+      test.data.nodeinfo-versions = mapAttrs (_: pkg: pkg.version)
+        (filterAttrs (name: _: cfg.${name}.enable) {
+          inherit (config.nix-bitcoin.pkgs) bitcoind electrs fulcrum rtl;
+          clightning = cfg.clightning.package;
+          lnd = cfg.lnd.package;
+          btcpayserver = cfg.btcpayserver.package;
+          mempool = cfg.mempool.package;
+        });
 
       tests.backups = cfg.backups.enable;
 

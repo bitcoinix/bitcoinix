@@ -36,6 +36,16 @@ let
 
   cfg = config.nix-bitcoin.nodeinfo;
   nbLib = config.nix-bitcoin.lib;
+  nbPkgs = config.nix-bitcoin.pkgs;
+
+  # The packages whose version nodeinfo shows for each service
+  servicePackages = {
+    inherit (nbPkgs) bitcoind electrs fulcrum rtl;
+    clightning = config.services.clightning.package;
+    lnd = config.services.lnd.package;
+    btcpayserver = config.services.btcpayserver.package;
+    mempool = config.services.mempool.package;
+  };
 
   # A JSON string is also a valid Python string literal
   pyStr = s: if s == null then "None" else builtins.toJSON s;
@@ -98,7 +108,7 @@ let
             return
         return f"{onion_address}:{port}"
 
-    def add_service(service, make_info, systemd_service = None):
+    def add_service(service, make_info, systemd_service = None, version = None):
         available.append(service)
         if not is_selected(service):
             return
@@ -107,6 +117,8 @@ let
             infos[service] = f"'{systemd_service}.service' is not running"
         else:
             info = OrderedDict()
+            if version is not None:
+                info["version"] = version
             exec(make_info, globals(), locals())
             infos[service] = info
 
@@ -145,7 +157,7 @@ let
       info["onion_address"] = get_onion_address("${name}", ${onionPort})
     '') + extraCode + ''
 
-      """, "${systemdServiceName}")
+      """, "${systemdServiceName}", ${pyStr (servicePackages.${name}.version or null)})
     '';
 
     mkIfOnionPort = name: fn:
