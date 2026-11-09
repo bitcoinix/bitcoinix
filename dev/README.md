@@ -155,8 +155,8 @@ packages exported by the flake are also included, with `channel` set to `local`.
 
 `nbPython3Packages` uses `pkgsUnstable.python3Packages`, including `pyln-bolt7`,
 `pyln-client`, `pyln-proto` and `pylightning`. Python Core Lightning plugins use
-the matching unstable interpreter and dependencies. HWI and Trezor use the
-separate package set with the ECDSA exception in
+the matching unstable interpreter and dependencies. Trezor also uses this package
+set. HWI uses the separate package set with the ECDSA exception in
 [`pkgs/python-packages/default.nix`](../pkgs/python-packages/default.nix).
 
 After changing a local package version, regenerate the manifest without updating

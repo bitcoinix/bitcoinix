@@ -37,6 +37,12 @@ TrustedCoin now uses the nixpkgs package. Replace explicit flake references to
 `nix build '.#legacyPackages.aarch64-linux.pinned.trustedcoin'` (or `x86_64-linux`).
 The plugin still uses `nix-bitcoin.pkgs.trustedcoin` automatically.
 
+Trezor now uses the unmodified nixpkgs-unstable package. Replace explicit package
+references to `nix-bitcoin.pkgs.pyPkgs.nbPython3PackagesWithUnlockedEcdsa.trezor`
+with `nix-bitcoin.pkgs.nbPython3Packages.trezor`. The
+`services.hardware-wallets.trezor` option selects it automatically; `trezorctl`
+remains available. HWI retains its separate ECDSA exception.
+
 `nbPython3Packages` now uses nixpkgs-unstable's Python interpreter and package set,
 including `pyln-bolt7`, `pyln-client`, `pyln-proto` and `pylightning`. Their versions
 are selected by nixpkgs-unstable independently of the Core Lightning daemon.
