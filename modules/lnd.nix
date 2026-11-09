@@ -49,27 +49,6 @@ let
       default = if cfg.tor.proxy then config.nix-bitcoin.torClientAddressWithPort else null;
       description = "Socks proxy for connecting to Tor nodes";
     };
-    macaroons = mkOption {
-      default = {};
-      type = with types; attrsOf (submodule {
-        options = {
-          user = mkOption {
-            type = types.str;
-            description = "User who owns the macaroon.";
-          };
-          permissions = mkOption {
-            type = types.str;
-            example = ''
-              {"entity":"info","action":"read"},{"entity":"onchain","action":"read"}
-            '';
-            description = "List of granted macaroon permissions.";
-          };
-        };
-      });
-      description = ''
-        Extra macaroon definitions.
-      '';
-    };
     certificate = {
       extraIPs = mkOption {
         type = with types; listOf str;
@@ -287,8 +266,6 @@ in {
       '';
       serviceConfig = nbLib.defaultHardening // {
         Type = "notify";
-        RuntimeDirectory = "lnd"; # Only used to store custom macaroons
-        RuntimeDirectoryMode = "711";
         ExecStart = "${cfg.package}/bin/lnd --configfile='${cfg.dataDir}/lnd.conf'";
         User = cfg.user;
         TimeoutSec = "15min";
@@ -300,48 +277,6 @@ in {
         Restart = "always";
         RestartSec = "10s";
         ReadWritePaths = [ cfg.dataDir ];
-        ExecStartPost = let
-          # `-q` (must be the first arg) skips curl's config files
-          curl = "${pkgs.curl}/bin/curl -q -fsS --cacert ${cfg.certPath}";
-          restUrl = "https://${nbLib.addressWithPort cfg.restAddress cfg.restPort}/v1";
-          # Setting macaroon permissions for other users needs root permissions
-          # The admin macaroon is passed to curl via a fd because argv is
-          # world-readable through /proc/<pid>/cmdline
-          #
-          # This script runs as root, but the lnd data dir and $RUNTIME_DIRECTORY
-          # are writable by the lnd user, which could place symlinks there.
-          # So never read or write files as root via paths in these dirs:
-          # - Read the admin macaroon as the lnd user.
-          # - Create the macaroons in a root-only dir and move them to
-          #   $RUNTIME_DIRECTORY via rename (`mv -T`), which doesn't follow symlinks.
-          #   Renaming requires both dirs to be on the same filesystem (`/run`).
-          script = nbLib.rootScript "lnd-create-macaroons" ''
-            tmpDir=$(mktemp -d /run/lnd-macaroons.XXXXXX)
-            trap 'rm -rf "$tmpDir"' EXIT
-            umask ug=r,o=
-            ${lib.concatMapStrings (macaroon: ''
-              echo "Create custom macaroon ${macaroon}"
-              tmpMacaroon="$tmpDir/${macaroon}.macaroon"
-              adminMacaroonHex=$(
-                ${pkgs.util-linux}/bin/runuser -u ${cfg.user} -- \
-                  ${pkgs.xxd}/bin/xxd -ps -u -c 99999 '${networkDir}/admin.macaroon'
-              )
-              # The response is controlled by lnd.
-              # Limit its size and fail if it contains no macaroon string.
-              ${curl} \
-                -H @<(printf 'Grpc-Metadata-macaroon: %s\n' "$adminMacaroonHex") \
-                -X POST \
-                -d '{"permissions":[${cfg.macaroons.${macaroon}.permissions}]}' \
-                ${restUrl}/macaroon |\
-                head -c 65536 |\
-                ${pkgs.jq}/bin/jq -ce '.macaroon | strings | select(. != "")' | ${pkgs.xxd}/bin/xxd -p -r > "$tmpMacaroon"
-              chown ${cfg.macaroons.${macaroon}.user}: "$tmpMacaroon"
-              mv -fT "$tmpMacaroon" "$RUNTIME_DIRECTORY/${macaroon}.macaroon"
-            '') (attrNames cfg.macaroons)}
-          '';
-        in [
-          script
-        ];
       } // nbLib.allowedIPAddresses cfg.tor.enforce;
     };
 

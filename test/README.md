@@ -24,7 +24,7 @@ test functions live. The split into files preserves the original execution order
 | `services` | Check services, credentials, and connection URLs. Checks that temporarily alter files or restart services restore them before returning. The existing `stop-electrs` exception leaves electrs stopped to silence mainnet logs. |
 | `network-and-hardening` | Check namespace reachability and running services' mounts before the disruptive phase stops bitcoind and its dependents. |
 | `disruptive` | `backups` stops bitcoind and its dependents. `restart-bitcoind` explicitly starts the units it exercises; `config-replace` starts each unit before testing its generated config; `clnrest-admin-rune` starts clightning before restarting it with broken admin rune files. |
-| `post-restart` | `regtest` waits for service readiness and synchronization after the restart checks. `lnd-restart-on-clean-exit` follows synchronization; `trustedcoin` checks the plugin's logs. |
+| `post-restart` | `regtest` waits for service readiness and synchronization after the restart checks. `lnd-restart-on-clean-exit` follows synchronization; `lnd-macaroon-revocation` restarts lnd and deletes macaroon root keys; `trustedcoin` checks the plugin's logs. |
 | `secrets` | Restart `setup-secrets` and check supplied-secret failures after all service checks, because each run temporarily restricts access to the secrets directory. |
 | `extra` | Tests registered by `test.extraTestScript` run last, in registration order, as before. They must account for the preceding service stops and restarts. |
 
@@ -60,7 +60,8 @@ From the repository root:
 nix eval .#checks.x86_64-linux.module-config.testCount
 
 # Build the lightweight checks on Linux (or using a Linux builder).
-nix build --no-link .#checks.x86_64-linux.module-config .#checks.x86_64-linux.test-runner
+nix build --no-link .#checks.x86_64-linux.module-config .#checks.x86_64-linux.test-runner \
+  .#checks.x86_64-linux.lnd-macaroon-filters
 
 # Check CVE scan/report behavior without network access or GitHub writes.
 nix build --no-link .#checks.x86_64-linux.cve-tools
@@ -81,6 +82,9 @@ a VM to report evaluation failures.
 selection, ordering, registration errors, and interactive dispatch using a
 machine stub. Both checks are exposed for `x86_64-linux` and `aarch64-linux`,
 and the existing CI `check_flake` job runs them through `nix flake check`.
+[lnd-macaroon-filters-tests.py](./lnd-macaroon-filters-tests.py), exposed as the
+`lnd-macaroon-filters` check, runs the jq filters of `lnd-create-macaroons` on
+valid and malformed `lncli` output.
 [ci/cve-tests.py](./ci/cve-tests.py), exposed as the `cve-tools` check, exercises
 [ci/cve.py](./ci/cve.py) with local nix and gh stubs: scan failures, whitelist
 filtering, and issue reporting.

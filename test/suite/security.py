@@ -193,20 +193,29 @@ def test_lnd_macaroons():
 
     # systemd sets HOME to the lnd user's home (the lnd data dir) also for
     # the root script. Config files placed there must not be loaded.
-    # A loaded `.curlrc` creates the trace file as root, a loaded `.jq` fails
-    # with a syntax error.
+    # A `.jq` loaded by the script's root jq fails with a syntax error.
     home = data["dataDir"]
-    trace = "/run/lnd-test-curl-trace"
-    succeed(
-        f"{as_lnd} sh -c 'echo trace-ascii = {trace} > {home}/.curlrc'",
-        f"{as_lnd} sh -c 'echo \"def (\" > {home}/.jq'",
-    )
+    succeed(f"{as_lnd} sh -c 'echo \"def (\" > {home}/.jq'")
     status, output = machine.execute(f"HOME={home} {create_macaroons}")
-    succeed(f"rm -f {home}/.curlrc {home}/.jq")
+    succeed(f"rm -f {home}/.jq")
     if status != 0:
         raise Exception(f"Creating macaroons failed with config files in HOME: '{output}'")
-    succeed(f"[[ ! -e {trace} ]] || {{ rm -f {trace}; exit 1; }}")
     assert_macaroon_created()
+
+    # lncli prefers a default profile in $HOME/.lncli over its flags. The lnd
+    # user may place one in its home, which must not redirect the script.
+    home = succeed(f"getent passwd {data['user']} | cut -d: -f6").strip()
+    profile = json.dumps({"default": "other", "profiles": [{
+        "name": "other", "rpcserver": "127.0.0.1:1", "lnddir": "/nonexistent",
+        "chain": "bitcoin", "network": "mainnet", "tlscert": "",
+        "macaroons": {"default": "", "timeout": 60, "ip": "", "jar": []},
+    }]})
+    write_profile = f"mkdir -p {home}/.lncli && echo {shlex.quote(profile)} > {home}/.lncli/profiles.json"
+    succeed(
+        f"{as_lnd} sh -c {shlex.quote(write_profile)}",
+        create_macaroons,
+        f"rm -r {home}/.lncli",
+    )
 
     # Admin macaroon is a symlink to a root-only file.
     # The file must not be read and sent to lnd.
@@ -215,8 +224,8 @@ def test_lnd_macaroons():
         "unshare --mount --propagation private sh -c"
         f" 'mount --bind {network_dir} {data['networkDir']} && {create_macaroons}'"
     )
-    denied = f"{data['networkDir']}/admin.macaroon: Permission denied"
-    if status == 0 or denied not in output:
+    denied = f"{data['networkDir']}/admin.macaroon: permission denied"
+    if status == 0 or denied.lower() not in output.lower():
         raise Exception(f"Unexpected result when reading the admin macaroon: {status}, '{output}'")
     assert_canary_untouched()
 
