@@ -116,11 +116,15 @@ let
       in mapAttrs (_: service: toList (service.serviceConfig.ReadOnlyPaths or []))
         (filterAttrs (_: usesDefaultHardening) config.systemd.services);
 
-      # Services restricted to local addresses (`nix-bitcoin.lib.allowLocalIPAddresses`)
+      # Services restricted to local addresses (`nix-bitcoin.lib.allowLocalIPAddresses`).
+      # Select them by either part of the restriction, so that a unit that
+      # overrides its allow list or its masks fails the test instead of dropping out.
       tests.tor-enforce = true;
-      test.data.tor-enforce = attrNames (filterAttrs (_: service:
-        elem "127.0.0.1/32" (toList (service.serviceConfig.IPAddressAllow or []))
-      ) config.systemd.services);
+      test.data.tor-enforce = let
+        isRestricted = service: let serviceConfig = service.serviceConfig; in
+          elem "127.0.0.1/32" (toList (serviceConfig.IPAddressAllow or []))
+          || elem "/run/nscd" (toList (serviceConfig.InaccessiblePaths or []));
+      in attrNames (filterAttrs (_: isRestricted) config.systemd.services);
       # A custom unit with the restriction, which must start on every node,
       # also when no service enforces Tor
       systemd.services.nb-tor-enforce-custom = mkIfTest "tor-enforce" {

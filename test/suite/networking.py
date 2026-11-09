@@ -113,12 +113,30 @@ def test_tor_enforce():
     if "secure-node" in enabled_tests:
         assert "bitcoind" in units, f"bitcoind should be restricted: {units}"
 
+    def show(unit, prop):
+        return succeed(f"systemctl show -P {prop} {unit}.service").strip()
+
+    # Directories masked with fail-closed (no `-`) entries; each must be present
+    # and hidden.
+    masks = ["/run/nscd", "/run/systemd/resolve", "/run/dbus"]
+
+    # Check each unit's own properties before setting up the probes, so a unit
+    # that lost its deny rule, allow list or masks fails here.
+    # `IPAddressDeny=any` shows as below.
+    restrictions = {}
+    for unit in units:
+        deny = show(unit, "IPAddressDeny")
+        assert set(deny.split()) == {"0.0.0.0/0", "::/0"}, f"{unit} IPAddressDeny={deny!r}"
+        allow = show(unit, "IPAddressAllow")
+        assert "127.0.0.1/32" in allow.split(), f"{unit} IPAddressAllow={allow!r}"
+        inaccessible = show(unit, "InaccessiblePaths")
+        for m in masks:
+            assert m in inaccessible.split(), f"{unit} doesn't mask {m}: {inaccessible!r}"
+        restrictions[unit] = (deny, allow, inaccessible)
+
     # The masked directories exist on every node, so a unit with the restriction
     # starts also when no service enforces Tor.
     assert_running(custom)
-
-    def show(unit, prop):
-        return succeed(f"systemctl show -P {prop} {unit}.service").strip()
 
     # A link-local address outside any netns subnet, used as a blocked target.
     blocked = "169.254.169.254"
@@ -133,9 +151,7 @@ def test_tor_enforce():
     )
     wait_for_open_port(blocked, port)
 
-    # Directories masked with fail-closed (no `-`) entries; each must be present
-    # and hidden. A host-side marker in each shows the mask actually applies.
-    masks = ["/run/nscd", "/run/systemd/resolve", "/run/dbus"]
+    # A host-side marker in each masked directory shows the mask actually applies.
     marker = ".nb-tor-enforce-marker"
     for m in masks:
         succeed(f"touch {m}/{marker}")
@@ -154,16 +170,7 @@ def test_tor_enforce():
         + "".join(f"! test -e {m}/{marker} || exit 14; " for m in masks)  # masks hide
         + "true"
     )
-    for unit in units:
-        # Replay the unit's own properties, so a unit that lost its deny rule,
-        # allow list or masks can't pass. `IPAddressDeny=any` shows as below.
-        deny = show(unit, "IPAddressDeny")
-        assert set(deny.split()) == {"0.0.0.0/0", "::/0"}, f"{unit} IPAddressDeny={deny!r}"
-        allow = show(unit, "IPAddressAllow")
-        assert "127.0.0.1/32" in allow.split(), f"{unit} IPAddressAllow={allow!r}"
-        inaccessible = show(unit, "InaccessiblePaths")
-        for m in masks:
-            assert m in inaccessible.split(), f"{unit} doesn't mask {m}: {inaccessible!r}"
+    for unit, (deny, allow, inaccessible) in restrictions.items():
         props = (
             # Transient units get the manager's minimal PATH, without nc/getent
             "--setenv=PATH=/run/current-system/sw/bin "
