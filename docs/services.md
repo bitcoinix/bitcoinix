@@ -12,7 +12,17 @@ for enabled services, and the node IDs of LND and Core Lightning. It prints JSON
 ```shell
 nodeinfo
 nodeinfo | jq -r .bitcoind.onion_address
+nodeinfo | jq -r .bitcoinix.revision
 ```
+The `bitcoinix` entry is not a service: its `revision` is the bitcoinix git commit the
+system is built from, with a `-dirty` suffix for a checkout with uncommitted changes.
+It is `null` when the modules are imported without the bitcoinix flake; set
+`nix-bitcoin.revision` yourself in that case.
+
+The revision is baked into the `nodeinfo` script, so every bitcoinix update produces a
+new system generation and boot entry, even when no package changed; no service restarts.
+Set `nix-bitcoin.revision = null;` to opt out.
+
 `nodeinfo` and `jq` are included in the `secure-node.nix` preset. Without the preset,
 set `nix-bitcoin.nodeinfo.enable = true` and install `jq` for the example above.
 

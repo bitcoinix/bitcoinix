@@ -303,6 +303,9 @@ def test_nodeinfo():
     if status == 0:
         machine.wait_for_unit("onion-addresses")
     info = succeed_json("runuser -u operator -- nodeinfo")
+    # Fixed in test/tests.nix
+    revision = "0123456789abcdef0123456789abcdef01234567"
+    assert info["bitcoinix"]["revision"] == revision
     assert info["bitcoind"]["local_address"]
 
 

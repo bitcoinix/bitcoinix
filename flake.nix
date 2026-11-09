@@ -67,6 +67,8 @@
         };
 
         config = {
+          nix-bitcoin.revision = lib.mkDefault (self.rev or self.dirtyRev or null);
+
           nix-bitcoin.pkgs =
             if config.nix-bitcoin.useVersionLockedPkgs
             then (self.lib.mkNbPkgs { inherit (config.nixpkgs) system; }).modulesPkgs

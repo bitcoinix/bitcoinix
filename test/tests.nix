@@ -16,6 +16,8 @@ let
         nix-bitcoin.generateSecrets = true;
         nix-bitcoin.operator.enable = true;
         environment.systemPackages = with pkgs; [ jq ];
+        # A fixed value, so that a new commit doesn't change every test derivation
+        nix-bitcoin.revision = "0123456789abcdef0123456789abcdef01234567";
       }
     ];
 

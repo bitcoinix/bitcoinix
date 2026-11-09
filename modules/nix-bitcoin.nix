@@ -29,6 +29,20 @@ with lib;
         '';
       };
 
+      revision = mkOption {
+        type = with types; nullOr str;
+        default = null;
+        example = "6d209ffe17e13abe15f5d368e18f14436019d317";
+        description = ''
+          The bitcoinix git commit that this system is built from.
+          `nixosModules.default` of the bitcoinix flake sets this to the flake's
+          revision (`<rev>-dirty` for a checkout with uncommitted changes).
+          It is `null` when the flake source has no revision or when the modules
+          are imported without the flake.
+          Shown by {command}`nodeinfo`.
+        '';
+      };
+
       lib = mkOption {
         readOnly = true;
         default = import ../pkgs/lib.nix lib pkgs config;

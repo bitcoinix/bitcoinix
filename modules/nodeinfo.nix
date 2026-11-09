@@ -37,6 +37,9 @@ let
   cfg = config.nix-bitcoin.nodeinfo;
   nbLib = config.nix-bitcoin.lib;
 
+  # A JSON string is also a valid Python string literal
+  pyStr = s: if s == null then "None" else builtins.toJSON s;
+
   script = pkgs.writeScriptBin "nodeinfo" ''
     #!${pkgs.python3}/bin/python
 
@@ -61,6 +64,9 @@ let
         return cmd("bash", "-c", *args).strip()
 
     infos = OrderedDict()
+    infos["bitcoinix"] = {
+        "revision": ${pyStr config.nix-bitcoin.revision},
+    }
     operator = "${config.nix-bitcoin.operator.name}"
 
     def get_onion_address(name, port):
