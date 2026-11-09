@@ -84,6 +84,25 @@ primary `group` and its `users.groups` entry with the current `gid`,
 `users.mutableUsers = false`, NixOS also manages the password, so declare it too
 if the account uses one.
 
+Each custom lnd macaroon (`services.lnd.macaroons`, also used by BTCPay Server and
+charge-lnd) now has its own root key, with an ID from 7953919891889717248 to
+7954201366866427903 (`0x6e62000000000000` to `0x6e62ffffffffffff`). Each time lnd
+starts, bitcoinix deletes the root key of every ID in this range that no configured
+macaroon uses. Before deploying, check that `lncli listmacaroonids` lists no ID in this
+range. If it does, bake the macaroons that use such an ID again with an ID outside the
+range.
+
+bitcoinix now uses lnd's admin macaroon and gRPC each time lnd starts, also without
+custom macaroons. Keep lnd's macaroons enabled: the `no-macaroons` option isn't
+supported.
+
+When lnd restarts during the deployment, bitcoinix creates the custom macaroons with
+their new root keys, and BTCPay Server restarts to read its new macaroon. Restart other
+services that read a custom macaroon only at startup; see
+[Custom macaroons](./services.md#custom-macaroons). Copies of custom macaroons created
+before this change use root key 0, like the admin macaroon, and stay valid. To revoke
+them, see [Revoke all macaroons](./services.md#revoke-all-macaroons).
+
 After migrating your configuration, set `nix-bitcoin.configVersion = "0.1.6";`.
 
 ## Upgrading to config version 0.1.5
