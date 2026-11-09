@@ -100,7 +100,13 @@ let self = {
   '';
 
   # Used for ExecStart*
-  rootScript = name: src: "+${self.script name src}";
+  # systemd sets HOME to the home of `User=` also for `+` commands. The service
+  # user can write there, so tools like curl or jq would load config files from it
+  # as root.
+  rootScript = name: src: "+${self.script name ''
+    export HOME=/var/empty
+    ${src}
+  ''}";
 
   mkOnionService = map: {
     map = [ map ];

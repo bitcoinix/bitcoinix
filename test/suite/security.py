@@ -193,12 +193,16 @@ def test_lnd_macaroons():
 
     # systemd sets HOME to the lnd user's home (the lnd data dir) also for
     # the root script. Config files placed there must not be loaded.
-    # A loaded `.curlrc` creates the trace file as root.
+    # A loaded `.curlrc` creates the trace file as root, a loaded `.jq` fails
+    # with a syntax error.
     home = data["dataDir"]
     trace = "/run/lnd-test-curl-trace"
-    succeed(f"{as_lnd} sh -c 'echo trace-ascii = {trace} > {home}/.curlrc'")
+    succeed(
+        f"{as_lnd} sh -c 'echo trace-ascii = {trace} > {home}/.curlrc'",
+        f"{as_lnd} sh -c 'echo \"def (\" > {home}/.jq'",
+    )
     status, output = machine.execute(f"HOME={home} {create_macaroons}")
-    succeed(f"rm -f {home}/.curlrc")
+    succeed(f"rm -f {home}/.curlrc {home}/.jq")
     if status != 0:
         raise Exception(f"Creating macaroons failed with config files in HOME: '{output}'")
     succeed(f"[[ ! -e {trace} ]] || {{ rm -f {trace}; exit 1; }}")
