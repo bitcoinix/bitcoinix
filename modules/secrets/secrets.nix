@@ -144,6 +144,20 @@ let
           mv -fT -- "$1" "$2"
           sync -- "$(dirname -- "$2")"
         }
+        # Identity keys are created only when their path is absent. A new key
+        # breaks everything that trusts the old one, so an empty key, or a
+        # symlink to a missing file, fails instead.
+        isAbsent() {
+          [[ ! -e $1 && ! -L $1 ]]
+        }
+        checkKey() {
+          if [[ ! -s $1 ]]; then
+            echo "Error: Key file '$1' is empty or a symlink to a missing file." \
+                 "Restore it from a backup, or delete it to generate a new key." \
+                 "A new key breaks $2." >&2
+            exit 1
+          fi
+        }
         makePasswordSecret() {
           # Passwords have alphabet {a-z, A-Z, 0-9} and ~119 bits of entropy.
           # Also regenerate an empty file, left by a failed run of an earlier version.
@@ -163,24 +177,41 @@ let
           name=$1
           # Add leading comma if not empty
           extraAltNames=''${2:+,}''${2:-}
-          if [[ ! -e $name-key ]]; then
+          keyTmp=
+          if isAbsent "$name-key"; then
             # Create new key and cert
-            doMakeCert "-newkey ec -pkeyopt ec_paramgen_curve:prime256v1 -nodes -keyout $name-key"
-          elif [[ ! -e $name-cert \
-                  || $(cat "$name-cert-alt-names" 2>/dev/null) != $extraAltNames ]]; then
-            # Create cert from existing key
-            doMakeCert "-key $name-key"
-          fi;
+            keyTmp=$(mktemp -- "$name-key.XXXXXX")
+            doMakeCert -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 -nodes -keyout "$keyTmp"
+            # Move the key after the cert. If this run stops in between,
+            # the next run finds no key and creates both again.
+            syncedRename "$keyTmp" "$name-key"
+          else
+            checkKey "$name-key" "clients that pinned the $name certificate"
+            # Also replace a missing, empty or broken cert
+            if ! ${pkgs.openssl}/bin/openssl x509 -noout -in "$name-cert" 2>/dev/null \
+               || [[ $(cat "$name-cert-alt-names" 2>/dev/null) != $extraAltNames ]]; then
+              # Create cert from existing key
+              doMakeCert -key "$name-key"
+            fi
+          fi
         }
         doMakeCert() {
-           # This fn uses global variables `name` and `extraAltNames`
-           keyOpts=$1
+           # This fn uses global variables `name`, `extraAltNames` and `keyTmp`.
+           # Like `writeSecret`, write to temp files and move them into place
+           # only after success. openssl writes the files itself.
+           local certTmp
+           certTmp=$(mktemp -- "$name-cert.XXXXXX")
            # Keep the subject generic: a service name in it makes the cert stand out
-           ${pkgs.openssl}/bin/openssl req -x509 \
-             -sha256 -days 3650 $keyOpts -out "$name-cert"  \
-             -subj "/CN=localhost" \
-             -addext "subjectAltName=DNS:localhost,IP:127.0.0.1$extraAltNames"
-           echo "$extraAltNames" > "$name-cert-alt-names"
+           if ! ${pkgs.openssl}/bin/openssl req -x509 \
+                  -sha256 -days 3650 "$@" -out "$certTmp" \
+                  -subj "/CN=localhost" \
+                  -addext "subjectAltName=DNS:localhost,IP:127.0.0.1$extraAltNames"; then
+             rm -f -- "$certTmp" ''${keyTmp:+"$keyTmp"}
+             exit 1
+           fi
+           syncedRename "$certTmp" "$name-cert"
+           # After the cert: until this file matches, the next run rebuilds the cert
+           writeSecret "$name-cert-alt-names" echo "$extraAltNames"
         }
 
         umask u=rw,go=

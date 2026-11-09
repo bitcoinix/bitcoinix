@@ -83,6 +83,27 @@ def test_secrets_no_argv():
     assert_str_matches(succeed(f"cat {password_file}"), r"\A[a-zA-Z0-9]{20}\n\Z")
     assert_hmac_matches("public")
 
+    if "lnd-key" in files:
+        key, cert = f"{gen_dir}/lnd-key", f"{gen_dir}/lnd-cert"
+        key_pub = succeed(f"openssl pkey -in {key} -pubout")
+        # A missing, empty or broken cert is rebuilt from the key
+        for break_cert in [f"rm {cert}", f"truncate -s 0 {cert}", f"echo broken > {cert}"]:
+            succeed(break_cert, generate)
+            assert succeed(f"openssl x509 -in {cert} -noout -pubkey") == key_pub
+        # A directory in place of the cert fails generation and stays empty
+        succeed(f"rm {cert}", f"mkdir {cert}")
+        machine.fail(generate)
+        succeed(f"rmdir {cert}", generate)
+        # An empty key, or a symlink to a missing file, fails and is kept:
+        # a new key breaks clients that pinned the cert
+        succeed(f"mv {key} {key}.orig")
+        for break_key, kept in [(f": > {key}", f"! -s {key}"), (f"ln -s missing {key}", f"-L {key}")]:
+            succeed(break_key)
+            status, out = machine.execute(f"{generate} 2>&1")
+            assert status != 0 and "Key file 'lnd-key' is empty or a symlink" in out, out
+            succeed(f"[[ {kept} ]]", f"rm {key}")
+        succeed(f"mv {key}.orig {key}")
+
     # A password file with only a newline is not regenerated (it isn't empty),
     # but must not get an HMAC of the empty password either
     succeed(f"rm {hmac_file}", f"echo > {password_file}")
