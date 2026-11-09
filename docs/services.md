@@ -23,6 +23,13 @@ The revision is baked into the `nodeinfo` script, so every bitcoinix update prod
 new system generation and boot entry, even when no package changed; no service restarts.
 Set `nix-bitcoin.revision = null;` to opt out.
 
+Without arguments `nodeinfo` prints all entries. Arguments change that:
+```shell
+nodeinfo --version           # print only the bitcoinix revision, as a JSON string
+nodeinfo bitcoind lnd        # print only these entries
+```
+See `nodeinfo --help`.
+
 `nodeinfo` and `jq` are included in the `secure-node.nix` preset. Without the preset,
 set `nix-bitcoin.nodeinfo.enable = true` and install `jq` for the example above.
 
