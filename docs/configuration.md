@@ -213,17 +213,27 @@ You can use the same approach to allow connections to other services.
 `nix-bitcoin.netns-isolation` is experimental and disabled by default; the secure-node
 preset doesn't enable it. It runs each service listed in
 [netns-isolation.nix](https://github.com/bitcoinix/bitcoinix/blob/master/modules/netns-isolation.nix)
-in its own network namespace. With it enabled:
+in its own network namespace. This separates the services from each other and from the
+outside network. It doesn't separate them from processes in the host network namespace,
+and services without `tor.enforce` can reach your LAN. With it enabled:
 
 - The snippets above don't work. The module sets the listen addresses of these services
   (`address`, `rpc.address` and similar) to their namespace address in
   `169.254.<addressblock>.0/24`. Setting them yourself fails evaluation with
   `conflicting definition values`.
-- A namespace accepts connections only from localhost, from the host and from the
-  namespaces of connected services. Connections from your LAN are dropped, and opening
-  ports in `networking.firewall` doesn't change this. Use onion services for remote access.
-- With `tor.enforce`, a namespace also drops outgoing connections except to these
-  addresses.
+- A namespace accepts connections only from its own localhost, from the namespaces of
+  connected services and from the host. Connections from the host come from the bridge
+  address `169.254.<addressblock>.10`, which every namespace accepts. This covers every
+  process in the host network namespace, not only the operator user: Tor, sshd, backup
+  jobs and services without a namespace can reach every service listener, so the services
+  still rely on their own authentication.
+- Connections from your LAN are dropped, and opening ports in `networking.firewall`
+  doesn't change this. Use onion services for remote access.
+- Outgoing connections leave through the host with NAT, and the host doesn't filter
+  forwarded traffic. A service without `tor.enforce` can connect to other hosts in your
+  LAN, not only to the internet.
+- With `tor.enforce`, a namespace drops outgoing connections except to the addresses it
+  accepts connections from.
 - IPv6 is disabled on the namespace interfaces.
 - Each namespace copies the host's `net.mptcp.enabled` setting when it is created.
   A later change of the host setting doesn't reach existing namespaces, and a switch
