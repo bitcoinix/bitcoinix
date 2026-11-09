@@ -68,14 +68,13 @@ let
 
         - If you have less than 40 GB of free space [2] on the electrs data dir volume:
           1. Delete the database:
-             systemctl stop electrs
-             rm -r '${dbPath}'
+             systemctl stop electrs && rm -r ${escapeShellArg dbPath}
           2. Deploy the new system config to your node
 
         - Otherwise:
           1. Deploy the new system config to your node
           2. Check that electrs works as expected and delete the old database:
-             rm -r '${dbPath}'
+             rm -r ${escapeShellArg dbPath}
 
         [1] https://github.com/romanz/electrs/blob/557911e3baf9a000f883a6f619f0518945a7678d/doc/usage.md#upgrading
         [2] This is based on the bitcoin blockchain size as of 2021-09.
@@ -341,11 +340,10 @@ let
         uses electrs.
 
         To upgrade, delete the old index before deploying:
-          systemctl stop electrs
-          rm -r '${dbPath}'
+          systemctl stop electrs && rm -r ${escapeShellArg dbPath}
         Then deploy the new system config to your node.
         If you roll back to the previous config after electrs 0.12 has started once,
-        also remove the marker file '${dbPath}.bindex'. Otherwise the index check is
+        also remove the marker file ${escapeShellArg "${dbPath}.bindex"}. Otherwise the index check is
         skipped on the next upgrade.
 
         electrs now requires Bitcoin Core 31 or later and reads blocks through
