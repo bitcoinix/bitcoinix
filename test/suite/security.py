@@ -104,6 +104,16 @@ def test_secrets_no_argv():
             succeed(f"[[ {kept} ]]", f"rm {key}")
         succeed(f"mv {key}.orig {key}")
 
+    # A passphrase that reads as empty never goes to the backup env file
+    if "backup-encryption-env" in files:
+        env, passphrase = f"{gen_dir}/backup-encryption-env", f"{gen_dir}/backup-encryption-password"
+        env_before = succeed(f"cat {env}")
+        succeed(f"echo > {passphrase}")
+        status, out = machine.execute(f"{generate} 2>&1")
+        assert status != 0 and "contains no passphrase" in out, out
+        assert succeed(f"cat {env}") == env_before
+        succeed(f"rm {passphrase}", generate)
+
     # A password file with only a newline is not regenerated (it isn't empty),
     # but must not get an HMAC of the empty password either
     succeed(f"rm {hmac_file}", f"echo > {password_file}")
