@@ -1,7 +1,7 @@
 containerBin=$(type -P extra-container) || true
-if [[ ! ($containerBin && $(realpath "$containerBin") == *extra-container-0.17*) ]]; then
+if [[ ! ($containerBin && $(realpath "$containerBin") == *extra-container-1.0.1*) ]]; then
     echo
-    echo "Building extra-container. Skip this step by adding extra-container 0.17 to PATH."
+    echo "Building extra-container. Skip this step by adding extra-container 1.0.1 to PATH."
     # Don't create an out-link: this script is often run as root, and a fixed
     # link name in a shared directory like /tmp can be pre-created by another user.
     # The store path in PATH keeps the package alive against the garbage collector
