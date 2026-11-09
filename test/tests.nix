@@ -320,9 +320,10 @@ let
       nix-bitcoin = {
         generateSecrets = mkForce false;
         setupSecrets = true;
-        secrets = genAttrs [ "first" "second" ] (_: {
+        secrets = genAttrs [ "first" "second" "empty" ] (name: {
           user = "nobody";
           group = "nogroup";
+          allowEmpty = name == "empty";
         });
       };
       systemd.services.supply-test-secrets = {
@@ -339,6 +340,7 @@ let
           ${config.nix-bitcoin.generateSecretsScript}
           printf first-secret > first
           printf second-secret > second
+          touch empty
         '';
       };
       tests.setup-secrets-supplied = true;

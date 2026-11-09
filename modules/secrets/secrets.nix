@@ -74,6 +74,15 @@ let
               type = str;
               default = "440";
             };
+            allowEmpty = mkOption {
+              type = bool;
+              default = false;
+              description = ''
+                Whether `setup-secrets` accepts an empty file for this secret.
+                Otherwise, an empty file fails setup like a missing one, so that
+                no service gets an empty credential.
+              '';
+            };
           };
         }
       ));
@@ -248,8 +257,17 @@ in {
            user="$2"
            group="$3"
            permissions="$4"
+           allowEmpty="$5"
            if [[ ! -e $file ]]; then
              echo "Error: Secret file '$file' is missing"
+             exit 1
+           fi
+           if [[ ! -f $file ]]; then
+             echo "Error: Secret file '$file' is not a regular file"
+             exit 1
+           fi
+           if [[ ! -s $file && $allowEmpty != true ]]; then
+             echo "Error: Secret file '$file' is empty"
              exit 1
            fi
            chown -- "$user:$group" "$file"
@@ -273,7 +291,7 @@ in {
         processedFiles=()
         ${
           concatStrings (mapAttrsToList (n: v: ''
-            setupSecret ${n} ${v.user} ${v.group} ${v.permissions}
+            setupSecret ${n} ${v.user} ${v.group} ${v.permissions} ${boolToString v.allowEmpty}
           '') cfg.secrets)
         }
 

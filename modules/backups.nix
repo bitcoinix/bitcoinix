@@ -133,7 +133,11 @@ in {
         databases = cfg.postgresqlDatabases;
       };
 
-      nix-bitcoin.secrets.backup-encryption-env.user = "root";
+      nix-bitcoin.secrets.backup-encryption-env = {
+        user = "root";
+        # A supplied env file may set nothing, e.g. with duplicity's `--no-encryption`
+        allowEmpty = true;
+      };
       nix-bitcoin.generateSecretsCmds.backups = ''
         makePasswordSecret backup-encryption-password
         if [[ backup-encryption-password -nt backup-encryption-env ]]; then

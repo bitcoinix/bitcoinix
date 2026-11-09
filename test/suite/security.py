@@ -608,26 +608,32 @@ def test_setup_secrets():
 def test_setup_secrets_supplied():
     # This scenario has generateSecrets = false and supplied secret files.
     # Losing one must deny access even to the other, otherwise readable secret.
+    # An empty one must too: services would get an empty credential.
     assert_full_match("runuser -u nobody -- cat /secrets/first", "first-secret")
     assert_full_match("runuser -u nobody -- cat /secrets/second", "second-secret")
-    succeed(
-        "mv /secrets/second /root/setup-secrets-supplied-orig",
-        "systemctl reset-failed setup-secrets",
-    )
-    machine.fail("systemctl restart setup-secrets")
-    assert_matches("systemctl show setup-secrets --value -p Result", "^exit-code$")
-    assert_matches("journalctl -b -u setup-secrets", "Secret file 'second' is missing")
-    assert_file_metadata("/secrets", owner="root", group="root", mode="700")
-    assert_file_metadata("/secrets/first", owner="nobody", group="nogroup", mode="440")
-    machine.fail("runuser -u nobody -- cat /secrets/first")
+    # Declared with `allowEmpty`
+    assert_file_metadata("/secrets/empty", owner="nobody", group="nogroup", mode="440")
+    orig = "/root/setup-secrets-supplied-orig"
+    for problem, break_secret in [
+        ("missing", f"mv /secrets/second {orig}"),
+        ("not a regular file", f"mv /secrets/second {orig} && mkdir /secrets/second"),
+        ("empty", f"cp -p /secrets/second {orig} && truncate -s 0 /secrets/second"),
+    ]:
+        succeed(break_secret, "systemctl reset-failed setup-secrets")
+        machine.fail("systemctl restart setup-secrets")
+        assert_matches("systemctl show setup-secrets --value -p Result", "^exit-code$")
+        assert_matches("journalctl -b -u setup-secrets", f"Secret file 'second' is {problem}")
+        assert_file_metadata("/secrets", owner="root", group="root", mode="700")
+        assert_file_metadata("/secrets/first", owner="nobody", group="nogroup", mode="440")
+        machine.fail("runuser -u nobody -- cat /secrets/first")
 
-    succeed(
-        "mv /root/setup-secrets-supplied-orig /secrets/second",
-        "systemctl reset-failed setup-secrets",
-        "systemctl restart setup-secrets",
-        "systemctl start nix-bitcoin-secrets.target",
-    )
-    assert_file_metadata("/secrets", owner="root", group="root", mode="751")
-    assert_file_metadata("/secrets/second", owner="nobody", group="nogroup", mode="440")
-    assert_full_match("runuser -u nobody -- cat /secrets/first", "first-secret")
-    assert_full_match("runuser -u nobody -- cat /secrets/second", "second-secret")
+        succeed(
+            f"rm -rf /secrets/second && mv {orig} /secrets/second",
+            "systemctl reset-failed setup-secrets",
+            "systemctl restart setup-secrets",
+            "systemctl start nix-bitcoin-secrets.target",
+        )
+        assert_file_metadata("/secrets", owner="root", group="root", mode="751")
+        assert_file_metadata("/secrets/second", owner="nobody", group="nogroup", mode="440")
+        assert_full_match("runuser -u nobody -- cat /secrets/first", "first-secret")
+        assert_full_match("runuser -u nobody -- cat /secrets/second", "second-secret")
