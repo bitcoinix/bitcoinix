@@ -191,6 +191,19 @@ def test_lnd_macaroons():
     assert_canary_untouched()
     assert_macaroon_created()
 
+    # systemd sets HOME to the lnd user's home (the lnd data dir) also for
+    # the root script. Config files placed there must not be loaded.
+    # A loaded `.curlrc` creates the trace file as root.
+    home = data["dataDir"]
+    trace = "/run/lnd-test-curl-trace"
+    succeed(f"{as_lnd} sh -c 'echo trace-ascii = {trace} > {home}/.curlrc'")
+    status, output = machine.execute(f"HOME={home} {create_macaroons}")
+    succeed(f"rm -f {home}/.curlrc")
+    if status != 0:
+        raise Exception(f"Creating macaroons failed with config files in HOME: '{output}'")
+    succeed(f"[[ ! -e {trace} ]] || {{ rm -f {trace}; exit 1; }}")
+    assert_macaroon_created()
+
     # Admin macaroon is a symlink to a root-only file.
     # The file must not be read and sent to lnd.
     succeed(f"{as_lnd} ln -s {canary} {network_dir}/admin.macaroon")

@@ -143,7 +143,7 @@ let
       tests.lnd = cfg.lnd.enable;
       tests.lnd-macaroons = cfg.lnd.enable && cfg.lnd.macaroons != {};
       test.data.lnd-macaroons = {
-        inherit (cfg.lnd) networkDir user;
+        inherit (cfg.lnd) dataDir networkDir user;
         users = mapAttrs (_: macaroon: macaroon.user) cfg.lnd.macaroons;
       };
       services.lnd = {
