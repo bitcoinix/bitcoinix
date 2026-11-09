@@ -231,9 +231,33 @@ in {
           user = user;
           permissions = "400";
         };
-        generateSecretsCmds.clightning-replication-ssh-key = ''
-          if [[ ! -f clightning-replication-ssh-key ]]; then
-            ${pkgs.openssh}/bin/ssh-keygen -t ed25519 -q -N "" -C "" -f clightning-replication-ssh-key
+        generateSecretsCmds.clightning-replication-ssh-key = let
+          key = "clightning-replication-ssh-key";
+          sshKeygen = "${pkgs.openssh}/bin/ssh-keygen";
+        in ''
+          if isAbsent ${key}; then
+            # ssh-keygen writes the files itself and won't replace them, so let
+            # it write into a new temp dir. The secrets umask has no x bit for dirs.
+            keyDir=$(umask 077 && mktemp -d -- ${key}.XXXXXX)
+            if ! ${sshKeygen} -t ed25519 -q -N "" -C "" -f "$keyDir/key"; then
+              rm -rf -- "$keyDir"
+              exit 1
+            fi
+            syncedRename "$keyDir/key" ${key}
+            rm -rf -- "$keyDir"
+          fi
+          checkKey ${key} \
+            "SSHFS replication until the replication server authorizes the new public key"
+          # Derive the public key on every run, so that it always matches. This
+          # works only for an unencrypted private key. Other identities, such as an
+          # encrypted key or a public key whose private key is in an SSH agent, keep
+          # their `.pub`.
+          # ssh-keygen rejects a key that others can read. Setup sets the declared
+          # mode afterwards anyway.
+          chmod go= ${key}
+          if sshPub=$(${sshKeygen} -y -P "" -f ${key} 2>/dev/null) \
+             && [[ $(cut -d' ' -f1,2 ${key}.pub 2>/dev/null) != $(cut -d' ' -f1,2 <<< "$sshPub") ]]; then
+            writeSecret ${key}.pub echo "$sshPub"
           fi
         '';
       })

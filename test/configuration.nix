@@ -452,6 +452,14 @@ let
       ];
       expected = [ false true true true ];
     }) [ "currencyrate" "rebalance" ]);
+  # Secret generation with the replication SSH key, run by the check below
+  replicationGenerator = (evaluate {
+    services.clightning = {
+      enable = true;
+      replication = { enable = true; sshfs.destination = "user@host:dir"; };
+    };
+  }).nix-bitcoin.generateSecretsScript;
+
   # The preset's preStart lines, run by the check below against a scratch data dir
   remoteRpcUser = "rpc$USER'$(id)";
   remotePresetPreStart = pkgs.writeText "bitcoind-remote-prestart"
@@ -826,6 +834,41 @@ else
       cat data/bitcoin.conf >&2
       exit 1
     fi
+
+    # The replication SSH key is created when it's absent. An empty key, or a
+    # symlink to a missing file, fails and is kept. A missing, empty or wrong
+    # `.pub` is rebuilt from an unencrypted key.
+    mkdir gen
+    (
+      cd gen
+      key=clightning-replication-ssh-key
+      fail() { echo "Replication SSH key: $*" >&2; exit 1; }
+      ${replicationGenerator}
+      [[ -z $(find . -name "$key.??????") ]] || fail "a temp file or dir was left behind"
+      pub=$(< $key.pub)
+      for breakPub in "rm $key.pub" ": > $key.pub" "echo ssh-ed25519 wrong > $key.pub"; do
+        eval "$breakPub"
+        ${replicationGenerator}
+        [[ $(< $key.pub) == "$pub" ]] || fail "'$breakPub' wasn't repaired"
+      done
+      : > $key
+      if ${replicationGenerator} 2> err; then fail "an empty key was accepted"; fi
+      grep -q "Key file '$key' is empty" err || fail "unexpected error: $(< err)"
+      [[ ! -s $key ]] || fail "an empty key was replaced"
+      rm $key && ln -s missing $key
+      if ${replicationGenerator} 2> /dev/null; then fail "a symlink to a missing key was accepted"; fi
+      [[ -L $key ]] || fail "a symlink to a missing key was replaced"
+      # Identities whose private key can't be read here keep their `.pub`: an
+      # encrypted key, and a public key whose private key is in an SSH agent
+      rm $key && ${pkgs.openssh}/bin/ssh-keygen -t ed25519 -q -N secret -C "" -f $key
+      publicKey=$(< $key.pub)
+      for identity in encrypted public-only; do
+        if [[ $identity == public-only ]]; then echo "$publicKey" > $key; fi
+        echo kept > $key.pub
+        ${replicationGenerator} || fail "the $identity identity failed"
+        [[ $(< $key.pub) == kept ]] || fail "the .pub of the $identity identity was changed"
+      done
+    )
 
     echo '${toString (builtins.length (builtins.attrNames tests))} configuration tests passed' > "$out"
   ''
