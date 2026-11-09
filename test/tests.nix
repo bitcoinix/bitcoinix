@@ -141,6 +141,11 @@ let
       };
 
       tests.lnd = cfg.lnd.enable;
+      tests.lnd-wallet-init = cfg.lnd.enable;
+      test.data.lnd-wallet-init = if cfg.lnd.enable then {
+        inherit (cfg.lnd) dataDir networkDir user group;
+        preStart = toString config.systemd.services.lnd.serviceConfig.ExecStartPre;
+      } else null;
       tests.lnd-macaroons = cfg.lnd.enable && cfg.lnd.macaroons != {};
       test.data.lnd-macaroons = {
         inherit (cfg.lnd) dataDir networkDir user;

@@ -23,7 +23,7 @@ test functions live. The split into files preserves the original execution order
 | --- | --- |
 | `services` | Check services, credentials, and connection URLs. Checks that temporarily alter files or restart services restore them before returning. The existing `stop-electrs` exception leaves electrs stopped to silence mainnet logs. |
 | `network-and-hardening` | Check namespace reachability and running services' mounts before the disruptive phase stops bitcoind and its dependents. |
-| `disruptive` | `backups` stops bitcoind and its dependents. `restart-bitcoind` explicitly starts the units it exercises; `config-replace` starts each unit before testing its generated config; `clnrest-admin-rune` starts clightning before restarting it with broken admin rune files. |
+| `disruptive` | `backups` stops bitcoind and its dependents. `restart-bitcoind` explicitly starts the units it exercises; `config-replace` starts each unit before testing its generated config; `clnrest-admin-rune` starts clightning before restarting it with broken admin rune files; `lnd-wallet-init` starts lnd on a new data dir, then on the restored original one. |
 | `post-restart` | `regtest` waits for service readiness and synchronization after the restart checks. `lnd-restart-on-clean-exit` follows synchronization; `trustedcoin` checks the plugin's logs. |
 | `secrets` | Restart `setup-secrets` and check supplied-secret failures after all service checks, because each run temporarily restricts access to the secrets directory. |
 | `extra` | Tests registered by `test.extraTestScript` run last, in registration order, as before. They must account for the preceding service stops and restarts. |

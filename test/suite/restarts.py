@@ -166,6 +166,81 @@ def test_clnrest_admin_rune():
         assert_full_match(f"cat {rtl_file}", re.escape(f'LIGHTNING_RUNE="{rune}"\n'))
 
 
+# Impure: restarts lnd on a new data dir, then on the original one
+@test("lnd-wallet-init")
+def test_lnd_wallet_init():
+    # lnd creates its seed and wallet while there's no wallet.db. On a new data
+    # dir, check that an empty seed fails and is kept, and that a failed wallet
+    # creation doesn't block a later one with the same seed.
+    data = test_data["lnd-wallet-init"]
+    data_dir, network_dir, user = data["dataDir"], data["networkDir"], data["user"]
+    seed = f"{data_dir}/lnd-seed-mnemonic"
+    no_wallet_tmp = f"! ls -A {network_dir} | grep -q wallet-init"
+    password = "/secrets/lnd-wallet-password"
+    # Run the preStart script directly: a failed lnd unit would fail later checks
+    # that lnd never failed
+    pre_start = f"runuser -u {user} -- {data['preStart']}"
+    # charge-lnd `requires` lnd, so a timer tick would start lnd during the test
+    timers = ["charge-lnd.timer"] if "charge-lnd" in enabled_tests else []
+
+    def start_lnd():
+        succeed("systemctl start lnd")
+        machine.wait_until_succeeds("runuser -u operator -- lncli getinfo")
+
+    # lnd might still be restarting after the preceding tests
+    start_lnd()
+    succeed(*[f"systemctl stop {unit}" for unit in timers + ["lnd"]])
+    succeed(
+        f"mv {data_dir} {data_dir}.orig",
+        f"install -d -o {user} -g {data['group']} -m 770 {data_dir}",
+    )
+
+    # A wallet.db that is a symlink to a missing file fails before a seed is
+    # created, with or without a seed, and nothing is replaced
+    wallet = f"{network_dir}/wallet.db"
+    succeed(f"runuser -u {user} -- sh -c 'umask 077 && mkdir -p {network_dir} && ln -s missing {wallet}'")
+    state = f"ls -A {network_dir}; stat -c '%N %s' {wallet} {seed} 2>&1 || true"
+    for make_seed in ["true", f"runuser -u {user} -- sh -c 'echo seed-words > {seed}'"]:
+        succeed(make_seed)
+        before = succeed(state)
+        status, out = machine.execute(f"{pre_start} 2>&1")
+        assert status != 0 and "wallet.db' isn't a regular file" in out, out
+        assert succeed(state) == before
+    succeed(f"rm {wallet} {seed}")
+
+    # An empty seed, left by a failed `lndinit gen-seed` of an earlier version
+    succeed(f"runuser -u {user} -- install -m 400 /dev/null {seed}")
+    status, out = machine.execute(f"{pre_start} 2>&1")
+    assert status != 0 and "lnd-seed-mnemonic' is empty" in out, out
+    succeed(f"[[ ! -s {seed} ]]")
+
+    # Without the seed file, a new seed is created. Then lndinit creates
+    # wallet.db in a temp dir and fails on the empty password. No wallet.db
+    # and no temp dir may be left.
+    succeed(
+        f"rm {seed}",
+        f"cp {password} /root/lnd-wallet-password.orig",
+        f"truncate -s 0 {password}",
+    )
+    machine.fail(pre_start)
+    succeed(f"[[ -s {seed} && ! -e {network_dir}/wallet.db ]]", no_wallet_tmp)
+    assert_file_metadata(seed, owner=user, mode="400", file_type="regular file")
+    seed_hash = succeed(f"sha256sum {seed}")
+
+    # The next start keeps the seed and creates the wallet
+    succeed(
+        f"cat /root/lnd-wallet-password.orig > {password}",
+        "rm /root/lnd-wallet-password.orig",
+    )
+    start_lnd()
+    assert succeed(f"sha256sum {seed}") == seed_hash
+    succeed(f"[[ -s {network_dir}/wallet.db ]]", no_wallet_tmp)
+
+    succeed("systemctl stop lnd", f"rm -rf {data_dir}", f"mv {data_dir}.orig {data_dir}")
+    start_lnd()
+    succeed(*[f"systemctl start {unit}" for unit in timers])
+
+
 # Impure: restarts lnd. Runs after `regtest`, so lnd is synced.
 @test("lnd-restart-on-clean-exit")
 def test_lnd_restart_on_clean_exit():
