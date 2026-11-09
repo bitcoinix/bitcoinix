@@ -37,6 +37,19 @@ TrustedCoin now uses the nixpkgs package. Replace explicit flake references to
 `nix build '.#legacyPackages.aarch64-linux.pinned.trustedcoin'` (or `x86_64-linux`).
 The plugin still uses `nix-bitcoin.pkgs.trustedcoin` automatically.
 
+`nbPython3Packages` now uses nixpkgs-unstable's Python interpreter and package set,
+including `pyln-bolt7`, `pyln-client`, `pyln-proto` and `pylightning`. Their versions
+are selected by nixpkgs-unstable independently of the Core Lightning daemon.
+In custom configurations, build Python environments with the matching interpreter,
+for example:
+
+```nix
+config.nix-bitcoin.pkgs.nbPython3Packages.python.withPackages (ps: [ ps.pyln-client ])
+```
+
+The built-in Python plugins select this interpreter automatically. The package
+paths under `nbPython3Packages` remain available.
+
 ## Upgrading to config version 0.1.5
 
 Currencyrate, rebalance, clnrest and mempool's `settings.CORE_RPC.PASSWORD` each

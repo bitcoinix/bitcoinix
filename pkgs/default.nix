@@ -24,7 +24,7 @@ let self = {
 
   inherit (self.pyPkgs.nbPython3PackagesWithUnlockedEcdsa) hwi;
 
-  pyPkgs = import ./python-packages self pkgs.python3;
+  pyPkgs = import ./python-packages pkgsUnstable pkgs.python3;
   inherit (self.pyPkgs)
     nbPython3Packages;
 

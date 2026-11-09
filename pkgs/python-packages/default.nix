@@ -1,19 +1,6 @@
-nbPkgs: python3:
-rec {
-  pyPkgsOverrides = self: super: let
-    inherit (self) callPackage;
-    clightningPkg = pkg: callPackage pkg { inherit (nbPkgs.pinned) clightning; };
-  in
-    {
-      pyln-client = clightningPkg ./pyln-client;
-      pyln-proto = clightningPkg ./pyln-proto;
-      pyln-bolt7 = clightningPkg ./pyln-bolt7;
-      pylightning = clightningPkg ./pylightning;
-    };
-
-  nbPython3Packages = (python3.override {
-    packageOverrides = pyPkgsOverrides;
-  }).pkgs;
+pkgsUnstable: python3:
+{
+  nbPython3Packages = pkgsUnstable.python3Packages;
 
   # Re-enable pkgs `hwi`, `trezor` that are unaffected by `CVE-2024-23342` because
   # they don't use python pkg `ecdsa` for signing.

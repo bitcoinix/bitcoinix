@@ -19,10 +19,6 @@ let
       version = "0.1.0"; # monitor/pyproject.toml
       description = "Helps you analyze the health of your peers and channels";
       extraPkgs = [ packaging ];
-      # Upstream only uses packaging.version.parse, available in nixpkgs' 26.1.
-      patchProject = ''
-        substituteInPlace pyproject.toml --replace-fail 'packaging>=26.3' 'packaging>=${packaging.version}'
-      '';
     };
     rebalance = {
       version = "0.1.0"; # rebalance/pyproject.toml
@@ -39,7 +35,7 @@ let
 
   mkPlugin = name: plugin: let
     # packaging is also used to validate the runtime requirements below.
-    python = pkgs.python3.withPackages (_:
+    python = nbPython3Packages.python.withPackages (_:
       [ nbPython3Packages.pyln-client nbPython3Packages.packaging ] ++ (plugin.extraPkgs or []));
     script = "${plugin.scriptName or name}.py";
     drv = pkgs.stdenv.mkDerivation {
@@ -49,7 +45,6 @@ let
       buildCommand = ''
         cp --no-preserve=mode -r '${src}/${plugin.directory or name}' "$out"
         cd "$out"
-        ${plugin.patchProject or ""}
 
         # Validate pyproject.toml without invoking uv or downloading dependencies.
         ${python}/bin/python - <<'PY'
