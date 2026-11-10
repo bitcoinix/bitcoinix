@@ -64,6 +64,15 @@ def test_netns_isolation():
     assert_unreachable("bitcoind", ["btcpayserver", "rtl"])
     assert_unreachable("btcpayserver", ["bitcoind"])
 
+    # With br_netfilter loaded (e.g. by Docker), traffic between namespaces
+    # passes the host's nat table and FORWARD chain. It must keep its source
+    # address, and allowed connections must keep working.
+    succeed("modprobe br_netfilter")
+    assert_reachable("bitcoind", ["clightning", "lnd"])
+    assert_unreachable("bitcoind", ["btcpayserver", "rtl"])
+    assert_unreachable("btcpayserver", ["bitcoind"])
+    succeed("rmmod br_netfilter")
+
     # The netns firewall rules are IPv4 only, so the veth inside a netns must
     # have no IPv6 address. Otherwise it is reachable over link-local IPv6
     # from every other netns on the bridge.
