@@ -36,14 +36,45 @@ let
 
   cfg = config.nix-bitcoin.nodeinfo;
   nbLib = config.nix-bitcoin.lib;
+  nbPkgs = config.nix-bitcoin.pkgs;
+
+  # The packages whose version nodeinfo shows for each service
+  servicePackages = {
+    inherit (nbPkgs) bitcoind electrs fulcrum rtl;
+    clightning = config.services.clightning.package;
+    lnd = config.services.lnd.package;
+    btcpayserver = config.services.btcpayserver.package;
+    mempool = config.services.mempool.package;
+  };
+
+  # A JSON string is also a valid Python string literal
+  pyStr = s: if s == null then "None" else builtins.toJSON s;
 
   script = pkgs.writeScriptBin "nodeinfo" ''
     #!${pkgs.python3}/bin/python
 
+    import argparse
     import json
     import subprocess
     import sys
     from collections import OrderedDict
+
+    parser = argparse.ArgumentParser(
+        description="Show the bitcoinix revision and the addresses of the enabled services."
+    )
+    parser.add_argument("services", nargs="*", metavar="NAME",
+                        help="only show these entries, e.g. 'bitcoind' or 'bitcoinix' (default: all)")
+    parser.add_argument("-V", "--version", action="store_true",
+                        help="print the bitcoinix revision as JSON and exit")
+    args = parser.parse_args()
+
+    revision = ${pyStr config.nix-bitcoin.revision}
+    if args.version:
+        print(json.dumps(revision))
+        exit(0)
+
+    def is_selected(name):
+        return not args.services or name in args.services
 
     def success(*args):
         return subprocess.call(args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL) == 0
@@ -61,6 +92,10 @@ let
         return cmd("bash", "-c", *args).strip()
 
     infos = OrderedDict()
+    infos["bitcoinix"] = {
+        "revision": revision,
+    }
+    available = ["bitcoinix"]
     operator = "${config.nix-bitcoin.operator.name}"
 
     def get_onion_address(name, port):
@@ -73,12 +108,17 @@ let
             return
         return f"{onion_address}:{port}"
 
-    def add_service(service, make_info, systemd_service = None):
+    def add_service(service, make_info, systemd_service = None, version = None):
+        available.append(service)
+        if not is_selected(service):
+            return
         systemd_service = systemd_service or service
         if not is_active(systemd_service):
             infos[service] = f"'{systemd_service}.service' is not running"
         else:
             info = OrderedDict()
+            if version is not None:
+                info["version"] = version
             exec(make_info, globals(), locals())
             infos[service] = info
 
@@ -87,6 +127,14 @@ let
         exit(1)
 
     ${concatStrings infos}
+
+    unknown = [name for name in args.services if name not in available]
+    if unknown:
+        print(f"error: unknown or disabled: {', '.join(unknown)}", file=sys.stderr)
+        print(f"available: {', '.join(available)}", file=sys.stderr)
+        exit(1)
+
+    infos = OrderedDict((name, info) for name, info in infos.items() if is_selected(name))
 
     print(json.dumps(infos, indent=2))
   '';
@@ -109,7 +157,7 @@ let
       info["onion_address"] = get_onion_address("${name}", ${onionPort})
     '') + extraCode + ''
 
-      """, "${systemdServiceName}")
+      """, "${systemdServiceName}", ${pyStr (servicePackages.${name}.version or null)})
     '';
 
     mkIfOnionPort = name: fn:

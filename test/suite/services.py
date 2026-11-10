@@ -303,7 +303,17 @@ def test_nodeinfo():
     if status == 0:
         machine.wait_for_unit("onion-addresses")
     info = succeed_json("runuser -u operator -- nodeinfo")
+    # Fixed in test/tests.nix
+    revision = "0123456789abcdef0123456789abcdef01234567"
+    assert info["bitcoinix"]["revision"] == revision
     assert info["bitcoind"]["local_address"]
+    for name, version in test_data["nodeinfo-versions"].items():
+        # A stopped service has no version
+        if isinstance(info[name], dict):
+            assert info[name].get("version") == version, f"{name}: expected version {version!r}: {info[name]}"
+    assert_full_match("runuser -u operator -- nodeinfo --version", f'"{revision}"\n')
+    assert list(succeed_json("runuser -u operator -- nodeinfo bitcoind")) == ["bitcoind"]
+    machine.fail("runuser -u operator -- nodeinfo no-such-service")
 
 
 @test("secure-node")
