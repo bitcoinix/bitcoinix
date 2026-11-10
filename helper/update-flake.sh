@@ -8,7 +8,6 @@ set -euo pipefail
 #     Pkg updates in nixpkgs unstable:
 #     bitcoin: 0.20.0 -> 0.21.1
 #     btcpayserver: 1.1.0 -> 1.1.2
-# - Write ../pkgs/pinned.nix with packages from unstable nixpkgs.
 # - Write ../versions.json with pinned and local package versions and channels.
 # - Write ../docs/versions-table.md, the package versions table of the docs.
 
@@ -60,17 +59,6 @@ fi
 
 echo
 nix eval --raw -f update-flake.nix --argstr prevVersions "$versions" showUpdates; echo
-
-pinned=../pkgs/pinned.nix
-# Compare the raw eval output byte for byte, like test/ci/check-versions.sh
-pinnedNew=$(mktemp)
-trap 'rm -f "$pinnedNew"' EXIT
-nix eval --raw -f update-flake.nix --argstr prevVersions "$versions" pinnedFile > "$pinnedNew"
-if ! cmp -s "$pinnedNew" "$pinned"; then
-    cp "$pinnedNew" "$pinned"
-    echo
-    echo "Updated pinned.nix"
-fi
 
 nix eval --json -f update-flake.nix versionsFile |
     nix shell --inputs-from .. nixpkgs#jq -c jq . > ../versions.json

@@ -477,10 +477,11 @@ let
         { version = "0.1.4"; enable = false; }
         { version = "0.1.5"; enable = true; }
         { version = "0.1.6"; enable = true; }
+        { version = "0.2.0"; enable = true; }
         { version = null; enable = true; }
       ];
       # The unstable-only migration also affects configurations without plugins.
-      expected = [ false false false true true ];
+      expected = [ false false false false true true ];
     }) [ "currencyrate" "rebalance" ]);
   # Secret generation with the replication SSH key, run by the check below
   replicationGenerator = (evaluate {
@@ -938,9 +939,10 @@ let
         { version = "0.1.4"; settings = {}; }
         { version = "0.1.5"; settings = password; }
         { version = "0.1.6"; settings = password; }
+        { version = "0.2.0"; settings = password; }
         { version = null; settings = password; }
       ];
-      expected = [ false false false true true ];
+      expected = [ false false false false true true ];
     };
     testEmptySecretsMigration = {
       expr = map (case: (builtins.tryEval (evaluate {
