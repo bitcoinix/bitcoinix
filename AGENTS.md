@@ -165,6 +165,10 @@ when they update. A release note alone is not enough. This includes:
 - something that used to work and now fails at runtime, e.g. a permission, RPC method
   or sandboxing restriction
 
+The exception is changes confined to package or flake attributes, with no change to
+module configuration or service behavior: document these in `docs/release-notes.md`.
+Do not add a config-version notice or bump solely for these changes.
+
 For each entry:
 
 - `version` is the next release (bump only the last component). Append at the end of
@@ -187,6 +191,10 @@ On every change, re-check whether the docs (`README.md`, `docs/`, `dev/README.md
 new feature or a behaviour change MUST be reflected in the docs, in the same PR.
 Pages under `docs/` must be listed in `docs/SUMMARY.md` to appear in the mdBook build.
 
+- Release notes: record notable release changes, including package and flake-attribute
+  changes, in `docs/release-notes.md` under `## <version>`, newest version first.
+  Add to the upcoming release; edit released sections only to fix errors. Link to
+  `docs/upgrading.md` for configuration migrations instead of duplicating their steps.
 - Upgrade notes: every `changes` entry with a non-trivial migration gets text in
   `docs/upgrading.md`. Each version has one `## Upgrading to config version <version>`
   section, newest version first, ending with the line that sets `configVersion`.

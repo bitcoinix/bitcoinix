@@ -186,6 +186,12 @@ matches `versions.json`. Run
 A release is a signed, annotated git tag and nothing else. There are no release archives
 and no GitHub release assets. Signing needs the maintainer's key, so this cannot run in CI.
 
+Before tagging, review the version's section in [the release notes](../docs/release-notes.md)
+and make sure it covers notable changes, including package and flake-attribute changes.
+Breaking module or service changes also need a `changes` entry in
+`modules/versioning.nix`, with non-trivial migrations documented in
+[the upgrading guide](../docs/upgrading.md).
+
 ```bash
 helper/make-release.sh <version>    # e.g. 0.1.0, without the leading "v"
 git push origin v<version>          # manual, the script never pushes

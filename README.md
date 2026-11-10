@@ -109,6 +109,7 @@ For changes on `master`, see [docs/](docs/).
 * [Installation](https://docs.bitcoinix.net/install.html)
 * [Configuration and maintenance](https://docs.bitcoinix.net/configuration.html)
 * [Upgrading](https://docs.bitcoinix.net/upgrading.html)
+* [Release notes](docs/release-notes.md) (includes upcoming changes)
 * [Using services](https://docs.bitcoinix.net/services.html)
 * [FAQ](https://docs.bitcoinix.net/faq.html)
 

@@ -1,5 +1,8 @@
 # Release notes
 
+For configuration migrations reported during evaluation, follow the
+[upgrading guide](upgrading.md).
+
 ## 0.1.6
 
 RTL now uses the nixpkgs package. Replace explicit flake references to
