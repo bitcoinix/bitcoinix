@@ -5,6 +5,11 @@ For configuration migrations reported during evaluation, follow the
 
 ## 0.1.6
 
+bitcoinix now uses a single `nixpkgs` input tracking `nixos-unstable` for its system
+and packages. `nix-bitcoin.useVersionLockedPkgs` defaults to `true`. Review the
+[0.1.6 migration guide](upgrading.md#upgrading-to-config-version-016) for the system
+input, package customization, and systemd-nspawn changes.
+
 RTL now uses the nixpkgs package. Replace explicit flake references to
 `packages.<system>.rtl` or `legacyPackages.<system>.rtl` with
 `legacyPackages.<system>.pinned.rtl`. For example, build it with
@@ -16,16 +21,18 @@ TrustedCoin now uses the nixpkgs package. Replace explicit flake references to
 `legacyPackages.<system>.pinned.trustedcoin`. For example, build it with
 `nix build '.#legacyPackages.aarch64-linux.pinned.trustedcoin'` (or `x86_64-linux`).
 The plugin still uses `nix-bitcoin.pkgs.trustedcoin` automatically.
+The pinned package carries a local initialization patch until a release includes
+the [upstream startup fix](https://github.com/nbd-wtf/trustedcoin/pull/44).
 
-Trezor now uses the unmodified nixpkgs-unstable package. Replace explicit package
+Trezor now uses the unmodified nixpkgs package. Replace explicit package
 references to `nix-bitcoin.pkgs.pyPkgs.nbPython3PackagesWithUnlockedEcdsa.trezor`
 with `nix-bitcoin.pkgs.nbPython3Packages.trezor`. The
 `services.hardware-wallets.trezor` option selects it automatically; `trezorctl`
 remains available. HWI retains its separate ECDSA exception.
 
-`nbPython3Packages` now uses nixpkgs-unstable's Python interpreter and package set,
+`nbPython3Packages` now uses the single nixpkgs input's Python interpreter and package set,
 including `pyln-bolt7`, `pyln-client`, `pyln-proto` and `pylightning`. Their versions
-are selected by nixpkgs-unstable independently of the Core Lightning daemon.
+are selected by nixpkgs independently of the Core Lightning daemon.
 In custom configurations, build Python environments with the matching interpreter,
 for example:
 

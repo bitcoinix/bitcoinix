@@ -153,7 +153,7 @@ Run `helper/update-flake.sh` to update all flake inputs. It also regenerates
 selected `version` and nixpkgs `channel` (`unstable`). Versioned local
 packages exported by the flake are also included, with `channel` set to `local`.
 
-`nbPython3Packages` uses `pkgsUnstable.python3Packages`, including `pyln-bolt7`,
+`nbPython3Packages` uses `pkgs.python3Packages` from the single unstable package set, including `pyln-bolt7`,
 `pyln-client`, `pyln-proto` and `pylightning`. Python Core Lightning plugins use
 the matching unstable interpreter and dependencies. Trezor also uses this package
 set. HWI uses the separate package set with the ECDSA exception in
