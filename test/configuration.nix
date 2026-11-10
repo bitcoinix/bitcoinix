@@ -270,6 +270,83 @@ let
     (evaluate {
       services.clightning = { enable = true; replication = { enable = true; } // replication; };
     }).warnings;
+  lndconnectOnion = {
+    services.lnd = { enable = true; lndconnect = { enable = true; onion = true; }; };
+  };
+  lndconnectNoOperator = evaluate lndconnectOnion;
+  lndconnectWithOperator = evaluate {
+    imports = [ lndconnectOnion ];
+    nix-bitcoin.operator.enable = true;
+  };
+  lnconnectNoOperator = evaluate {
+    services.clightning = {
+      enable = true;
+      plugins.clnrest = { enable = true; lnconnect = { enable = true; onion = true; }; };
+    };
+  };
+  # An existing account named as the operator, with the operator role disabled
+  operatorAccountOnion = {
+    imports = [ lndconnectOnion ];
+    users.users.alice.isNormalUser = true;
+    nix-bitcoin.operator.name = "alice";
+    services.clightning = {
+      enable = true;
+      # Don't conflict with the lnd p2p port
+      port = 9736;
+      plugins.clnrest = { enable = true; lnconnect = { enable = true; onion = true; }; };
+    };
+  };
+  operatorAccountRoleDisabled = evaluate operatorAccountOnion;
+  # The same, with the account defined under an attribute that isn't its login name
+  operatorRenamedAccountRoleDisabled = evaluate {
+    imports = [ lndconnectOnion ];
+    users.users.account = { name = "alice"; isNormalUser = true; };
+    nix-bitcoin.operator.name = "alice";
+    services.clightning = {
+      inherit (operatorAccountOnion.services.clightning) enable port plugins;
+    };
+  };
+  # The migration that docs/upgrading.md describes for a disabled role
+  operatorAccountGrant = {
+    imports = [ operatorAccountOnion ];
+    nix-bitcoin.onionAddresses.access.alice = [ "clnrest" ];
+    users.users.alice.extraGroups = [ "clightning" ];
+  };
+  operatorAccountExplicitAccess = evaluate operatorAccountGrant;
+  # Whether a config written for the last release passes the versioning check
+  passesVersionCheckAt = version: module: (builtins.tryEval (evaluate {
+    imports = [ module ];
+    nix-bitcoin.configVersion = version;
+  }).system.stateVersion).success;
+  # Whether a 0.1.5 config gets the notice whose message contains `phrase`.
+  # The versioning throw is a definition of `system`, which the module check
+  # forces on any config access, so skip the check here.
+  hasNotice = phrase: module: lib.any (lib.hasInfix phrase) (evaluate {
+    imports = [ module ];
+    nix-bitcoin.configVersion = "0.1.5";
+    _module.check = false;
+  }).nix-bitcoin.versioning.incompatibleChanges;
+  hasOperatorAccessNotice = hasNotice "lnconnect-clnrest now gives the operator user";
+  hasAccessUsersNotice = hasNotice "now accepts only users that are defined";
+  # A user that exists only outside `users.users`, for example via useradd or LDAP
+  onionAccessExternalUser = {
+    nix-bitcoin.onionAddresses.access.external-user = [ "bitcoind" ];
+  };
+  onionAccessUnknownUser = evaluate {
+    nix-bitcoin.onionAddresses.access."no-such-user" = [ "bitcoind" ];
+  };
+  # The access key is a login name, which can differ from the attribute name
+  onionAccessLoginName = {
+    users.users.account = { name = "renamed-user"; isNormalUser = true; };
+    nix-bitcoin.onionAddresses.access."renamed-user" = [ "bitcoind" ];
+  };
+  onionAccessRenamedUser = evaluate onionAccessLoginName;
+  onionAccessDisabledUser = evaluate {
+    users.users.disabled-user = { isNormalUser = true; enable = false; };
+    nix-bitcoin.onionAddresses.access."disabled-user" = [ "bitcoind" ];
+  };
+  getOnionAccessUsers = config:
+    lib.sort lib.lessThan (builtins.attrNames config.nix-bitcoin.onionAddresses.access);
   getBitcoinDefaults = config: with config.services.bitcoind; {
     inherit network port listen;
     rpc = { inherit (rpc) address port allowip; };
@@ -586,6 +663,117 @@ let
       expected = {
         zstd = [ true true false ];
         none = [ true true false ];
+      };
+    };
+    testLndconnectWithoutOperator = {
+      expr = {
+        failed = failedAssertions lndconnectNoOperator;
+        users = getOnionAccessUsers lndconnectNoOperator;
+      };
+      expected = { failed = []; users = [ lndconnectNoOperator.services.lnd.user ]; };
+    };
+    testLndconnectWithOperator = {
+      expr = getOnionAccessUsers lndconnectWithOperator;
+      expected = with lndconnectWithOperator;
+        lib.sort lib.lessThan [ services.lnd.user nix-bitcoin.operator.name ];
+    };
+    testLnconnectOnionRequiresOperator = {
+      expr = map (lib.hasInfix "nix-bitcoin.operator.enable")
+        (failedAssertions lnconnectNoOperator);
+      expected = [ true ];
+    };
+    testOperatorAccountGetsNoAutomaticAccess = {
+      expr = {
+        users = getOnionAccessUsers operatorAccountRoleDisabled;
+        lnconnectFails = map (lib.hasInfix "lnconnect.onion")
+          (failedAssertions operatorAccountRoleDisabled);
+      };
+      expected = {
+        users = [ operatorAccountRoleDisabled.services.lnd.user ];
+        lnconnectFails = [ true ];
+      };
+    };
+    testOperatorAccountExplicitAccess = {
+      expr = with operatorAccountExplicitAccess; {
+        failed = failedAssertions operatorAccountExplicitAccess;
+        alice = nix-bitcoin.onionAddresses.access.alice;
+      };
+      expected = { failed = []; alice = [ "clnrest" ]; };
+    };
+    # Offer the access hint only when the operator user exists
+    testLnconnectAssertionHints = let
+      hints = config: map (message: {
+        grant = lib.hasInfix "extraGroups" message;
+        defineUser = lib.hasInfix "define the user" message;
+      }) (failedAssertions config);
+    in {
+      expr = {
+        noUser = hints lnconnectNoOperator;
+        existingUser = hints operatorAccountRoleDisabled;
+        renamedAccount = map (lib.hasInfix "users.users.account.extraGroups")
+          (failedAssertions operatorRenamedAccountRoleDisabled);
+      };
+      expected = {
+        noUser = [ { grant = false; defineUser = true; } ];
+        existingUser = [ { grant = true; defineUser = false; } ];
+        renamedAccount = [ true ];
+      };
+    };
+    # lndconnect reads the lnd user's copy, so only the clnrest access is checked
+    testVersioningOperatorAccess = {
+      expr = {
+        clnrest = hasOperatorAccessNotice operatorAccountOnion;
+        lndOnly = hasOperatorAccessNotice {
+          imports = [ lndconnectOnion ];
+          users.users.alice.isNormalUser = true;
+          nix-bitcoin.operator.name = "alice";
+        };
+        explicitAccess = hasOperatorAccessNotice operatorAccountGrant;
+        # An operator account from outside `users.users`, for example via LDAP
+        externalOperator = hasOperatorAccessNotice {
+          imports = [ lndconnectOnion ];
+          nix-bitcoin.operator.name = "alice";
+          services.clightning = {
+            enable = true;
+            port = 9736;
+            plugins.clnrest = { enable = true; lnconnect = { enable = true; onion = true; }; };
+          };
+        };
+      };
+      expected = {
+        clnrest = true; lndOnly = false; explicitAccess = false; externalOperator = true;
+      };
+    };
+    testOnionAccessRejectsUnknownUser = {
+      expr = map (lib.hasInfix "no-such-user") (failedAssertions onionAccessUnknownUser);
+      expected = [ true ];
+    };
+    testOnionAccessAcceptsLoginName = {
+      expr = failedAssertions onionAccessRenamedUser;
+      expected = [ ];
+    };
+    testOnionAccessRejectsDisabledUser = {
+      expr = map (lib.hasInfix "disabled-user") (failedAssertions onionAccessDisabledUser);
+      expected = [ true ];
+    };
+    # Before 0.1.6, the access could name users that aren't defined or enabled in `users.users`
+    testVersioningOnionAccessUndefinedUser = {
+      expr = {
+        undefined = hasAccessUsersNotice onionAccessExternalUser;
+        current = passesVersionCheckAt "0.1.6" onionAccessExternalUser;
+        currentFails = map (lib.hasInfix "external-user")
+          (failedAssertions (evaluate {
+            imports = [ onionAccessExternalUser ];
+            nix-bitcoin.configVersion = "0.1.6";
+          }));
+        defined = hasAccessUsersNotice onionAccessLoginName;
+        disabled = hasAccessUsersNotice {
+          users.users.disabled-user = { isNormalUser = true; enable = false; };
+          nix-bitcoin.onionAddresses.access."disabled-user" = [ "bitcoind" ];
+        };
+      };
+      expected = {
+        undefined = true; current = true; currentFails = [ true ]; defined = false; disabled = true;
       };
     };
     testMempoolCustomUser = {

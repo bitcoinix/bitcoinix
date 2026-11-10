@@ -25,6 +25,67 @@ This fetches the latest release, verifies the signature on its release tag and u
 It refuses to switch to a release older than the one currently pinned. To downgrade on purpose,
 run `fetch-release.sh` with `releaseVersion=<version>` and write its output to `nix-bitcoin-release.nix`.
 
+## Upgrading to config version 0.1.6
+
+`services.lnd.lndconnect.onion` and
+`services.clightning.plugins.clnrest.lnconnect.onion` now give the operator user
+access to the `lnd-rest` and `clnrest` onion addresses only when
+`nix-bitcoin.operator.enable` is set. This matches the access to the other onion
+addresses. Before, the operator user received this access whenever it existed,
+for example when `nix-bitcoin.operator.name` named an existing account and the
+operator role was disabled. When the operator user didn't exist at all, the
+`onion-addresses` service failed and published no onion address for anyone.
+
+`lndconnect` isn't affected. It runs as the lnd user and reads the lnd user's copy
+of the address. With the operator role disabled, only `lnconnect-clnrest` reads the
+address from the operator user's directory. `nodeinfo` reads it too, but it enables
+the operator role itself. So with `clnrest.lnconnect.onion` enabled, evaluation
+fails unless the operator user has `clnrest` access. If you use it with the operator
+role disabled, choose one of the following:
+
+- Enable the operator role. It declares `users.users.<operator name>` as a normal
+  user and merges into an existing declaration under that attribute, but also adds
+  the operator's groups and its permission to run commands as service users. Don't
+  use it if the account is declared under another attribute or comes from outside
+  `users.users`, since NixOS would then manage it with its defaults:
+  ```nix
+  nix-bitcoin.operator.enable = true;
+  ```
+- Keep the role disabled and grant only the onion address access:
+  ```nix
+  nix-bitcoin.onionAddresses.access.<operator name> = [ "clnrest" ];
+  ```
+  `lnconnect-clnrest` also reads the admin rune, which only the `clightning` group
+  can read. Without the role, run `lnconnect-clnrest` as root, or add the user to
+  this group:
+  ```nix
+  users.users.<operator account>.extraGroups = [ "clightning" ];
+  ```
+  `<operator account>` is the `users.users` attribute that defines the account. It's
+  usually the operator name.
+  Members of this group can read the admin rune and use the clightning RPC socket,
+  so they have full control over the node.
+- If the operator account is disabled in `users.users`, enable it and use one of
+  the options above. If it comes from outside `users.users`, for example from
+  LDAP, and you can't declare it (see below), set `nix-bitcoin.operator.name` to
+  an enabled account in `users.users` and use one of the options above for it, or
+  disable `clnrest.lnconnect.onion`.
+
+`nix-bitcoin.onionAddresses.access` now accepts only users that are defined and
+enabled in `users.users`, and evaluation fails if it names any other user. Before,
+it also accepted accounts created outside the configuration, for example with
+`useradd` or via LDAP, because the `onion-addresses` service looked the names up
+at runtime. For each such user, either remove it from
+`nix-bitcoin.onionAddresses.access`, or declare the account in `users.users`.
+NixOS then manages the account and applies its defaults to anything you leave out,
+so declare its current settings: `isNormalUser` or `isSystemUser`, `uid`, the
+primary `group` and its `users.groups` entry with the current `gid`,
+`extraGroups`, `description`, `home`, `homeMode` and `shell`. With
+`users.mutableUsers = false`, NixOS also manages the password, so declare it too
+if the account uses one.
+
+After migrating your configuration, set `nix-bitcoin.configVersion = "0.1.6";`.
+
 ## Upgrading to config version 0.1.5
 
 Currencyrate, rebalance and mempool's `settings.CORE_RPC.PASSWORD` each
