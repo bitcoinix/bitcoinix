@@ -25,7 +25,7 @@ This fetches the latest release, verifies the signature on its release tag and u
 It refuses to switch to a release older than the one currently pinned. To downgrade on purpose,
 run `fetch-release.sh` with `releaseVersion=<version>` and write its output to `nix-bitcoin-release.nix`.
 
-## Upgrading to config version 0.1.6
+## Upgrading to config version 0.2.0
 
 bitcoinix now bases its systems and packages on unstable nixpkgs only. The single
 `nixpkgs` input tracks `nixos-unstable`; remove any follows declarations targeting
@@ -73,7 +73,7 @@ Without it, `lightning_hsmd` aborts during startup. The bitcoinix container exam
 and test runner already set this flag. The normal memory-lock limit still applies;
 no additional capability is needed.
 
-After addressing these changes, set `nix-bitcoin.configVersion = "0.1.6";`.
+After addressing these changes, set `nix-bitcoin.configVersion = "0.2.0";`.
 
 ## Upgrading to config version 0.1.6
 

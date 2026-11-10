@@ -148,10 +148,13 @@ be covered by the [checks without a VM](../test/README.md#checks-without-a-vm).
 ## Updating dependencies
 
 Run `helper/update-flake.sh` to update all flake inputs. It also regenerates
-[`pkgs/pinned.nix`](../pkgs/pinned.nix) and
 [`versions.json`](../versions.json), which maps each pinned package name to its
 selected `version` and nixpkgs `channel` (`unstable`). Versioned local
 packages exported by the flake are also included, with `channel` set to `local`.
+
+Nixpkgs service packages and their overrides are selected in the `pinned`
+attribute set in [`pkgs/default.nix`](../pkgs/default.nix). The manifest reads
+their versions directly from that selection.
 
 `nbPython3Packages` uses `pkgs.python3Packages` from the single unstable package set, including `pyln-bolt7`,
 `pyln-client`, `pyln-proto` and `pylightning`. Python Core Lightning plugins use
@@ -172,8 +175,7 @@ The second command regenerates the package versions table that
 `versions.json`, add its release link to `helper/gen-docs-versions.sh`; the script fails
 without it.
 
-CI checks that `pkgs/pinned.nix` matches what `helper/update-flake.sh` generates, that
-`versions.json` matches the locked inputs and local packages, and that the docs table
+CI checks that `versions.json` matches the selected nixpkgs and local packages, and that the docs table
 matches `versions.json`. Run
 `./test/ci/check-versions.sh` to check it locally without updating dependencies.
 

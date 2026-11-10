@@ -106,10 +106,9 @@ sudo ./test/run-tests.sh container          # fast container; needs systemd + ro
   defaults to true and selects the flake's pinned unstable nixpkgs for services.
 - Always update `flake.lock` via `helper/update-flake.sh`; never hand-edit it or
   run `nix flake update` / `nix flake lock` directly. The helper keeps
-  `pkgs/pinned.nix`, `versions.json` and `docs/versions-table.md` in sync with
-  the locked inputs.
-- `pkgs/pinned.nix` is **generated** by `helper/update-flake.sh` (all listed packages
-  come from the single unstable nixpkgs input) — don't hand-edit it.
+  `versions.json` and `docs/versions-table.md` in sync with the locked inputs.
+- `pkgs/default.nix` selects nixpkgs service packages in its `pinned` attribute set
+  and applies local overrides. The version manifest reads this selection directly.
 - Only `x86_64-linux` and `aarch64-linux` are supported and tested.
 - No Nix formatter/linter is set up; `nix flake check` and `./test/shellcheck.sh`
   are the static checks. Shellcheck also covers shebang'd extensionless files.

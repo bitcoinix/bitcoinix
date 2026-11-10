@@ -28,7 +28,23 @@ let self = {
   # Internal pkgs
   krops = import ./krops { inherit pkgs; };
 
-  pinned = (import ./pinned.nix pkgs) // {
+  pinned = {
+    inherit (pkgs)
+      bitcoind
+      btcpayserver
+      charge-lnd
+      clboss
+      clightning
+      extra-container
+      fulcrum
+      lnd
+      lndconnect
+      lndinit
+      nbxplorer
+      rtl;
+
+    inherit pkgs;
+
     trustedcoin = pkgs.trustedcoin.overrideAttrs (old: {
       patches = (old.patches or []) ++ [ ./trustedcoin/wait-for-initialization.patch ];
     });
