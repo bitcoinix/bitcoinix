@@ -266,7 +266,7 @@ in {
       isSystemUser = true;
       group = cfg.btcpayserver.group;
       extraGroups = [ cfg.nbxplorer.group ]
-                    ++ optional (cfg.btcpayserver.lightningBackend == "clightning") cfg.clightning.user;
+                    ++ optional (cfg.btcpayserver.lightningBackend == "clightning") cfg.clightning.group;
       home = cfg.btcpayserver.dataDir;
     };
     users.groups.${cfg.btcpayserver.group} = {};
