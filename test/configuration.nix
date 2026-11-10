@@ -121,6 +121,135 @@ let
       settings.CORE_RPC.PASSWORD = lib.mkForce "literal-password";
     };
   };
+  wireguardLndconnect = {
+    imports = [ ../modules/presets/wireguard.nix ];
+    services.lnd = { enable = true; lndconnect.enable = true; };
+  };
+  wireguardNftablesIptablesBackend = evaluate {
+    imports = [ wireguardLndconnect ];
+    networking.nftables.enable = true;
+    networking.firewall.backend = "iptables";
+  };
+  wireguardNftablesIptables = {
+    imports = [ wireguardLndconnect ];
+    networking.nftables.enable = true;
+    networking.firewall.backend = "iptables";
+    networking.firewall.package = pkgs.iptables;
+  };
+  wireguardNftablesIptablesPackage = evaluate wireguardNftablesIptables;
+  wireguardNftablesIptablesExtraPackage = evaluate {
+    imports = [ wireguardLndconnect ];
+    networking.nftables.enable = true;
+    networking.firewall.backend = "iptables";
+    networking.firewall.extraPackages = [ pkgs.iptables ];
+  };
+  wireguardNftablesRuleset = evaluate {
+    imports = [ wireguardNftablesIptables ];
+    networking.nftables.ruleset = "table inet extra { }";
+  };
+  wireguardNftablesOldStateVersion = evaluate {
+    imports = [ wireguardNftablesIptables ];
+    system.stateVersion = lib.mkForce "23.05";
+  };
+  wireguardNftablesTables = evaluate {
+    imports = [ wireguardNftablesIptables ];
+    networking.nftables.tables.extra = { family = "inet"; content = ""; };
+  };
+  wireguardNftablesIptablesTable = evaluate {
+    imports = [ wireguardNftablesIptables ];
+    networking.nftables.tables.filter = { family = "ip"; content = ""; };
+  };
+  wireguardNftablesIptablesLegacy = {
+    imports = [ wireguardLndconnect ];
+    networking.nftables.enable = true;
+    networking.firewall.backend = "iptables";
+    networking.firewall.package = pkgs.iptables-legacy;
+  };
+  wireguardNftablesIptablesLegacyRuleset = evaluate {
+    imports = [ wireguardNftablesIptablesLegacy ];
+    networking.nftables.ruleset = "table inet extra { }";
+  };
+  wireguardNftablesIptablesLegacyTable = evaluate {
+    imports = [ wireguardNftablesIptablesLegacy ];
+    networking.nftables.tables.filter = { family = "ip"; content = ""; };
+  };
+  wireguardNftablesIptablesLegacyExtraPackageRuleset = evaluate {
+    imports = [ wireguardLndconnect ];
+    networking.nftables.enable = true;
+    networking.firewall.backend = "iptables";
+    networking.firewall.extraPackages = [ pkgs.iptables-legacy ];
+    networking.nftables.ruleset = "table inet extra { }";
+  };
+  wireguardNftablesIptablesBeforeLegacyRuleset = evaluate {
+    imports = [ wireguardLndconnect ];
+    networking.nftables.enable = true;
+    networking.firewall.backend = "iptables";
+    networking.firewall.extraPackages = [ pkgs.iptables pkgs.iptables-legacy ];
+    networking.nftables.ruleset = "table inet extra { }";
+  };
+  # An iptables-nft package under another name still runs first
+  wireguardNftablesRenamedIptablesRuleset = evaluate {
+    imports = [ wireguardLndconnect ];
+    networking.nftables.enable = true;
+    networking.firewall.backend = "iptables";
+    networking.firewall.package = pkgs.iptables.overrideAttrs { pname = "iptables-nft"; };
+    networking.firewall.extraPackages = [ pkgs.iptables-legacy ];
+    networking.nftables.ruleset = "table inet extra { }";
+  };
+  # The legacy build comes first on the PATH, so it runs
+  wireguardNftablesIptablesAfterLegacyRuleset = evaluate {
+    imports = [ wireguardLndconnect ];
+    networking.nftables.enable = true;
+    networking.firewall.backend = "iptables";
+    networking.firewall.extraPackages = [ pkgs.iptables-legacy pkgs.iptables ];
+    networking.nftables.ruleset = "table inet extra { }";
+  };
+  wireguardNftablesRenamedIptablesExtraPackageRuleset = evaluate {
+    imports = [ wireguardLndconnect ];
+    networking.nftables.enable = true;
+    networking.firewall.backend = "iptables";
+    networking.firewall.extraPackages = [
+      (pkgs.iptables.overrideAttrs { pname = "iptables-nft"; })
+      pkgs.iptables-legacy
+    ];
+    networking.nftables.ruleset = "table inet extra { }";
+  };
+  # An iptables-nft package under any other name counts as iptables-nft
+  wireguardNftablesCustomIptablesRuleset = evaluate {
+    imports = [ wireguardLndconnect ];
+    networking.nftables.enable = true;
+    networking.firewall.backend = "iptables";
+    networking.firewall.package = pkgs.iptables.overrideAttrs { pname = "xtables-nft"; };
+    networking.firewall.extraPackages = [ pkgs.iptables-legacy ];
+    networking.nftables.ruleset = "table inet extra { }";
+  };
+  # A wrapper without "tables" in its name
+  wireguardNftablesWrappedIptablesRuleset = evaluate {
+    imports = [ wireguardLndconnect ];
+    networking.nftables.enable = true;
+    networking.firewall.backend = "iptables";
+    networking.firewall.package = pkgs.symlinkJoin { name = "fw-tools"; paths = [ pkgs.iptables ]; };
+    networking.firewall.extraPackages = [ pkgs.iptables-legacy ];
+    networking.nftables.ruleset = "table inet extra { }";
+  };
+  # The service's PATH replaced directly
+  wireguardNftablesIptablesForcedPathRuleset = evaluate {
+    imports = [ wireguardNftablesIptablesLegacy ];
+    systemd.services.firewall.environment.PATH =
+      lib.mkForce (lib.makeBinPath [ pkgs.iptables pkgs.coreutils ]);
+    networking.nftables.ruleset = "table inet extra { }";
+  };
+  # PATH can be unset and come from serviceConfig.Environment instead
+  wireguardNullPath = evaluate {
+    imports = [ wireguardLndconnect ];
+    systemd.services.firewall.environment.PATH = lib.mkForce null;
+  };
+  # iptables-nft added to the service PATH directly
+  wireguardNftablesIptablesOnServicePathRuleset = evaluate {
+    imports = [ wireguardNftablesIptablesLegacy ];
+    systemd.services.firewall.path = lib.mkBefore [ pkgs.iptables ];
+    networking.nftables.ruleset = "table inet extra { }";
+  };
   customMempoolUser = evaluate {
     services.mempool = { enable = true; user = "mempool-custom"; };
   };
@@ -328,6 +457,93 @@ let
     testNetnsAllowsNftablesWithIptablesPackage = {
       expr = failedAssertions netnsNftablesIptablesPackage;
       expected = [];
+    };
+    testWireguardRejectsNftablesWithIptablesBackend = {
+      expr = map (lib.hasInfix "need `iptables` on the firewall service's PATH")
+        (failedAssertions wireguardNftablesIptablesBackend);
+      expected = [ true ];
+    };
+    testWireguardAllowsNftablesWithIptablesPackage = {
+      expr = failedAssertions wireguardNftablesIptablesPackage;
+      expected = [];
+    };
+    testWireguardAllowsNftablesWithIptablesExtraPackage = {
+      expr = failedAssertions wireguardNftablesIptablesExtraPackage;
+      expected = [];
+    };
+    testWireguardRejectsNftablesRuleset = {
+      expr = map (lib.hasInfix "`networking.nftables.flushRuleset` deletes them")
+        (failedAssertions wireguardNftablesRuleset);
+      expected = [ true ];
+    };
+    testWireguardRejectsNftablesOldStateVersion = {
+      expr = map (lib.hasInfix "`networking.nftables.flushRuleset` deletes them")
+        (failedAssertions wireguardNftablesOldStateVersion);
+      expected = [ true ];
+    };
+    testWireguardAllowsNftablesTables = {
+      expr = failedAssertions wireguardNftablesTables;
+      expected = [];
+    };
+    testWireguardRejectsNftablesIptablesTable = {
+      expr = map (lib.hasInfix "`networking.nftables.tables` replaces ip filter")
+        (failedAssertions wireguardNftablesIptablesTable);
+      expected = [ true ];
+    };
+    testWireguardAllowsNftablesRulesetWithIptablesLegacy = {
+      expr = failedAssertions wireguardNftablesIptablesLegacyRuleset;
+      expected = [];
+    };
+    testWireguardAllowsNftablesIptablesTableWithIptablesLegacy = {
+      expr = failedAssertions wireguardNftablesIptablesLegacyTable;
+      expected = [];
+    };
+    testWireguardAllowsNftablesRulesetWithIptablesLegacyExtraPackage = {
+      expr = failedAssertions wireguardNftablesIptablesLegacyExtraPackageRuleset;
+      expected = [];
+    };
+    testWireguardRejectsNftablesRulesetWithIptablesBeforeLegacy = {
+      expr = map (lib.hasInfix "`networking.nftables.flushRuleset` deletes them")
+        (failedAssertions wireguardNftablesIptablesBeforeLegacyRuleset);
+      expected = [ true ];
+    };
+    testWireguardRejectsNftablesRulesetWithRenamedIptables = {
+      expr = map (lib.hasInfix "`networking.nftables.flushRuleset` deletes them")
+        (failedAssertions wireguardNftablesRenamedIptablesRuleset);
+      expected = [ true ];
+    };
+    testWireguardAllowsNftablesRulesetWithIptablesAfterLegacy = {
+      expr = failedAssertions wireguardNftablesIptablesAfterLegacyRuleset;
+      expected = [];
+    };
+    testWireguardRejectsNftablesRulesetWithRenamedIptablesExtraPackage = {
+      expr = map (lib.hasInfix "`networking.nftables.flushRuleset` deletes them")
+        (failedAssertions wireguardNftablesRenamedIptablesExtraPackageRuleset);
+      expected = [ true ];
+    };
+    testWireguardRejectsNftablesRulesetWithCustomIptables = {
+      expr = map (lib.hasInfix "`networking.nftables.flushRuleset` deletes them")
+        (failedAssertions wireguardNftablesCustomIptablesRuleset);
+      expected = [ true ];
+    };
+    testWireguardRejectsNftablesRulesetWithWrappedIptables = {
+      expr = map (lib.hasInfix "`networking.nftables.flushRuleset` deletes them")
+        (failedAssertions wireguardNftablesWrappedIptablesRuleset);
+      expected = [ true ];
+    };
+    testWireguardRejectsNftablesRulesetWithForcedPath = {
+      expr = map (lib.hasInfix "`networking.nftables.flushRuleset` deletes them")
+        (failedAssertions wireguardNftablesIptablesForcedPathRuleset);
+      expected = [ true ];
+    };
+    testWireguardEvaluatesWithNullPath = {
+      expr = failedAssertions wireguardNullPath;
+      expected = [];
+    };
+    testWireguardRejectsNftablesRulesetWithIptablesOnServicePath = {
+      expr = map (lib.hasInfix "`networking.nftables.flushRuleset` deletes them")
+        (failedAssertions wireguardNftablesIptablesOnServicePathRuleset);
+      expected = [ true ];
     };
     testNetnsRESTAddresses = {
       expr = getRestAddresses netns;

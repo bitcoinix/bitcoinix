@@ -306,6 +306,7 @@ buildable=(
     clightning-replication
     lndPruned
     wireguard-lndconnect
+    wireguardIptablesLegacy
     trustedcoin
 )
 buildable() { buildTests buildable "$@"; }
