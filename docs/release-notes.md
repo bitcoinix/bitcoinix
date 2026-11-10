@@ -35,3 +35,16 @@ config.nix-bitcoin.pkgs.nbPython3Packages.python.withPackages (ps: [ ps.pyln-cli
 
 The built-in Python plugins select this interpreter automatically. The package
 paths under `nbPython3Packages` remain available.
+
+## 0.1.5
+
+The clnrest package has moved from `nix-bitcoin.pkgs.clnrest` to
+`nix-bitcoin.pkgs.clightning-plugins.clnrest`. Update explicit package references
+in custom configurations and scripts. For flake builds, use
+`'.#packages.aarch64-linux.clightning-plugins/clnrest'` (or `x86_64-linux`)
+instead of `'.#packages.aarch64-linux.clnrest'`.
+The default package is selected automatically, including when RTL enables clnrest.
+If you have no custom package references, this rename requires no manual changes.
+
+For this release's configuration and service migrations, see
+[Upgrading to config version 0.1.5](upgrading.md#upgrading-to-config-version-015).

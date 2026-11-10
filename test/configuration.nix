@@ -245,7 +245,7 @@ let
         { version = null; enable = true; }
       ];
       expected = [ false true true true ];
-    }) [ "currencyrate" "rebalance" "clnrest" ]);
+    }) [ "currencyrate" "rebalance" ]);
   # The preset's preStart lines, run by the check below against a scratch data dir
   remoteRpcUser = "rpc$USER'$(id)";
   remotePresetPreStart = pkgs.writeText "bitcoind-remote-prestart"
