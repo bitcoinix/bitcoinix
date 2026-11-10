@@ -1,7 +1,7 @@
 { lib
 , stdenvNoCC
-, nodejs_26
-, nodejs-slim_26
+, nodejs_24
+, nodejs-slim_24
 , fetchFromGitHub
 , fetchNodeModules
 , runCommand
@@ -16,8 +16,8 @@
 , napi-rs-cli
 }:
 rec {
-  nodejs = nodejs_26;
-  nodejsRuntime = nodejs-slim_26;
+  nodejs = nodejs_24;
+  nodejsRuntime = nodejs-slim_24;
 
   version = "3.3.2";
 
@@ -50,7 +50,16 @@ rec {
   mempool-backend = mkDerivationMempool {
     pname = "mempool-backend";
 
-    disallowedReferences = [ nodejs ];
+    buildInputs = [ nodejsRuntime ];
+
+    # Keep build tools and the fetched dependency tree out of the runtime closure.
+    disallowedRequisites = [
+      nodejs
+      nodejsRuntime.npm
+      nodejsRuntime.corepack
+      nodejsRuntime.python
+      nodeModules.backend
+    ];
 
     patches = [
       ./0001-allow-disabling-mining-pool-fetching.patch
@@ -77,7 +86,7 @@ rec {
 
       # Build-time shebang patching selects full Node, which also retains npm.
       # Use the slim runtime for scripts shipped with the backend instead.
-      PATH=${nodejsRuntime}/bin:$PATH patchShebangs --update $out/lib/mempool-backend/node_modules
+      patchShebangs --host --update $out/lib/mempool-backend/node_modules
 
       makeWrapper ${nodejsRuntime}/bin/node $out/bin/mempool-backend \
         --add-flags $out/lib/mempool-backend/index.js
@@ -100,6 +109,9 @@ rec {
   # (`interface Env` and `defaultEnv`)
   mkFrontend = config: mkDerivationMempool {
     pname = "mempool-frontend";
+
+    # The frontend only serves static files and needs no Node.js runtime.
+    disallowedRequisites = [ nodejs nodejsRuntime nodeModules.frontend ];
 
     # The Nix build log is a terminal, so `ng build` (Angular 20) shows its progress
     # spinner, which stalls the build indefinitely.
