@@ -301,7 +301,8 @@ in {
         RestartSec = "10s";
         ReadWritePaths = [ cfg.dataDir ];
         ExecStartPost = let
-          curl = "${pkgs.curl}/bin/curl -fsS --cacert ${cfg.certPath}";
+          # `-q` (must be the first arg) skips curl's config files
+          curl = "${pkgs.curl}/bin/curl -q -fsS --cacert ${cfg.certPath}";
           restUrl = "https://${nbLib.addressWithPort cfg.restAddress cfg.restPort}/v1";
           # Setting macaroon permissions for other users needs root permissions
           # The admin macaroon is passed to curl via a fd because argv is
