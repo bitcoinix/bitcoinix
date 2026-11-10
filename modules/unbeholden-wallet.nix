@@ -35,6 +35,7 @@ let
       example = [ "wallet.example.com" ];
       description = ''
         Names under which the server answers, in addition to `localhost` and IP addresses.
+        Give host names without a port: `wallet.example.com:8443` never matches.
         Add the name of an https reverse proxy in front of the service.
         Other names are refused, so a website can't reach the Electrum relay through DNS rebinding.
       '';

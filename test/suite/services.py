@@ -303,6 +303,10 @@ def test_unbeholden_wallet():
     url = f"{ip('unbeholden-wallet')}:60846"
     wait_for_open_port(ip("unbeholden-wallet"), 60846)
     assert_matches(f"curl {url}", "<title>Unbeholden Wallet</title>")
+    status = f"curl -s -o /dev/null -w '%{{http_code}}' {url}"
+    assert_full_match(f"{status} -H 'Host: evil.example'", "403")
+    for host in test_data["unbeholden-wallet"]["allowedHosts"]:
+        assert_full_match(f"{status} -H 'Host: {host}'", "200")
     # Mainnet fixtures never sync, so their Electrum backend may not listen.
     if "regtest" not in enabled_tests:
         return

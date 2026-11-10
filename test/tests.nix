@@ -143,7 +143,9 @@ let
       };
 
       tests.unbeholden-wallet = cfg.unbeholden-wallet.enable;
-      test.data.unbeholden-wallet.electrumServer = cfg.unbeholden-wallet.electrumServer;
+      test.data.unbeholden-wallet = {
+        inherit (cfg.unbeholden-wallet) electrumServer allowedHosts;
+      };
 
       tests.lnd = cfg.lnd.enable;
       tests.lnd-macaroons = cfg.lnd.enable && cfg.lnd.macaroons != {};
@@ -532,6 +534,7 @@ let
     unbeholden-wallet-electrs = {
       imports = [ scenarios.regtestBase ];
       services.unbeholden-wallet.enable = true;
+      services.unbeholden-wallet.allowedHosts = [ "wallet.test" ];
     };
 
     unbeholden-wallet-fulcrum = {
