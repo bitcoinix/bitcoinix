@@ -6,9 +6,9 @@ function nb() {
 }
 
 # A package defined by nix-bitcoin
-nb .#trustedcoin
+nb .#mempool-backend
 # Equivalent
-nb .#modulesPkgs.trustedcoin
+nb .#modulesPkgs.mempool-backend
 
 # A nix-bitcoin python package
 nb .#nbPython3Packages.pyln-client
@@ -20,10 +20,10 @@ nb .#modulesPkgs.electrs
 
 ## Eval packages
 # Check version
-nix eval .#trustedcoin.version
+nix eval .#mempool-backend.version
 
 # Eval derivation. --raw is needed due to a Nix bug (https://github.com/NixOS/nix/issues/5731)
-nix eval --raw .#trustedcoin; echo
+nix eval --raw .#mempool-backend; echo
 
 # Check the version of a package in the nixpkgs(-unstable) inputs of the nix-bitcoin flake
 nix eval --inputs-from . nixpkgs#electrs.version

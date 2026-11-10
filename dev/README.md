@@ -131,7 +131,7 @@ It's easiest to use an existing service as a template:
 - [electrs.nix](../modules/electrs.nix): a basic service
 - [clightning.nix](../modules/clightning.nix): simple, but covers a few more features.\
   (A CLI binary and a runtime-composed config to include secrets.)
-- [rtl.nix](../modules/rtl.nix): includes a custom package, defined in [pkgs/rtl](../pkgs/rtl).\
+- [mempool.nix](../modules/mempool.nix): includes custom packages, defined in [pkgs/mempool](../pkgs/mempool).\
   Most other services use packages that are already included in nixpkgs.
 
 For generated configs in writable service directories, use `install -T` with an
@@ -152,6 +152,12 @@ Run `helper/update-flake.sh` to update all flake inputs. It also regenerates
 [`versions.json`](../versions.json), which maps each pinned package name to its
 selected `version` and nixpkgs `channel` (`stable` or `unstable`). Versioned local
 packages exported by the flake are also included, with `channel` set to `local`.
+
+`nbPython3Packages` uses `pkgsUnstable.python3Packages`, including `pyln-bolt7`,
+`pyln-client`, `pyln-proto` and `pylightning`. Python Core Lightning plugins use
+the matching unstable interpreter and dependencies. Trezor also uses this package
+set. HWI uses the separate package set with the ECDSA exception in
+[`pkgs/python-packages/default.nix`](../pkgs/python-packages/default.nix).
 
 After changing a local package version, regenerate the manifest without updating
 flake inputs:
@@ -179,6 +185,12 @@ matches `versions.json`. Run
 
 A release is a signed, annotated git tag and nothing else. There are no release archives
 and no GitHub release assets. Signing needs the maintainer's key, so this cannot run in CI.
+
+Before tagging, review the version's section in [the release notes](../docs/release-notes.md)
+and make sure it covers notable changes, including package and flake-attribute changes.
+Breaking module or service changes also need a `changes` entry in
+`modules/versioning.nix`, with non-trivial migrations documented in
+[the upgrading guide](../docs/upgrading.md).
 
 ```bash
 helper/make-release.sh <version>    # e.g. 0.1.0, without the leading "v"

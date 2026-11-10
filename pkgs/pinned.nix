@@ -15,7 +15,9 @@ pkgs: pkgsUnstable:
     fulcrum
     lnd
     lndinit
-    nbxplorer;
+    nbxplorer
+    rtl
+    trustedcoin;
 
   inherit pkgs pkgsUnstable;
 }

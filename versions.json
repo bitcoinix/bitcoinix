@@ -88,11 +88,11 @@
     "version": "2.6.17"
   },
   "rtl": {
-    "channel": "local",
+    "channel": "unstable",
     "version": "0.15.16"
   },
   "trustedcoin": {
-    "channel": "local",
+    "channel": "unstable",
     "version": "0.8.7"
   }
 }

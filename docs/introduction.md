@@ -57,7 +57,8 @@ if you set `nix-bitcoin.useVersionLockedPkgs = true`.
 3. [Configuration and maintenance](configuration.md): customize services and allow external connections.
 4. [Using services](services.md): connect wallets and manage the services.
 5. [Upgrading](upgrading.md): read this before you update bitcoinix.
-6. [FAQ](faq.md)
+6. [Release notes](release-notes.md): review notable changes by release.
+7. [FAQ](faq.md)
 
 Some pages still come from nix-bitcoin and are being reviewed. If something is wrong or doesn't
 work, please [open an issue](https://github.com/bitcoinix/bitcoinix/issues).

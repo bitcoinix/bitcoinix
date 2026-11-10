@@ -14,6 +14,8 @@ newer than your config version, starting with the oldest. Then set
 `nix-bitcoin.configVersion` to the version named in the error message.
 
 ## Updating bitcoinix
+Review the [release notes](./release-notes.md) for changes to packages and flake attributes.
+
 With a [flake-based deployment](./install.md#4-deploy-with-a-flake), verify the new release tag as in
 step 3 of the installation, set it in `flake.nix`, run `nix flake lock` and check the locked commit
 as in step 4.2. Then deploy.
@@ -25,18 +27,9 @@ run `fetch-release.sh` with `releaseVersion=<version>` and write its output to `
 
 ## Upgrading to config version 0.1.5
 
-Currencyrate, rebalance, clnrest and mempool's `settings.CORE_RPC.PASSWORD` each
+Currencyrate, rebalance and mempool's `settings.CORE_RPC.PASSWORD` each
 have a migration notice. Review the changes for each one you use before updating
 your config version.
-
-The clnrest package has moved from `nix-bitcoin.pkgs.clnrest` to
-`nix-bitcoin.pkgs.clightning-plugins.clnrest`. Update explicit package references
-in custom configurations. For flake builds, use
-`'.#packages.aarch64-linux.clightning-plugins/clnrest'` (or `x86_64-linux`)
-instead of `'.#packages.aarch64-linux.clnrest'`.
-The default package is selected automatically.
-The migration notice also applies when RTL enables clnrest automatically. If you
-have no custom package references, this rename requires no manual changes.
 
 The Python currencyrate plugin has been replaced by Rust `cln-currencyrate`.
 Keep `services.clightning.plugins.currencyrate.enable = true`, but update any
