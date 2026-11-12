@@ -134,6 +134,34 @@ let
     }
   '';
 
+  backends = optional cfg.nodes.clightning.enable "clightning" ++
+             optional cfg.nodes.lnd.enable "lnd";
+
+  # Added to the units of the backends, see `systemd.services.rtl`.
+  # `--no-block`: RTL's start waits for the backend's start job, which
+  # includes this command. So a blocking start would deadlock.
+  # Skip the start while the other backend is stopped, stopping or waiting to
+  # restart: RTL's `bindsTo` would start it, during maintenance or before its
+  # `RestartSec`. Its own next start starts RTL.
+  # When RTL can't start, for example because it's masked, RTL stays down
+  # and the backend still starts.
+  startRtl = backend: let
+    systemctl = "${config.systemd.package}/bin/systemctl";
+  in {
+    serviceConfig.ExecStartPost = [
+      (nbLib.rootScript "${backend}-start-rtl" (concatMapStrings (other: ''
+        active=$(${systemctl} show -P ActiveState ${other}.service)
+        sub=$(${systemctl} show -P SubState ${other}.service)
+        case $active/$sub in
+          active/* | activating/start*) ;;
+          *) exit 0 ;;
+        esac
+      '') (remove backend backends) + ''
+        ${systemctl} start --no-block rtl.service || true
+      ''))
+    ];
+  };
+
   inherit (nbLib) optionalAttr;
 
   node = { isLnd, index }: {
@@ -216,10 +244,18 @@ in {
     services.rtl.tor.enforce = mkIf (cfg.extraCurrency != null) false;
 
     systemd.services.rtl = rec {
+      # RTL sends the lnd admin macaroon and the clightning admin rune to its
+      # backends without checking their TLS certificate, so it must only run
+      # while they hold their ports. `bindsTo` with `after` stops RTL whenever
+      # a backend stops, crashes or exits. It doesn't start RTL again when the
+      # backend comes back, so each backend starts RTL from its `ExecStartPost`
+      # (`startRtl`). `after` holds that start until the backend is ready.
+      # Starting RTL through `wantedBy` on the backends would make a backend
+      # that sends STOPPING=1 as it shuts down, like lnd, restart at once
+      # instead of after its `RestartSec`.
+      bindsTo = map (backend: "${backend}.service") backends;
       wantedBy = [ "multi-user.target" ];
-      wants = optional cfg.nodes.clightning.enable "clightning.service" ++
-              optional cfg.nodes.lnd.enable "lnd.service";
-      after = wants ++ [ "nix-bitcoin-secrets.target" ];
+      after = bindsTo ++ [ "nix-bitcoin-secrets.target" ];
       environment.RTL_CONFIG_PATH = cfg.dataDir;
       environment.DB_DIRECTORY_PATH = cfg.dataDir;
       serviceConfig = nbLib.defaultHardening // {
@@ -267,6 +303,9 @@ in {
       } // nbLib.allowedIPAddresses cfg.tor.enforce
         // nbLib.nodejs;
     };
+
+    systemd.services.lnd = mkIf cfg.nodes.lnd.enable (startRtl "lnd");
+    systemd.services.clightning = mkIf cfg.nodes.clightning.enable (startRtl "clightning");
 
     users.users.${cfg.user} = {
       isSystemUser = true;
