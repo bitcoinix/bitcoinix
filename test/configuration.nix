@@ -353,8 +353,7 @@ let
   getOnionAccessUsers = config:
     lib.sort lib.lessThan (builtins.attrNames config.nix-bitcoin.onionAddresses.access);
   getBitcoinDefaults = config: with config.services.bitcoind; {
-    network = config.services.bitcoind.network;
-    inherit port listen;
+    inherit network port listen;
     rpc = { inherit (rpc) address port allowip; };
     rest = { inherit (rest) enable allowNonLocal allowUncheckedConfig; };
   };
