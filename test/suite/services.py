@@ -261,17 +261,20 @@ def test_rtl():
     # The 2FA secret set up in the UI survives a restart
     conf = f"{test_data['rtl-credentials']['dataDir']}/RTL-Config.json"
 
-    def restart_with_secret_2fa(secret):
-        # `cat` writes in place, which keeps the file's owner and mode
-        succeed(
-            f"tmp=$(mktemp) && jq --arg s '{secret}' '.secret2FA = $s' {conf} > $tmp"
-            f" && cat $tmp > {conf} && rm $tmp",
-            "systemctl restart rtl",
-        )
+    def restart_rtl():
+        succeed("systemctl restart rtl")
         assert_running("rtl")
         machine.wait_until_succeeds(
             current_run_log_has_string("rtl", "Server is up and running")
         )
+
+    def restart_with_secret_2fa(secret):
+        # `cat` writes in place, which keeps the file's owner and mode
+        succeed(
+            f"tmp=$(mktemp) && jq --arg s '{secret}' '.secret2FA = $s' {conf} > $tmp"
+            f" && cat $tmp > {conf} && rm $tmp"
+        )
+        restart_rtl()
 
     # RTL reports `enable2FA` to clients before login
     enable_2fa = f"curl -fsS {ip('rtl')}:3000/rtl/api/conf | jq .enable2FA"
@@ -285,6 +288,11 @@ def test_rtl():
     restart_with_secret_2fa("")
     succeed(f"jq -e 'has(\"secret2FA\") | not' {conf}")
     assert_full_match(enable_2fa, "false\n")
+    # A file with two JSON values, which RTL can't parse, isn't carried over
+    succeed(f"""echo '{{"secret2FA": "JBSWY3DPEHPK3PXP"}} {{}}' > {conf}""")
+    restart_rtl()
+    succeed(current_run_log_has_string("rtl", "single JSON object"))
+    succeed(f"jq -e 'has(\"secret2FA\") | not' {conf}")
 
 
 @test("mempool")
