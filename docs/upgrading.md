@@ -103,6 +103,29 @@ restart. Restart other services that read a custom macaroon only at startup; see
 before this change use root key 0, like the admin macaroon, and stay valid. To revoke
 them, see [Revoke all macaroons](./services.md#revoke-all-macaroons).
 
+RTL is now bound to the units of its enabled backends, lnd for
+`services.rtl.nodes.lnd` and clightning for `services.rtl.nodes.clightning`.
+RTL sends the lnd admin macaroon and the clightning admin rune to their REST ports
+without checking the certificate. So it now stops when a backend's unit stops,
+crashes or exits, instead of polling the port of a stopped backend, which another
+local user could take over. A backend's start starts RTL again once all of RTL's
+backends run. Deploying this change restarts each backend that RTL uses once,
+because its unit changes.
+
+With both backends enabled:
+
+- Stopping one backend, for example clightning for maintenance, also stops RTL for
+  the other one.
+- Starting RTL starts a stopped backend too. Leave RTL stopped until the maintenance
+  is done. The backend's own start starts RTL again afterwards.
+
+RTL now keeps the two-factor authentication (2FA) that you set up in its web
+interface across restarts. Before, each restart turned 2FA off without a warning.
+If you lose the authenticator, delete `RTL-Config.json` in RTL's data dir
+(`/var/lib/rtl` by default) and restart RTL. `RTL-Config.json` holds the 2FA
+secret and is now readable only by RTL's user. Before, members of group `rtl`
+could read it too.
+
 After migrating your configuration, set `nix-bitcoin.configVersion = "0.1.6";`.
 
 ## Upgrading to config version 0.1.5

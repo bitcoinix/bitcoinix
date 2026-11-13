@@ -134,6 +134,27 @@ let
     }
   '';
 
+  backends = optional cfg.nodes.clightning.enable "clightning" ++
+             optional cfg.nodes.lnd.enable "lnd";
+
+  # Added to the units of the backends, see `systemd.services.rtl`.
+  # `--no-block`: RTL's start waits for the backend's start job, which
+  # includes this command. So a blocking start would deadlock.
+  # `--job-mode=ignore-requirements`: otherwise RTL's `bindsTo` would also
+  # start the other backend while it's stopped, during maintenance or before
+  # its `RestartSec`. This is safe: systemd starts RTL only while all backends
+  # that it's bound to and ordered after are active. Otherwise the start fails
+  # with "Bound to unit ..., but unit isn't active", and the other backend's
+  # own start starts RTL later. A start queued while the other backend is
+  # starting waits for it.
+  # `-`: when systemctl fails, for example because RTL is masked, the backend
+  # still starts. `+`: run as root, which systemctl needs to start a unit.
+  startRtl = {
+    serviceConfig.ExecStartPost = [
+      "-+${config.systemd.package}/bin/systemctl start --no-block --job-mode=ignore-requirements rtl.service"
+    ];
+  };
+
   inherit (nbLib) optionalAttr;
 
   node = { isLnd, index }: {
@@ -216,10 +237,20 @@ in {
     services.rtl.tor.enforce = mkIf (cfg.extraCurrency != null) false;
 
     systemd.services.rtl = rec {
+      # RTL sends the lnd admin macaroon and the clightning admin rune to its
+      # backends without checking their TLS certificate. So it shouldn't run
+      # while a backend is down, when another local process could take over
+      # the backend's port. `bindsTo` with `after` stops RTL whenever a backend
+      # stops, crashes or exits. It doesn't start RTL again when the backend
+      # comes back, so each backend starts RTL from its `ExecStartPost`
+      # (`startRtl`). `after` holds that start until the backend's start job,
+      # including its readiness checks, has finished.
+      # Starting RTL through `wantedBy` on the backends would make a backend
+      # that sends STOPPING=1 as it shuts down, like lnd, restart at once
+      # instead of after its `RestartSec`.
+      bindsTo = map (backend: "${backend}.service") backends;
       wantedBy = [ "multi-user.target" ];
-      wants = optional cfg.nodes.clightning.enable "clightning.service" ++
-              optional cfg.nodes.lnd.enable "lnd.service";
-      after = wants ++ [ "nix-bitcoin-secrets.target" ];
+      after = bindsTo ++ [ "nix-bitcoin-secrets.target" ];
       environment.RTL_CONFIG_PATH = cfg.dataDir;
       environment.DB_DIRECTORY_PATH = cfg.dataDir;
       serviceConfig = nbLib.defaultHardening // {
@@ -228,9 +259,29 @@ in {
           # the password in its argv, readable by every local user through
           # /proc/<pid>/cmdline while it runs. jq also escapes it as JSON.
           (nbLib.script "rtl-setup-config" ''
-            ${pkgs.jq}/bin/jq --rawfile pw '${secretsDir}/rtl-password' \
-              '.multiPass = ($pw | sub("\n+$"; ""))' ${configFile} \
-              > '${cfg.dataDir}/RTL-Config.json'
+            conf='${cfg.dataDir}/RTL-Config.json'
+            # RTL keeps the 2FA secret set up in its UI in this file as `secret2FA`
+            # and enables 2FA when it is set. So carry it over from the old file,
+            # which jq also reads itself. Ignore a missing or empty file, or one that
+            # jq doesn't read as exactly one object.
+            old=/dev/null
+            if [[ -s $conf ]] && ${pkgs.jq}/bin/jq -es 'length == 1 and (.[0] | type == "object")' "$conf" >/dev/null 2>&1; then
+              old=$conf
+            elif [[ -e $conf ]]; then
+              # For example after a crash while RTL rewrote the file
+              echo "Warning: Ignore '$conf', which isn't a single JSON object." \
+                   "2FA is off until you set it up again." >&2
+            fi
+            # Write to a temp file. `>` would truncate "$conf" before jq reads it.
+            tmp=$(mktemp "$conf.XXXXXX")
+            trap 'rm -f "$tmp"' EXIT
+            ${pkgs.jq}/bin/jq --rawfile pw '${secretsDir}/rtl-password' --slurpfile old "$old" '
+              .multiPass = ($pw | sub("\n+$"; ""))
+              | ($old[0].secret2FA? // null) as $secret
+              | if ($secret | type) == "string" and $secret != ""
+                then .secret2FA = $secret else . end
+            ' ${configFile} > "$tmp"
+            mv -f "$tmp" "$conf"
           '')
         ]
         ++ optional cfg.nodes.lnd.enable
@@ -267,6 +318,9 @@ in {
       } // nbLib.allowedIPAddresses cfg.tor.enforce
         // nbLib.nodejs;
     };
+
+    systemd.services.lnd = mkIf cfg.nodes.lnd.enable startRtl;
+    systemd.services.clightning = mkIf cfg.nodes.clightning.enable startRtl;
 
     users.users.${cfg.user} = {
       isSystemUser = true;

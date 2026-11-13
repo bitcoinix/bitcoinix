@@ -258,6 +258,42 @@ def test_rtl():
         log_has_string("rtl", "Server is up and running")
     )
 
+    # The 2FA secret set up in the UI survives a restart
+    conf = f"{test_data['rtl-credentials']['dataDir']}/RTL-Config.json"
+
+    def restart_rtl():
+        succeed("systemctl restart rtl")
+        assert_running("rtl")
+        machine.wait_until_succeeds(
+            current_run_log_has_string("rtl", "Server is up and running")
+        )
+
+    def restart_with_secret_2fa(secret):
+        # `cat` writes in place, which keeps the file's owner and mode
+        succeed(
+            f"tmp=$(mktemp) && jq --arg s '{secret}' '.secret2FA = $s' {conf} > $tmp"
+            f" && cat $tmp > {conf} && rm $tmp"
+        )
+        restart_rtl()
+
+    # RTL reports `enable2FA` to clients before login
+    enable_2fa = f"curl -fsS {ip('rtl')}:3000/rtl/api/conf | jq .enable2FA"
+
+    restart_with_secret_2fa("JBSWY3DPEHPK3PXP")
+    assert_full_match(f"jq -r .secret2FA {conf}", "JBSWY3DPEHPK3PXP\n")
+    assert_full_match(enable_2fa, "true\n")
+    # The config holds the RTL password and the 2FA secret
+    assert_file_metadata(conf, owner=test_data["rtl-credentials"]["user"], mode="600")
+    # An empty secret is not carried over. This restores the original config.
+    restart_with_secret_2fa("")
+    succeed(f"jq -e 'has(\"secret2FA\") | not' {conf}")
+    assert_full_match(enable_2fa, "false\n")
+    # A file with two JSON values, which RTL can't parse, isn't carried over
+    succeed(f"""echo '{{"secret2FA": "JBSWY3DPEHPK3PXP"}} {{}}' > {conf}""")
+    restart_rtl()
+    succeed(current_run_log_has_string("rtl", "single JSON object"))
+    succeed(f"jq -e 'has(\"secret2FA\") | not' {conf}")
+
 
 @test("mempool")
 def test_mempool():

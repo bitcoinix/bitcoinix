@@ -114,6 +114,7 @@ let
 
       tests.rtl = cfg.rtl.enable;
       tests.rtl-credentials = cfg.rtl.enable;
+      tests.rtl-stops-with-backend = cfg.rtl.enable;
       test.data.rtl-credentials = {
         inherit (cfg.rtl) dataDir user group;
         lnd = if cfg.rtl.nodes.lnd.enable then { inherit (cfg.lnd) networkDir user; } else null;
