@@ -509,7 +509,7 @@ To print the connection URL as text instead, run `lndconnect-wg --url` or
 
 `services.lnd.macaroons.<name>` gives a service its own macaroon with only the
 permissions it needs. Each time lnd starts, bitcoinix creates the macaroon at
-`/run/lnd/<name>.macaroon`, owned by `user`. BTCPay Server and charge-lnd get
+`/run/lnd/<name>.macaroon`, readable only by `user`. BTCPay Server and charge-lnd get
 their macaroons this way.
 
 ```nix

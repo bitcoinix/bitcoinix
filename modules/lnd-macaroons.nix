@@ -15,7 +15,7 @@ let
       options = {
         user = mkOption {
           type = types.str;
-          description = "User who owns the macaroon.";
+          description = "User who owns the macaroon. Only this user can read it.";
         };
         permissions = mkOption {
           type = types.str;
@@ -128,7 +128,9 @@ let
   createMacaroons = nbLib.rootScript "lnd-create-macaroons" ''
     tmpDir=$(mktemp -d /run/lnd-macaroons.XXXXXX)
     trap 'rm -rf "$tmpDir"' EXIT
-    umask ug=r,o=
+    # Only the macaroon's user may read it. The file's group is the user's
+    # primary group, which may be shared. Normal users get `users` by default.
+    umask u=r,go=
 
     # lncli prefers a default profile in ~/.lncli over its flags, and the lnd
     # user owns its home. An empty --profile turns profiles off, but lncli

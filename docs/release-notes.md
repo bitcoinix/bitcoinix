@@ -58,6 +58,10 @@ When you change or remove a macaroon, its old copies stop working when lnd resta
 during the deployment. Copies made before 0.1.6 use root key 0 and stay valid until
 you revoke all macaroons. See [Custom macaroons](services.md#custom-macaroons).
 
+A custom lnd macaroon is now readable only by its `user`. Before, the user's primary
+group could read it too. For a user like `operator`, that's the group `users`, which
+normal users get by default. So other normal users could read the macaroon.
+
 RTL now stops when lnd or clightning stops, crashes or exits. Before, it kept sending
 their admin credentials to the port of a stopped backend. A backend's start starts RTL
 again, and with both backends enabled, both must run.
