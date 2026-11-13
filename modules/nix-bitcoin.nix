@@ -4,15 +4,6 @@ with lib;
 {
   options = {
     nix-bitcoin = {
-      network = mkOption {
-        type = types.enum [ "mainnet" "regtest" ];
-        default = "mainnet";
-        description = ''
-          Bitcoin network used by the deployment's services.
-          Use regtest for a local regression testing network.
-        '';
-      };
-
       pkgs = mkOption {
         type = types.attrs;
         default = (import ../pkgs { inherit pkgs; }).modulesPkgs;

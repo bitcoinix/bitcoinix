@@ -55,7 +55,7 @@ let
   # A host that only imports the modules
   modulesOnly = evaluate {};
   bitcoin = evaluate { services.bitcoind.enable = true; };
-  regtest = evaluate { services.bitcoind.enable = true; nix-bitcoin.network = "regtest"; };
+  regtest = evaluate { services.bitcoind.enable = true; services.bitcoind.network = "regtest"; };
   electrs = evaluate { services.electrs.enable = true; };
   prunedElectrs = evaluate {
     services.electrs.enable = true;
@@ -376,7 +376,7 @@ let
   getOnionAccessUsers = config:
     lib.sort lib.lessThan (builtins.attrNames config.nix-bitcoin.onionAddresses.access);
   getBitcoinDefaults = config: with config.services.bitcoind; {
-    network = config.nix-bitcoin.network;
+    network = config.services.bitcoind.network;
     inherit port listen;
     rpc = { inherit (rpc) address port allowip; };
     rest = { inherit (rest) enable allowNonLocal allowUncheckedConfig; };
@@ -524,7 +524,7 @@ let
     };
     testNetworkRejectsUnsupportedValues = {
       expr = map (network: (builtins.tryEval
-        (evaluate { nix-bitcoin.network = network; }).nix-bitcoin.network).success)
+        (evaluate { services.bitcoind.network = network; }).services.bitcoind.network).success)
         [ "testnet" "signet" "" true ];
       expected = [ false false false false ];
     };
@@ -541,7 +541,7 @@ let
       }).system.stateVersion).success) [
         { services.bitcoind.regtest = true; }
         { services.bitcoind.regtest = false; }
-        { nix-bitcoin.network = "regtest"; }
+        { services.bitcoind.network = "regtest"; }
         {}
       ];
       expected = [ false false true true ];
@@ -549,27 +549,27 @@ let
     testNetworkServiceIntegration = {
       expr = map (network: let
         config = evaluate {
-          nix-bitcoin.network = network;
+          services.bitcoind.network = network;
           services.clightning.enable = true;
           services.lnd.enable = true;
         };
       in {
         inherit (config.services.clightning) networkDir;
         lndNetworkDir = config.services.lnd.networkDir;
-        legacyNetwork = config.services.bitcoind.network;
+        network = config.services.bitcoind.network;
         legacyName = config.services.bitcoind.makeNetworkName "main" "regtest";
       }) [ "mainnet" "regtest" ];
       expected = [
         {
           networkDir = "/var/lib/clightning/bitcoin";
           lndNetworkDir = "/var/lib/lnd/chain/bitcoin/mainnet";
-          legacyNetwork = "mainnet";
+          network = "mainnet";
           legacyName = "main";
         }
         {
           networkDir = "/var/lib/clightning/regtest";
           lndNetworkDir = "/var/lib/lnd/chain/bitcoin/regtest";
-          legacyNetwork = "regtest";
+          network = "regtest";
           legacyName = "regtest";
         }
       ];
