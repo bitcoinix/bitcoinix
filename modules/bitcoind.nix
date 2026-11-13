@@ -12,7 +12,7 @@ let
       };
       port = mkOption {
         type = types.port;
-        default = { mainnet = 8333; regtest = 18444; }.${config.services.bitcoind.network};
+        default = { mainnet = 8333; regtest = 18444; }.${cfg.network};
         defaultText = "8333 on mainnet, 18444 on regtest";
         description = "Port to listen for peer connections.";
       };
@@ -83,7 +83,7 @@ let
         };
         port = mkOption {
           type = types.port;
-          default = { mainnet = 8332; regtest = 18443; }.${config.services.bitcoind.network};
+          default = { mainnet = 8332; regtest = 18443; }.${cfg.network};
           defaultText = "8332 on mainnet, 18443 on regtest";
           description = "Port to listen for JSON-RPC connections.";
         };
@@ -333,7 +333,7 @@ let
 
     startupnotify=/run/current-system/systemd/bin/systemd-notify --ready
 
-    ${optionalString (config.services.bitcoind.network == "regtest") ''
+    ${optionalString (cfg.network == "regtest") ''
       regtest=1
       [regtest]
     ''}
