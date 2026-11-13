@@ -3,6 +3,22 @@
 For configuration migrations reported during evaluation, follow the
 [upgrading guide](upgrading.md).
 
+## 0.2.0
+
+Select the Bitcoin network with `services.bitcoind.network` (`"mainnet"` or
+`"regtest"`) instead of `services.bitcoind.regtest`. The `makeNetworkName` helper
+is replaced by `nix-bitcoin.lib.networkName`, which accepts name overrides and
+passes other network names through unchanged. See the
+[0.2.0 upgrade notes](upgrading.md#upgrading-to-config-version-020).
+
+Mempool's backend and frontend now follow `services.bitcoind.network`, including
+regtest. See the [0.2.0 upgrade notes](upgrading.md#upgrading-to-config-version-020)
+for existing regtest deployments and custom frontend settings.
+
+Charge-LND reads its certificate and macaroon directly, without staging them
+under a synthetic mainnet directory. Users selecting custom credentials with
+`--lnddir` should follow the [0.2.0 upgrade notes](upgrading.md#upgrading-to-config-version-020).
+
 ## 0.1.6
 
 New service: [Unbeholden Wallet](services.md#connect-to-unbeholden-wallet), a watch-only

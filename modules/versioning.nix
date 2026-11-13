@@ -9,6 +9,7 @@
 
 with lib;
 let
+  nbLib = config.nix-bitcoin.lib;
   versioningOptions = {
     nix-bitcoin.configVersion = mkOption {
       type = with types; nullOr str;
@@ -275,7 +276,7 @@ let
         bitcoind = config.services.bitcoind;
       in ''
         bitcoind's RPC authentication cookie has moved from
-        `${bitcoind.dataDir}/${optionalString bitcoind.regtest "regtest/"}.cookie`
+        `${bitcoind.dataDir}/${optionalString (bitcoind.network == "regtest") "regtest/"}.cookie`
         to `/run/bitcoind/.cookie`.
 
         Update external RPC clients and scripts that read the old cookie path.
@@ -338,7 +339,7 @@ let
       version = "0.1.3";
       condition = config.services.electrs.enable;
       message = let
-        dbPath = "${config.services.electrs.dataDir}/${config.services.bitcoind.makeNetworkName "bitcoin" "regtest"}";
+        dbPath = "${config.services.electrs.dataDir}/${nbLib.networkName { mainnet = "bitcoin"; }}";
       in ''
         electrs 0.12.0 uses a new index format and must rebuild its index from scratch.
         It does not convert or delete the old index: until it is removed, electrs
@@ -578,6 +579,45 @@ let
         restart RTL. RTL-Config.json, which holds the 2FA secret, is now readable
         only by RTL's user, not by group rtl.
         See docs/upgrading.md, "Upgrading to config version 0.1.6".
+      '';
+    }
+    {
+      version = "0.2.0";
+      condition = options.services.bitcoind.regtest.isDefined
+        || options.services.bitcoind.makeNetworkName.isDefined;
+      message = ''
+        services.bitcoind.regtest has been replaced by the
+        services.bitcoind.network option. Replace true with services.bitcoind.network = "regtest";
+        or remove the old option for mainnet (the default).
+        The makeNetworkName helper has also been removed. Use
+        nbLib.networkName { mainnet = "bitcoin"; } instead
+        to override mainnet's name while passing other network names through unchanged.
+        See docs/upgrading.md, "Upgrading to config version 0.2.0".
+      '';
+    }
+    {
+      version = "0.2.0";
+      condition = config.services.mempool.enable && config.services.bitcoind.network == "regtest";
+      message = ''
+        Mempool now uses regtest in both its backend and frontend when
+        services.bitcoind.network is "regtest", instead of identifying as mainnet.
+        Mempool automatically clears disk caches labelled mainnet and reloads
+        data from the configured backend. Review any custom frontend network
+        settings or staticContentRoot, then reload the web interface.
+        See docs/upgrading.md, "Upgrading to config version 0.2.0".
+      '';
+    }
+    {
+      version = "0.2.0";
+      condition = config.services.charge-lnd.enable && any
+        (flag: flag == "--lnddir" || hasPrefix "--lnddir=" flag)
+        config.services.charge-lnd.extraFlags;
+      message = ''
+        charge-lnd now receives explicit --tlscert and --macaroon paths.
+        If you use --lnddir in services.charge-lnd.extraFlags to select custom
+        credentials, replace it with --tlscert and --macaroon: --lnddir no
+        longer determines the credential paths.
+        See docs/upgrading.md, "Upgrading to config version 0.2.0".
       '';
     }
   ];

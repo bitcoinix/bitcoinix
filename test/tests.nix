@@ -5,7 +5,8 @@ let
   # Included in all scenarios
   baseConfig = { config, pkgs, ... }: with lib; let
     cfg = config.services;
-    inherit (config.nix-bitcoin.lib.test) mkIfTest;
+    nbLib = config.nix-bitcoin.lib;
+    inherit (nbLib.test) mkIfTest;
   in {
     imports = [
       ./lib/test-lib.nix
@@ -58,7 +59,7 @@ let
       test.data.bitcoind-rest = {
         inherit (cfg.bitcoind.rest) enable;
         rpcPort = cfg.bitcoind.rpc.port;
-        chain = cfg.bitcoind.makeNetworkName "main" "regtest";
+        chain = nbLib.networkName { mainnet = "main"; };
       };
 
       services.bitcoind = {
@@ -138,6 +139,7 @@ let
       '');
 
       tests.mempool = cfg.mempool.enable;
+      test.data.mempool.network = cfg.bitcoind.network;
       services.mempool = {
         electrumServer = "fulcrum";
         settings.MEMPOOL.POOLS_JSON_URL = mkIf config.test.noConnections "disable-pool-fetching";
@@ -468,7 +470,7 @@ let
       tests.lnd-restart-on-clean-exit = config.services.lnd.enable;
       test.data.num_blocks = 100;
 
-      services.bitcoind.regtest = true;
+      services.bitcoind.network = "regtest";
       systemd.services.bitcoind.postStart = mkAfter ''
         cli=${config.services.bitcoind.cli}/bin/bitcoin-cli
         if ! $cli listwallets | ${pkgs.jq}/bin/jq -e 'index("test")'; then

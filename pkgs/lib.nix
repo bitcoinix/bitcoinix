@@ -5,6 +5,10 @@ with lib;
 # See `man systemd.exec` and `man systemd.resource-control` for an explanation
 # of the systemd-related options available through this file.
 let self = {
+  # Override daemon-specific network names, passing other names through unchanged.
+  networkName = overrides:
+    overrides.${config.services.bitcoind.network} or config.services.bitcoind.network;
+
   extraConfigDescription = ''
     User-supplied extraConfig options are unsupported by bitcoinix. They may
     override managed settings or bypass security checks. You take full

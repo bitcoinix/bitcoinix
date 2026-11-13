@@ -93,10 +93,11 @@ let
   };
 
   cfg = config.services.clightning.replication;
+  nbLib = config.nix-bitcoin.lib;
   inherit (config.services) clightning;
 
   secretsDir = config.nix-bitcoin.secretsDir;
-  network = config.services.bitcoind.makeNetworkName "bitcoin" "regtest";
+  network = nbLib.networkName { mainnet = "bitcoin"; };
   user = clightning.user;
   group = clightning.group;
 
