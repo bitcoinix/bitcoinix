@@ -156,7 +156,7 @@ in {
 
     systemd.services.nbxplorer = let
       configFile = builtins.toFile "config" ''
-        network=${config.nix-bitcoin.network}
+        network=${config.services.bitcoind.network}
         btcrpcuser=${cfg.bitcoind.rpc.users.btcpayserver.name}
         btcrpcurl=http://${nbLib.addressWithPort bitcoind.rpc.address cfg.bitcoind.rpc.port}
         btcnodeendpoint=${nbLib.addressWithPort bitcoind.address bitcoind.whitelistedPort}
@@ -204,9 +204,9 @@ in {
 
     systemd.services.btcpayserver = let
       nbExplorerUrl = "http://${nbLib.addressWithPort cfg.nbxplorer.address cfg.nbxplorer.port}/";
-      nbExplorerCookie = "${cfg.nbxplorer.dataDir}/${({ mainnet = "Main"; regtest = "RegTest"; }.${config.nix-bitcoin.network})}/.cookie";
+      nbExplorerCookie = "${cfg.nbxplorer.dataDir}/${({ mainnet = "Main"; regtest = "RegTest"; }.${config.services.bitcoind.network})}/.cookie";
       configFile = builtins.toFile "btcpayserver-config" (''
-        network=${config.nix-bitcoin.network}
+        network=${config.services.bitcoind.network}
         bind=${cfg.btcpayserver.address}
         port=${toString cfg.btcpayserver.port}
         socksendpoint=${config.nix-bitcoin.torClientAddressWithPort}
@@ -216,7 +216,7 @@ in {
       '' + optionalString (cfg.btcpayserver.rootpath != null) ''
         rootpath=${cfg.btcpayserver.rootpath}
       '' + optionalString (cfg.btcpayserver.lightningBackend == "clightning") ''
-        btclightning=type=clightning;server=unix:///${cfg.clightning.dataDir}/${({ mainnet = "bitcoin"; regtest = "regtest"; }.${config.nix-bitcoin.network})}/lightning-rpc
+        btclightning=type=clightning;server=unix:///${cfg.clightning.dataDir}/${({ mainnet = "bitcoin"; regtest = "regtest"; }.${config.services.bitcoind.network})}/lightning-rpc
       '' + optionalString (cfg.btcpayserver.lightningBackend == "lnd")
         (
           "btclightning=type=lnd-rest;" +

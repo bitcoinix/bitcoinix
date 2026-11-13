@@ -12,7 +12,7 @@ let
       };
       port = mkOption {
         type = types.port;
-        default = { mainnet = 8333; regtest = 18444; }.${config.nix-bitcoin.network};
+        default = { mainnet = 8333; regtest = 18444; }.${config.services.bitcoind.network};
         defaultText = "8333 on mainnet, 18444 on regtest";
         description = "Port to listen for peer connections.";
       };
@@ -83,7 +83,7 @@ let
         };
         port = mkOption {
           type = types.port;
-          default = { mainnet = 8332; regtest = 18443; }.${config.nix-bitcoin.network};
+          default = { mainnet = 8332; regtest = 18443; }.${config.services.bitcoind.network};
           defaultText = "8332 on mainnet, 18443 on regtest";
           description = "Port to listen for JSON-RPC connections.";
         };
@@ -146,12 +146,16 @@ let
         };
       };
       network = mkOption {
-        readOnly = true;
-        default = config.nix-bitcoin.network;
+        type = types.enum [ "mainnet" "regtest" ];
+        default = "mainnet";
+        description = ''
+          Bitcoin network used by the deployment's services.
+          Use regtest for a local regression testing network.
+        '';
       };
       makeNetworkName = mkOption {
         readOnly = true;
-        default = mainnet: regtest: { inherit mainnet regtest; }.${config.nix-bitcoin.network};
+        default = mainnet: regtest: { inherit mainnet regtest; }.${config.services.bitcoind.network};
       };
       proxy = mkOption {
         type = types.nullOr types.str;
@@ -333,7 +337,7 @@ let
 
     startupnotify=/run/current-system/systemd/bin/systemd-notify --ready
 
-    ${optionalString (config.nix-bitcoin.network == "regtest") ''
+    ${optionalString (config.services.bitcoind.network == "regtest") ''
       regtest=1
       [regtest]
     ''}

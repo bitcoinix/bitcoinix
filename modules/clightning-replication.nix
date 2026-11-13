@@ -96,7 +96,7 @@ let
   inherit (config.services) clightning;
 
   secretsDir = config.nix-bitcoin.secretsDir;
-  network = ({ mainnet = "bitcoin"; regtest = "regtest"; }.${config.nix-bitcoin.network});
+  network = ({ mainnet = "bitcoin"; regtest = "regtest"; }.${config.services.bitcoind.network});
   user = clightning.user;
   group = clightning.group;
 

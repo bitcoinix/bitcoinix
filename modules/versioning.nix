@@ -275,7 +275,7 @@ let
         bitcoind = config.services.bitcoind;
       in ''
         bitcoind's RPC authentication cookie has moved from
-        `${bitcoind.dataDir}/${optionalString (config.nix-bitcoin.network == "regtest") "regtest/"}.cookie`
+        `${bitcoind.dataDir}/${optionalString (config.services.bitcoind.network == "regtest") "regtest/"}.cookie`
         to `/run/bitcoind/.cookie`.
 
         Update external RPC clients and scripts that read the old cookie path.
@@ -338,7 +338,7 @@ let
       version = "0.1.3";
       condition = config.services.electrs.enable;
       message = let
-        dbPath = "${config.services.electrs.dataDir}/${({ mainnet = "bitcoin"; regtest = "regtest"; }.${config.nix-bitcoin.network})}";
+        dbPath = "${config.services.electrs.dataDir}/${({ mainnet = "bitcoin"; regtest = "regtest"; }.${config.services.bitcoind.network})}";
       in ''
         electrs 0.12.0 uses a new index format and must rebuild its index from scratch.
         It does not convert or delete the old index: until it is removed, electrs
@@ -585,7 +585,7 @@ let
       condition = options.services.bitcoind.regtest.isDefined;
       message = ''
         services.bitcoind.regtest has been replaced by the deployment-wide
-        nix-bitcoin.network option. Replace true with nix-bitcoin.network = "regtest";
+        services.bitcoind.network option. Replace true with services.bitcoind.network = "regtest";
         or remove the old option for mainnet (the default).
         See docs/upgrading.md, "Upgrading to config version 0.2.0".
       '';

@@ -27,9 +27,9 @@ run `fetch-release.sh` with `releaseVersion=<version>` and write its output to `
 
 ## Upgrading to config version 0.2.0
 
-Replace `services.bitcoind.regtest = true;` with `nix-bitcoin.network = "regtest";`.
+Replace `services.bitcoind.regtest = true;` with `services.bitcoind.network = "regtest";`.
 If you explicitly set `services.bitcoind.regtest = false;`, remove it or set
-`nix-bitcoin.network = "mainnet";` (the default). The new option selects the
+`services.bitcoind.network = "mainnet";` (the default). The new option selects the
 network for the whole deployment; existing network-specific paths and ports
 are unchanged.
 

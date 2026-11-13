@@ -20,7 +20,7 @@ let
 in {
   imports = [
     (mkRemovedOptionModule [ "services" "bitcoind" "regtest" ] ''
-      Use `nix-bitcoin.network = "regtest";` instead of `services.bitcoind.regtest = true;`.
+      Use `services.bitcoind.network = "regtest";` instead of `services.bitcoind.regtest = true;`.
       For false, remove the old option; the network defaults to "mainnet".
     '')
 

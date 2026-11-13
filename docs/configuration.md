@@ -16,7 +16,7 @@ With a flake-based deployment, you deploy with `nixos-rebuild` or `colmena` as d
 The deployment defaults to mainnet. To use a local regression testing network, set:
 
 ```nix
-nix-bitcoin.network = "regtest";
+services.bitcoind.network = "regtest";
 ```
 
 The supported values are `"mainnet"` and `"regtest"`. Bitcoin and the services
