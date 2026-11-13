@@ -33,6 +33,9 @@
             # Always start container along with the container host
             autoStart = true;
 
+            # Core Lightning needs these calls to lock its signing keys in memory.
+            extraFlags = [ "--system-call-filter=@memlock" ];
+
             # This assigns the following addresses:
             # Host IP:      10.250.0.1
             # Container IP: 10.250.0.2

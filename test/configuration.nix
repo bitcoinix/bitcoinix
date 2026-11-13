@@ -314,17 +314,14 @@ let
   };
   operatorAccountExplicitAccess = evaluate operatorAccountGrant;
   # Whether a config written for the last release passes the versioning check
-  passesVersionCheckAt = version: module: (builtins.tryEval (evaluate {
+  passesVersionCheckAt = version: module: (evaluate {
     imports = [ module ];
     nix-bitcoin.configVersion = version;
-  }).system.stateVersion).success;
+  }).nix-bitcoin.versioning.incompatibleChanges == [];
   # Whether a 0.1.5 config gets the notice whose message contains `phrase`.
-  # The versioning throw is a definition of `system`, which the module check
-  # forces on any config access, so skip the check here.
   hasNotice = phrase: module: lib.any (lib.hasInfix phrase) (evaluate {
     imports = [ module ];
     nix-bitcoin.configVersion = "0.1.5";
-    _module.check = false;
   }).nix-bitcoin.versioning.incompatibleChanges;
   hasOperatorAccessNotice = hasNotice "lnconnect-clnrest now gives the operator user";
   hasAccessUsersNotice = hasNotice "now accepts only users that are defined";
@@ -438,13 +435,12 @@ let
   };
   pluginMigrationTests = lib.listToAttrs (map (plugin:
     lib.nameValuePair "testClightningPluginMigration-${plugin}" {
-      expr = map (case: (builtins.tryEval (evaluate {
-        nix-bitcoin.configVersion = case.version;
+      expr = map (case: passesVersionCheckAt case.version {
         services.clightning = {
           enable = true;
           plugins.${plugin}.enable = case.enable;
         };
-      }).system.stateVersion).success) [
+      }) [
         { version = "0.1.4"; enable = true; }
         { version = "0.1.4"; enable = false; }
         { version = "0.1.5"; enable = true; }
@@ -473,6 +469,35 @@ let
     testLockedPackagesDefault = {
       expr = bitcoin.nix-bitcoin.useVersionLockedPkgs;
       expected = true;
+    };
+    testUnstableDefaultNotices = {
+      expr = {
+        reversePath = hasNotice "checkReversePath from true" {};
+        strict = hasNotice "checkReversePath from true" {
+          networking.firewall.checkReversePath = true;
+        };
+        noFirewall = hasNotice "checkReversePath from true" {
+          networking.firewall.enable = false;
+        };
+        fuse = hasNotice "disables programs.fuse.enable" {};
+        explicitFuse = hasNotice "disables programs.fuse.enable" {
+          programs.fuse.enable = true;
+        };
+        replication = hasNotice "disables programs.fuse.enable" {
+          services.clightning = {
+            enable = true;
+            replication = {
+              enable = true;
+              encrypt = true;
+              local.directory = "/var/backup/clightning";
+            };
+          };
+        };
+      };
+      expected = {
+        reversePath = true; strict = false; noFirewall = false;
+        fuse = true; explicitFuse = false; replication = false;
+      };
     };
     testI2pSAM = {
       expr = let
@@ -692,10 +717,9 @@ let
     testMempoolRpcPasswordMigration = let
       password.CORE_RPC.PASSWORD = lib.mkForce "literal-password";
     in {
-      expr = map (case: (builtins.tryEval (evaluate {
-        nix-bitcoin.configVersion = case.version;
+      expr = map (case: passesVersionCheckAt case.version {
         services.mempool = { enable = true; inherit (case) settings; };
-      }).system.stateVersion).success) [
+      }) [
         { version = "0.1.4"; settings = password; }
         { version = "0.1.4"; settings = {}; }
         { version = "0.1.5"; settings = password; }
@@ -814,11 +838,11 @@ let
     testVersioningOnionAccessUndefinedUser = {
       expr = {
         undefined = hasAccessUsersNotice onionAccessExternalUser;
-        current = passesVersionCheckAt "0.1.6" onionAccessExternalUser;
+        current = passesVersionCheckAt "0.2.0" onionAccessExternalUser;
         currentFails = map (lib.hasInfix "external-user")
           (failedAssertions (evaluate {
             imports = [ onionAccessExternalUser ];
-            nix-bitcoin.configVersion = "0.1.6";
+            nix-bitcoin.configVersion = "0.2.0";
           }));
         defined = hasAccessUsersNotice onionAccessLoginName;
         disabled = hasAccessUsersNotice {

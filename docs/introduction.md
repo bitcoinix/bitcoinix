@@ -35,9 +35,12 @@ release notes, tag or source directory:
 
 All nixpkgs packages come from the single `nixpkgs` input, which tracks `nixos-unstable`.
 Channel `local` packages are built by bitcoinix from pinned sources, except `hwi`, which wraps
-nixpkgs' package. By default, services use the locked unstable package set, including local builds.
-If you set `nix-bitcoin.useVersionLockedPkgs = false`, they use your system's nixpkgs instead;
-use unstable there too. The listed versions then depend on your system's nixpkgs revision.
+nixpkgs' package. The flake NixOS module uses the locked unstable package set by default,
+including for local builds. Non-flake module imports and
+`nix-bitcoin.useVersionLockedPkgs = false` use your system's unstable nixpkgs instead.
+Overriding bitcoinix's `nixpkgs` input also replaces its tested pin. In these setups,
+service versions depend on your chosen revision; review the
+[package migration guidance](upgrading.md#upgrading-to-config-version-020) before updating it.
 
 ## Security
 

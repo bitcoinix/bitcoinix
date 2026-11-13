@@ -115,7 +115,9 @@ in {
     };
     services.i2pd.settings.sam.address = bridgeIp;
     # The upstream check starts i2pd in the build sandbox, where nb-br's
-    # address does not exist. Validate the namespace listener in VM tests.
+    # address does not exist. Custom setting errors are only caught at startup.
+    # Validate the generated listener in the i2p VM scenario; see the 0.2.0
+    # migration notes for checks after changing custom settings.
     services.i2pd.checkConfig = mkDefault false;
     networking.firewall.interfaces.nb-br.allowedTCPPorts = [
       config.services.tor.client.socksListenAddress.port

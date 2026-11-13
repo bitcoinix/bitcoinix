@@ -38,14 +38,43 @@ Switch your system's nixpkgs input to unstable before evaluating this release.
 If your system follows `bitcoinix/nixpkgs`, as the deployment examples do, updating
 bitcoinix moves the whole OS from NixOS 26.05 to unstable, not only service packages.
 
-`nix-bitcoin.useVersionLockedPkgs` now defaults to `true`, including for local
-package builds. Your system's `nixpkgs.overlays` and `nixpkgs.config` no longer
-apply to the pinned service packages, including bitcoind, lnd and clightning.
+With the flake's NixOS module, `nix-bitcoin.useVersionLockedPkgs` now defaults to
+`true`, including for local package builds. Your system's `nixpkgs.overlays` and
+`nixpkgs.config` no longer apply to the pinned service packages, including bitcoind,
+lnd and clightning.
 Review any security patches or other customizations supplied through overlays:
 set `nix-bitcoin.useVersionLockedPkgs = false` to use your system's customized
 unstable package set, or explicitly override the affected service's package.
+
+The formerly separate unstable service packages (including lnd and clightning)
+now also follow your system's nixpkgs when you set this option to `false` or
+import the NixOS modules without flakes. Non-flake module imports do not provide
+the `useVersionLockedPkgs` option. If your flake sets
+`bitcoinix.inputs.nixpkgs.follows = "nixpkgs"`, even the option's default `true`
+uses your chosen input instead of bitcoinix's tested revision. This is different
+from having your system's `nixpkgs.follows = "bitcoinix/nixpkgs"`, which keeps the
+bitcoinix pin.
+
+In these setups, pin your own nixpkgs and review service versions before each
+update against the [tested versions](versions-table.md). An update can upgrade
+or downgrade a daemon independently of bitcoinix; an older lnd or clightning may
+refuse a database written by a newer version. Follow the daemon's migration
+instructions and do not assume rolling back nixpkgs can roll back its database.
+
 Keep your existing `system.stateVersion`: it controls state compatibility and does
 not select the nixpkgs channel.
+
+The OS update also changes these NixOS defaults:
+
+- `networking.firewall.checkReversePath` changes from `true` (strict) to `"loose"`.
+  Loose checking accepts a source reachable through any interface, rather than
+  requiring the return route to use the incoming interface. Set
+  `networking.firewall.checkReversePath = true;` to retain strict checking, after
+  checking compatibility with your routing and VPN configuration.
+- `programs.fuse.enable` defaults to `false`. If you use non-root FUSE mounts,
+  such as an sshfs backup target, set `programs.fuse.enable = true;` to keep the
+  privileged mount helper. Encrypted Core Lightning replication enables it
+  automatically; unrelated operator mounts need their own setting.
 
 Custom calls to `lib.mkNbPkgs` or `pkgs/default.nix` must remove `pkgsUnstable`.
 Use `pinned.pkgs` in place of `pinned.pkgsUnstable`. The deployment shell no longer
@@ -59,6 +88,15 @@ sets its address for namespace isolation.
 The web console, HTTP proxy and SOCKS proxy remain disabled by default, and
 NTCP2/SSU2 address publication remains disabled. Explicit opt-ins through
 `services.i2pd.settings` still take precedence.
+
+With namespace isolation, bitcoinix disables `services.i2pd.checkConfig` by
+default: the upstream build-time check starts i2pd and cannot bind the namespace
+bridge address inside the build sandbox. Custom setting errors can therefore
+surface only when the service starts. After changing I2P settings, check
+`systemctl status i2pd` and `journalctl -u i2pd`, and verify bitcoind can reach
+the SAM listener. The `i2p` VM scenario exercises this bridge listener and
+`i2pLocal` covers the loopback listener with the upstream check enabled; these
+tests do not validate your custom configuration.
 
 On the unstable package/system base, Core Lightning in systemd-nspawn needs
 memory-locking syscalls allowed to keep its signing keys out of swap. For a custom
