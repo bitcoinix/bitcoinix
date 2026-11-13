@@ -105,10 +105,16 @@ empty files, for example with `find /etc/nix-bitcoin-secrets -maxdepth 1 -type f
   `rpcauth=` line, as printed by Bitcoin Core's `share/rpcauth/rpcauth.py`. Or set
   `allowEmpty` for them.
 
-While lnd has no `wallet.db`, an empty `lnd-seed-mnemonic` in lnd's data dir,
-which a failed seed creation of an earlier version could leave, now stops lnd with
-an error, and so does a symlink there to a missing file. If lnd never ran a wallet
-from that seed, delete the file, and lnd creates a new seed. Otherwise, restore it
+lnd now stops with an error when `wallet.db` in lnd's network dir isn't a regular
+file, for example a symlink to a moved or unmounted wallet. Before, lnd tried to
+create a new wallet there. Restore the wallet, or remove the entry if lnd never ran
+a wallet from it.
+
+While lnd has no `wallet.db`, a symlink to a missing file at `lnd-seed-mnemonic` in
+lnd's data dir now stops lnd with an error. An empty `lnd-seed-mnemonic`, which a
+failed seed creation of an earlier version could leave, already stopped lnd with an
+`lndinit` error. Now the error names the file. In both cases, if lnd never ran a
+wallet from that seed, delete it, and lnd creates a new seed. Otherwise, restore it
 from a backup.
 
 lnd now creates its wallet in a temporary directory. Before, a failed wallet

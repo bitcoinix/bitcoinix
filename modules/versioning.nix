@@ -533,8 +533,9 @@ let
         and says how to restore or replace it.
         With the bitcoind-remote preset and `nix-bitcoin.generateSecrets = false`,
         this includes the unused local `bitcoin-HMAC-*` files.
-        While lnd has no wallet.db, it now stops when its seed file is empty or a
-        symlink to a missing file.
+        lnd now stops when wallet.db isn't a regular file, for example a symlink
+        to a missing file. While lnd has no wallet.db, it also stops when its seed
+        file is a symlink to a missing file.
         See docs/upgrading.md, "Upgrading to config version 0.1.6".
       '';
     }

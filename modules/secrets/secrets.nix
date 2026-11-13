@@ -79,8 +79,7 @@ let
               default = false;
               description = ''
                 Whether `setup-secrets` accepts an empty file for this secret.
-                Otherwise, an empty file fails setup like a missing one, so that
-                no service gets an empty credential.
+                Otherwise, an empty file fails setup like a missing one.
               '';
             };
           };

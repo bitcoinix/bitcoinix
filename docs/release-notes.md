@@ -39,10 +39,12 @@ paths under `nbPython3Packages` remain available.
 `setup-secrets` now fails when a declared secret file is empty or isn't a regular
 file. Set `nix-bitcoin.secrets.<name>.allowEmpty = true` for a secret that may be
 empty. Secret generation now fails when a TLS, WireGuard or replication SSH private
-key is empty, and it doesn't replace the key. lnd now fails to start when its seed
-file is empty and it has no wallet yet. It creates its seed and wallet through
-temporary files, so a failed wallet creation no longer leaves a partial `wallet.db`
-that blocks later starts. See
+key is empty, and it doesn't replace the key. lnd now stops when `wallet.db` isn't a
+regular file, for example a symlink to a missing file. While lnd has no wallet yet,
+it also stops when its seed file is a symlink to a missing file, and its error for an
+empty seed file names the file. lnd now creates its seed and wallet through temporary
+files, so a failed wallet creation no longer leaves a partial `wallet.db` that
+blocks later starts. See
 [Upgrading to config version 0.1.6](upgrading.md#upgrading-to-config-version-016).
 
 ## 0.1.5
