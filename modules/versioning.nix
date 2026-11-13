@@ -522,6 +522,19 @@ let
       version = "0.1.6";
       condition = config.services.rtl.enable;
       message = ''
+        RTL is now bound to the units of its enabled backends (lnd,
+        clightning). It stops when one of them stops, crashes or exits, and a
+        backend's start starts it again once all of its backends run. With
+        both backends enabled, stopping one of them also stops RTL for the
+        other one, and starting RTL starts a stopped backend too. Deploying
+        this change restarts each backend that RTL uses once.
+        See docs/upgrading.md, "Upgrading to config version 0.1.6".
+      '';
+    }
+    {
+      version = "0.1.6";
+      condition = config.services.rtl.enable;
+      message = ''
         RTL now keeps the two-factor authentication that you set up in its web
         interface across restarts. Before, each restart turned it off. To turn it
         off without the authenticator, delete RTL-Config.json in RTL's data dir and

@@ -186,6 +186,14 @@ Open `http://<onion address>` in Tor Browser, using the address from
 The password is in `$secretsDir/rtl-password`.
 See: [Secrets dir](./configuration.md#secrets-dir)
 
+RTL is bound to the units of its backends. It stops when the lnd or clightning unit
+stops, crashes or exits, and the backend's next start starts it again. With both
+backends enabled, stopping one of them also stops RTL for the other one, and
+starting RTL starts a stopped backend too. So during maintenance of one backend,
+leave RTL stopped. RTL doesn't check its backends' certificates, so a local process
+that takes the clnrest port before clnrest does can still get the clightning rune.
+lnd stops when it can't use its REST port, so RTL then stays down.
+
 Two-factor authentication that you set up in RTL stays on across restarts. If you
 lose the authenticator, delete `RTL-Config.json` in RTL's data dir
 (`/var/lib/rtl` by default) and restart RTL. bitcoinix then writes a new one
