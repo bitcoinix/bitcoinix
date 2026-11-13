@@ -38,7 +38,7 @@ Replace calls such as `config.services.bitcoind.makeNetworkName "bitcoin" "regte
 with the new helper, specifying only names that need overriding:
 
 ```nix
-config.nix-bitcoin.lib.networkName { mainnet = "bitcoin"; }
+nbLib.networkName { mainnet = "bitcoin"; }
 ```
 
 This returns `"bitcoin"` on mainnet and `"regtest"` on regtest. Unmapped network
