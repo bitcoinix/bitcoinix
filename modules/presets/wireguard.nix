@@ -278,11 +278,15 @@ in {
         local name=$1
         local priv=wg-$name-private-key
         local pub=wg-$name-public-key
-        if [[ ! -e $priv ]]; then
-          ${wg} genkey > $priv
+        local derivedPub
+        if isAbsent "$priv"; then
+          writeSecret "$priv" ${wg} genkey
         fi
-        if [[ $priv -nt $pub ]]; then
-          ${wg} pubkey < $priv > $pub
+        checkKey "$priv" "the WireGuard clients set up with the current keys"
+        # Derive the public key on every run, so that it always matches
+        derivedPub=$(${wg} pubkey < "$priv")
+        if [[ $(cat "$pub" 2>/dev/null) != "$derivedPub" ]]; then
+          writeSecret "$pub" echo "$derivedPub"
         fi
       }
       makeWireguardKey server

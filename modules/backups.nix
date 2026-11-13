@@ -133,11 +133,20 @@ in {
         databases = cfg.postgresqlDatabases;
       };
 
-      nix-bitcoin.secrets.backup-encryption-env.user = "root";
+      nix-bitcoin.secrets.backup-encryption-env = {
+        user = "root";
+        # A supplied env file may set nothing, e.g. with duplicity's `--no-encryption`
+        allowEmpty = true;
+      };
       nix-bitcoin.generateSecretsCmds.backups = ''
         makePasswordSecret backup-encryption-password
         if [[ backup-encryption-password -nt backup-encryption-env ]]; then
-           echo "PASSPHRASE=$(cat backup-encryption-password)" > backup-encryption-env
+           backupPassphrase=$(<backup-encryption-password)
+           if [[ ! $backupPassphrase ]]; then
+             echo "Error: Secret file 'backup-encryption-password' contains no passphrase" >&2
+             exit 1
+           fi
+           writeSecret backup-encryption-env echo "PASSPHRASE=$backupPassphrase"
         fi
       '';
 

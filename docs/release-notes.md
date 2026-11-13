@@ -36,6 +36,16 @@ config.nix-bitcoin.pkgs.nbPython3Packages.python.withPackages (ps: [ ps.pyln-cli
 The built-in Python plugins select this interpreter automatically. The package
 paths under `nbPython3Packages` remain available.
 
+`setup-secrets` now fails when a declared secret file is empty or isn't a regular
+file. Set `nix-bitcoin.secrets.<name>.allowEmpty = true` for a secret that may be
+empty. Secret generation now fails when a TLS, WireGuard or replication SSH private
+key is empty, and it doesn't replace the key. lnd now stops when `wallet.db` isn't a
+regular file, for example a symlink to a missing file. While lnd has no wallet yet,
+it also stops when its seed file is a symlink to a missing file, and its error for an
+empty seed file names the file. lnd now creates its seed and wallet through temporary
+files, so a failed wallet creation no longer leaves a partial `wallet.db` that
+blocks later starts.
+
 Each custom lnd macaroon (`services.lnd.macaroons`, used by BTCPay Server and
 charge-lnd) now has its own root key. You can revoke one of them, and the other
 macaroons and lnd's admin macaroon stay valid. The revocation needs an lnd restart.

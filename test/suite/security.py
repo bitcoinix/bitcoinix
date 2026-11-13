@@ -68,7 +68,8 @@ def test_secrets_no_argv():
     succeed(f"rm {password_file} {hmac_file}", f"mkdir {password_file}")
     status, out = machine.execute(f"{generate} 2>&1")
     assert status != 0 and "IsADirectoryError" in out, out
-    succeed(f"[[ ! -e {hmac_file} && ! -e {hmac_file}.tmp ]]")
+    # No HMAC file and no temp file is left behind
+    succeed(f"[[ ! -e {hmac_file} ]]", f"! ls -d {hmac_file}.* 2>/dev/null")
 
     # An empty HMAC file is regenerated, even when it is newer than the password
     succeed(f"rmdir {password_file}",
@@ -82,12 +83,43 @@ def test_secrets_no_argv():
     assert_str_matches(succeed(f"cat {password_file}"), r"\A[a-zA-Z0-9]{20}\n\Z")
     assert_hmac_matches("public")
 
+    if "lnd-key" in files:
+        key, cert = f"{gen_dir}/lnd-key", f"{gen_dir}/lnd-cert"
+        key_pub = succeed(f"openssl pkey -in {key} -pubout")
+        # A missing, empty or broken cert is rebuilt from the key
+        for break_cert in [f"rm {cert}", f"truncate -s 0 {cert}", f"echo broken > {cert}"]:
+            succeed(break_cert, generate)
+            assert succeed(f"openssl x509 -in {cert} -noout -pubkey") == key_pub
+        # A directory in place of the cert fails generation and stays empty
+        succeed(f"rm {cert}", f"mkdir {cert}")
+        machine.fail(generate)
+        succeed(f"rmdir {cert}", generate)
+        # An empty key, or a symlink to a missing file, fails and is kept:
+        # a new key breaks clients that pinned the cert
+        succeed(f"mv {key} {key}.orig")
+        for break_key, kept in [(f": > {key}", f"! -s {key}"), (f"ln -s missing {key}", f"-L {key}")]:
+            succeed(break_key)
+            status, out = machine.execute(f"{generate} 2>&1")
+            assert status != 0 and "Key file 'lnd-key' is empty or a symlink" in out, out
+            succeed(f"[[ {kept} ]]", f"rm {key}")
+        succeed(f"mv {key}.orig {key}")
+
+    # A passphrase that reads as empty never goes to the backup env file
+    if "backup-encryption-env" in files:
+        env, passphrase = f"{gen_dir}/backup-encryption-env", f"{gen_dir}/backup-encryption-password"
+        env_before = succeed(f"cat {env}")
+        succeed(f"echo > {passphrase}")
+        status, out = machine.execute(f"{generate} 2>&1")
+        assert status != 0 and "contains no passphrase" in out, out
+        assert succeed(f"cat {env}") == env_before
+        succeed(f"rm {passphrase}", generate)
+
     # A password file with only a newline is not regenerated (it isn't empty),
     # but must not get an HMAC of the empty password either
     succeed(f"rm {hmac_file}", f"echo > {password_file}")
     status, out = machine.execute(f"{generate} 2>&1")
     assert status != 0 and "contains no password" in out, out
-    succeed(f"[[ ! -e {hmac_file} && ! -e {hmac_file}.tmp ]]")
+    succeed(f"[[ ! -e {hmac_file} ]]", f"! ls -d {hmac_file}.* 2>/dev/null")
     succeed(f"rm -rf {gen_dir} {gen_dir}.trace")
 
 
@@ -624,26 +656,32 @@ def test_setup_secrets():
 def test_setup_secrets_supplied():
     # This scenario has generateSecrets = false and supplied secret files.
     # Losing one must deny access even to the other, otherwise readable secret.
+    # An empty one must too: services would get an empty credential.
     assert_full_match("runuser -u nobody -- cat /secrets/first", "first-secret")
     assert_full_match("runuser -u nobody -- cat /secrets/second", "second-secret")
-    succeed(
-        "mv /secrets/second /root/setup-secrets-supplied-orig",
-        "systemctl reset-failed setup-secrets",
-    )
-    machine.fail("systemctl restart setup-secrets")
-    assert_matches("systemctl show setup-secrets --value -p Result", "^exit-code$")
-    assert_matches("journalctl -b -u setup-secrets", "Secret file 'second' is missing")
-    assert_file_metadata("/secrets", owner="root", group="root", mode="700")
-    assert_file_metadata("/secrets/first", owner="nobody", group="nogroup", mode="440")
-    machine.fail("runuser -u nobody -- cat /secrets/first")
+    # Declared with `allowEmpty`
+    assert_file_metadata("/secrets/empty", owner="nobody", group="nogroup", mode="440")
+    orig = "/root/setup-secrets-supplied-orig"
+    for problem, break_secret in [
+        ("missing", f"mv /secrets/second {orig}"),
+        ("not a regular file", f"mv /secrets/second {orig} && mkdir /secrets/second"),
+        ("empty", f"cp -p /secrets/second {orig} && truncate -s 0 /secrets/second"),
+    ]:
+        succeed(break_secret, "systemctl reset-failed setup-secrets")
+        machine.fail("systemctl restart setup-secrets")
+        assert_matches("systemctl show setup-secrets --value -p Result", "^exit-code$")
+        assert_matches("journalctl -b -u setup-secrets", f"Secret file 'second' is {problem}")
+        assert_file_metadata("/secrets", owner="root", group="root", mode="700")
+        assert_file_metadata("/secrets/first", owner="nobody", group="nogroup", mode="440")
+        machine.fail("runuser -u nobody -- cat /secrets/first")
 
-    succeed(
-        "mv /root/setup-secrets-supplied-orig /secrets/second",
-        "systemctl reset-failed setup-secrets",
-        "systemctl restart setup-secrets",
-        "systemctl start nix-bitcoin-secrets.target",
-    )
-    assert_file_metadata("/secrets", owner="root", group="root", mode="751")
-    assert_file_metadata("/secrets/second", owner="nobody", group="nogroup", mode="440")
-    assert_full_match("runuser -u nobody -- cat /secrets/first", "first-secret")
-    assert_full_match("runuser -u nobody -- cat /secrets/second", "second-secret")
+        succeed(
+            f"rm -rf /secrets/second && mv {orig} /secrets/second",
+            "systemctl reset-failed setup-secrets",
+            "systemctl restart setup-secrets",
+            "systemctl start nix-bitcoin-secrets.target",
+        )
+        assert_file_metadata("/secrets", owner="root", group="root", mode="751")
+        assert_file_metadata("/secrets/second", owner="nobody", group="nogroup", mode="440")
+        assert_full_match("runuser -u nobody -- cat /secrets/first", "first-secret")
+        assert_full_match("runuser -u nobody -- cat /secrets/second", "second-secret")

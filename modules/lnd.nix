@@ -249,19 +249,57 @@ in {
         )
         install -T -m 600 <(echo "$conf") '${cfg.dataDir}/lnd.conf'
 
-        if [[ ! -f ${networkDir}/wallet.db ]]; then
+        wallet='${networkDir}/wallet.db'
+        if [[ -e $wallet || -L $wallet ]]; then
+          # Never create a wallet in place of an entry that might lead to the
+          # real one, such as a symlink to a moved or unmounted wallet
+          if [[ ! -f $wallet ]]; then
+            echo "Error: The lnd wallet '$wallet' isn't a regular file, or is a symlink" \
+                 "to a missing file. Restore the wallet, or remove the entry if lnd" \
+                 "never ran a wallet from it." >&2
+            exit 1
+          fi
+        else
           seed='${cfg.dataDir}/lnd-seed-mnemonic'
 
-          if [[ ! -f "$seed" ]]; then
+          if [[ ! -e $seed && ! -L $seed ]]; then
             echo "Create lnd seed"
-            (umask u=r,go=; ${lndinit} gen-seed > "$seed")
+            seedTmp=$(mktemp -- "$seed.XXXXXX")
+            if ! ${lndinit} gen-seed > "$seedTmp"; then
+              rm -f -- "$seedTmp"
+              exit 1
+            fi
+            chmod 400 "$seedTmp"
+            # The seed must be on disk before a wallet is created from it
+            sync "$seedTmp"
+            mv -fT -- "$seedTmp" "$seed"
+            sync '${cfg.dataDir}'
+          elif [[ ! -s $seed ]]; then
+            # A missing wallet.db doesn't prove that no wallet ran from this seed,
+            # for example with a restored channel state. So never replace it.
+            echo "Error: The lnd seed file '$seed' is empty or a symlink to a missing file." \
+                 "If lnd never ran a wallet from it, delete it to create a new seed." \
+                 "Otherwise, restore it from a backup." >&2
+            exit 1
           fi
 
           echo "Create lnd wallet"
-          ${lndinit} -v init-wallet \
-            --file.seed="$seed" \
-            --file.wallet-password='${secretsDir}/lnd-wallet-password' \
-            --init-file.output-wallet-dir='${cfg.networkDir}'
+          # Create the wallet in a temp dir and move it into place after success.
+          # A partial wallet.db would skip wallet creation on every later start.
+          # Like lndinit, create missing parent dirs only accessible to lnd.
+          (umask 077 && mkdir -p '${networkDir}')
+          walletTmp=$(mktemp -d -- '${networkDir}/wallet-init.XXXXXX')
+          if ! ${lndinit} -v init-wallet \
+               --file.seed="$seed" \
+               --file.wallet-password='${secretsDir}/lnd-wallet-password' \
+               --init-file.output-wallet-dir="$walletTmp"; then
+            rm -rf -- "$walletTmp"
+            exit 1
+          fi
+          sync "$walletTmp/wallet.db"
+          mv -fT -- "$walletTmp/wallet.db" "$wallet"
+          sync '${networkDir}'
+          rmdir "$walletTmp"
         fi
       '';
       serviceConfig = nbLib.defaultHardening // {

@@ -429,7 +429,9 @@ following default values:
 - Otherwise: `/etc/nix-bitcoin-secrets`
 
 With `nix-bitcoin.setupSecrets = true`, `setup-secrets` sets the declared secrets'
-owners and permissions and restricts undeclared files to root. It makes the
+owners and permissions and restricts undeclared files to root. A declared secret
+that is missing or isn't a regular file fails setup, and so does an empty one,
+unless its `nix-bitcoin.secrets.<name>.allowEmpty` is set. `setup-secrets` makes the
 directory accessible only to root while it runs; if setup fails, services lose
 access to all secrets there until a successful run restores directory mode `0751`.
 

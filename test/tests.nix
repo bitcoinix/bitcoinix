@@ -142,6 +142,11 @@ let
       };
 
       tests.lnd = cfg.lnd.enable;
+      tests.lnd-wallet-init = cfg.lnd.enable;
+      test.data.lnd-wallet-init = if cfg.lnd.enable then {
+        inherit (cfg.lnd) dataDir networkDir user group;
+        preStart = toString config.systemd.services.lnd.serviceConfig.ExecStartPre;
+      } else null;
       tests.lnd-macaroons = cfg.lnd.enable && cfg.lnd.macaroons != {};
       # Also without custom macaroons, as lnd still deletes stale ones then
       tests.lnd-macaroon-revocation = cfg.lnd.enable;
@@ -324,9 +329,10 @@ let
       nix-bitcoin = {
         generateSecrets = mkForce false;
         setupSecrets = true;
-        secrets = genAttrs [ "first" "second" ] (_: {
+        secrets = genAttrs [ "first" "second" "empty" ] (name: {
           user = "nobody";
           group = "nogroup";
+          allowEmpty = name == "empty";
         });
       };
       systemd.services.supply-test-secrets = {
@@ -343,6 +349,7 @@ let
           ${config.nix-bitcoin.generateSecretsScript}
           printf first-secret > first
           printf second-secret > second
+          touch empty
         '';
       };
       tests.setup-secrets-supplied = true;
