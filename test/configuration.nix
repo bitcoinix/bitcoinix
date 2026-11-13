@@ -714,6 +714,53 @@ let
         map (lib.elem "nix-bitcoin-secrets.target") [ wants after ];
       expected = [ true true ];
     };
+    testMempoolNetworks = {
+      expr = map (network: let
+        config = evaluate {
+          services.bitcoind.network = network;
+          services.mempool.enable = true;
+        };
+      in {
+        network = config.services.mempool.settings.MEMPOOL.NETWORK;
+        rpcPort = config.services.mempool.settings.CORE_RPC.PORT;
+        frontend = config.services.mempool.frontend.settings;
+      }) [ "mainnet" "regtest" ];
+      expected = [
+        {
+          network = "mainnet";
+          rpcPort = 8332;
+          frontend = { MAINNET_ENABLED = true; REGTEST_ENABLED = false; ROOT_NETWORK = ""; };
+        }
+        {
+          network = "regtest";
+          rpcPort = 18443;
+          frontend = { MAINNET_ENABLED = false; REGTEST_ENABLED = true; ROOT_NETWORK = "regtest"; };
+        }
+      ];
+    };
+    testMempoolFrontendOverrides = {
+      expr = (evaluate {
+        services.bitcoind.network = "regtest";
+        services.mempool = {
+          enable = true;
+          frontend.settings = { MAINNET_ENABLED = true; ROOT_NETWORK = ""; };
+        };
+      }).services.mempool.frontend.settings;
+      expected = { MAINNET_ENABLED = true; REGTEST_ENABLED = true; ROOT_NETWORK = ""; };
+    };
+    testMempoolNetworkMigration = {
+      expr = map (case: (builtins.tryEval (evaluate {
+        nix-bitcoin.configVersion = case.version;
+        services.bitcoind.network = case.network;
+        services.mempool.enable = case.enable;
+      }).system.stateVersion).success) [
+        { version = "0.1.6"; network = "regtest"; enable = true; }
+        { version = "0.1.6"; network = "mainnet"; enable = true; }
+        { version = "0.1.6"; network = "regtest"; enable = false; }
+        { version = "0.2.0"; network = "regtest"; enable = true; }
+      ];
+      expected = [ false true true true ];
+    };
     testMempoolDefaultRpcPassword = { expr = failedAssertions mempool; expected = []; };
     testMempoolRejectsRpcPassword = {
       expr = map (lib.hasInfix "settings.CORE_RPC.PASSWORD` would be copied")

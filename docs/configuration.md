@@ -20,8 +20,8 @@ services.bitcoind.network = "regtest";
 ```
 
 The supported values are `"mainnet"` and `"regtest"`. Bitcoin and the services
-connected to it derive their network settings from this option. Mempool does not
-support regtest.
+connected to it derive their network settings from this option. Mempool
+automatically configures its backend and frontend for the selected network.
 
 ## Deployment shell
 This section applies to the legacy [krops deployment](./install.md#5-alternative-deploy-with-krops-legacy).

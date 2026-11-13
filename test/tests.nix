@@ -139,6 +139,7 @@ let
       '');
 
       tests.mempool = cfg.mempool.enable;
+      test.data.mempool.network = cfg.bitcoind.network;
       services.mempool = {
         electrumServer = "fulcrum";
         settings.MEMPOOL.POOLS_JSON_URL = mkIf config.test.noConnections "disable-pool-fetching";

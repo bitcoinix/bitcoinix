@@ -11,6 +11,10 @@ is replaced by `nix-bitcoin.lib.networkName`, which accepts name overrides and
 passes other network names through unchanged. See the
 [0.2.0 upgrade notes](upgrading.md#upgrading-to-config-version-020).
 
+Mempool's backend and frontend now follow `services.bitcoind.network`, including
+regtest. See the [0.2.0 upgrade notes](upgrading.md#upgrading-to-config-version-020)
+for existing regtest deployments and custom frontend settings.
+
 ## 0.1.6
 
 New service: [Unbeholden Wallet](services.md#connect-to-unbeholden-wallet), a watch-only

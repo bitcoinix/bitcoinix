@@ -68,6 +68,11 @@ def test_regtest():
 
     if enabled("mempool"):
         assert_running("nginx")
+        # Exercise the API path used by the frontend's ROOT_NETWORK setting.
+        genesis = succeed("bitcoin-cli getblockhash 0").strip()
+        assert_full_match(
+            f"curl -fsS http://{ip('nginx')}:60845/api/block-height/0", genesis
+        )
         machine.wait_until_succeeds(
             f"[[ $(curl -fsS http://{ip('nginx')}:60845/api/v1/blocks/tip/height) == {num_blocks} ]]"
         )
