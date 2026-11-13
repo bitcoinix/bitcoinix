@@ -58,7 +58,7 @@ let
       test.data.bitcoind-rest = {
         inherit (cfg.bitcoind.rest) enable;
         rpcPort = cfg.bitcoind.rpc.port;
-        chain = ({ mainnet = "main"; regtest = "regtest"; }.${config.services.bitcoind.network});
+        chain = config.nix-bitcoin.lib.networkName { mainnet = "main"; };
       };
 
       services.bitcoind = {

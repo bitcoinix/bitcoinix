@@ -20,7 +20,8 @@ let
 in {
   imports = [
     (mkRemovedOptionModule [ "services" "bitcoind" "makeNetworkName" ] ''
-      Select network-specific values using `config.services.bitcoind.network` instead.
+      Use `config.nix-bitcoin.lib.networkName { mainnet = "bitcoin"; }` instead
+      to override mainnet's name while passing other network names through unchanged.
       See docs/upgrading.md, "Upgrading to config version 0.2.0".
     '')
 

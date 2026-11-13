@@ -35,11 +35,14 @@ are unchanged.
 
 The read-only `services.bitcoind.makeNetworkName` helper has been removed.
 Replace calls such as `config.services.bitcoind.makeNetworkName "bitcoin" "regtest"`
-with a mapping keyed by the selected network:
+with the new helper, specifying only names that need overriding:
 
 ```nix
-{ mainnet = "bitcoin"; regtest = "regtest"; }.${config.services.bitcoind.network}
+config.nix-bitcoin.lib.networkName { mainnet = "bitcoin"; }
 ```
+
+This returns `"bitcoin"` on mainnet and `"regtest"` on regtest. Unmapped network
+names pass through unchanged.
 
 After migrating your configuration, set `nix-bitcoin.configVersion = "0.2.0";`.
 

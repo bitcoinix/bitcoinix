@@ -530,6 +530,19 @@ let
       ];
       expected = [ false false false true true ];
     };
+    testNetworkNameOverrides = {
+      expr = map (config: let
+        inherit (config.nix-bitcoin.lib) networkName;
+      in [
+        (networkName {})
+        (networkName { mainnet = "bitcoin"; })
+        (networkName { mainnet = "Main"; regtest = "RegTest"; })
+      ]) [ bitcoin regtest ];
+      expected = [
+        [ "mainnet" "bitcoin" "Main" ]
+        [ "regtest" "regtest" "RegTest" ]
+      ];
+    };
     testNetworkServiceIntegration = {
       expr = map (network: let
         config = evaluate {
