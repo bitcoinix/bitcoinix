@@ -150,6 +150,15 @@ restart. Restart other services that read a custom macaroon only at startup; see
 before this change use root key 0, like the admin macaroon, and stay valid. To revoke
 them, see [Revoke all macaroons](./services.md#revoke-all-macaroons).
 
+Each custom lnd macaroon is now readable only by its `user`, with mode `0400`.
+Before, the user's primary group could read it too. For a user like `operator`,
+that's the group `users`, which normal users get by default. So other normal users
+could read the macaroon. If other users log in to your node, they could have
+copied it, and such copies stay valid. To revoke them, see
+[Revoke all macaroons](./services.md#revoke-all-macaroons). If a program reads a
+custom macaroon as another user, through the group, give the program its own
+macaroon in `services.lnd.macaroons`.
+
 RTL is now bound to the units of its enabled backends, lnd for
 `services.rtl.nodes.lnd` and clightning for `services.rtl.nodes.clightning`.
 RTL sends the lnd admin macaroon and the clightning admin rune to their REST ports

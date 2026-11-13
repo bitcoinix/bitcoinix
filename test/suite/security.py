@@ -204,9 +204,13 @@ def test_lnd_macaroons():
         f"install -d -m 750 -o {data['user']} {runtime_dir} {network_dir}",
     )
     live_before = succeed(live_macaroons)
+    # Only its user may read a macaroon. Its group may be shared, like `users`.
+    for live_name, live_user in data["users"].items():
+        assert_file_metadata(f"/run/lnd/{live_name}.macaroon", owner=live_user, mode="400",
+                             file_type="regular file")
 
     def assert_macaroon_created():
-        assert_file_metadata(macaroon, owner=user, mode="440", file_type="regular file")
+        assert_file_metadata(macaroon, owner=user, mode="400", file_type="regular file")
 
     def assert_canary_untouched():
         assert_full_match(f"cat {canary}", "canary\n")
