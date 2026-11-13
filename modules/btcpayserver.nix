@@ -156,7 +156,7 @@ in {
 
     systemd.services.nbxplorer = let
       configFile = builtins.toFile "config" ''
-        network=${config.services.bitcoind.network}
+        network=${bitcoind.network}
         btcrpcuser=${cfg.bitcoind.rpc.users.btcpayserver.name}
         btcrpcurl=http://${nbLib.addressWithPort bitcoind.rpc.address cfg.bitcoind.rpc.port}
         btcnodeendpoint=${nbLib.addressWithPort bitcoind.address bitcoind.whitelistedPort}
@@ -206,7 +206,7 @@ in {
       nbExplorerUrl = "http://${nbLib.addressWithPort cfg.nbxplorer.address cfg.nbxplorer.port}/";
       nbExplorerCookie = "${cfg.nbxplorer.dataDir}/${nbLib.networkName { mainnet = "Main"; regtest = "RegTest"; }}/.cookie";
       configFile = builtins.toFile "btcpayserver-config" (''
-        network=${config.services.bitcoind.network}
+        network=${bitcoind.network}
         bind=${cfg.btcpayserver.address}
         port=${toString cfg.btcpayserver.port}
         socksendpoint=${config.nix-bitcoin.torClientAddressWithPort}
