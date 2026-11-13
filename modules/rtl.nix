@@ -140,25 +140,18 @@ let
   # Added to the units of the backends, see `systemd.services.rtl`.
   # `--no-block`: RTL's start waits for the backend's start job, which
   # includes this command. So a blocking start would deadlock.
-  # Skip the start while the other backend is stopped, stopping or waiting to
-  # restart: RTL's `bindsTo` would start it, during maintenance or before its
-  # `RestartSec`. Its own next start starts RTL.
-  # When RTL can't start, for example because it's masked, RTL stays down
-  # and the backend still starts.
-  startRtl = backend: let
-    systemctl = "${config.systemd.package}/bin/systemctl";
-  in {
+  # `--job-mode=ignore-requirements`: otherwise RTL's `bindsTo` would also
+  # start the other backend while it's stopped, during maintenance or before
+  # its `RestartSec`. This is safe: systemd starts RTL only while all backends
+  # that it's bound to and ordered after are active. Otherwise the start fails
+  # with "Bound to unit ..., but unit isn't active", and the other backend's
+  # own start starts RTL later. A start queued while the other backend is
+  # starting waits for it.
+  # `-`: when systemctl fails, for example because RTL is masked, the backend
+  # still starts. `+`: run as root, which systemctl needs to start a unit.
+  startRtl = {
     serviceConfig.ExecStartPost = [
-      (nbLib.rootScript "${backend}-start-rtl" (concatMapStrings (other: ''
-        active=$(${systemctl} show -P ActiveState ${other}.service)
-        sub=$(${systemctl} show -P SubState ${other}.service)
-        case $active/$sub in
-          active/* | activating/start*) ;;
-          *) exit 0 ;;
-        esac
-      '') (remove backend backends) + ''
-        ${systemctl} start --no-block rtl.service || true
-      ''))
+      "-+${config.systemd.package}/bin/systemctl start --no-block --job-mode=ignore-requirements rtl.service"
     ];
   };
 
@@ -245,11 +238,13 @@ in {
 
     systemd.services.rtl = rec {
       # RTL sends the lnd admin macaroon and the clightning admin rune to its
-      # backends without checking their TLS certificate, so it must only run
-      # while they hold their ports. `bindsTo` with `after` stops RTL whenever
-      # a backend stops, crashes or exits. It doesn't start RTL again when the
-      # backend comes back, so each backend starts RTL from its `ExecStartPost`
-      # (`startRtl`). `after` holds that start until the backend is ready.
+      # backends without checking their TLS certificate. So it shouldn't run
+      # while a backend is down, when another local process could take over
+      # the backend's port. `bindsTo` with `after` stops RTL whenever a backend
+      # stops, crashes or exits. It doesn't start RTL again when the backend
+      # comes back, so each backend starts RTL from its `ExecStartPost`
+      # (`startRtl`). `after` holds that start until the backend's start job,
+      # including its readiness checks, has finished.
       # Starting RTL through `wantedBy` on the backends would make a backend
       # that sends STOPPING=1 as it shuts down, like lnd, restart at once
       # instead of after its `RestartSec`.
@@ -304,8 +299,8 @@ in {
         // nbLib.nodejs;
     };
 
-    systemd.services.lnd = mkIf cfg.nodes.lnd.enable (startRtl "lnd");
-    systemd.services.clightning = mkIf cfg.nodes.clightning.enable (startRtl "clightning");
+    systemd.services.lnd = mkIf cfg.nodes.lnd.enable startRtl;
+    systemd.services.clightning = mkIf cfg.nodes.clightning.enable startRtl;
 
     users.users.${cfg.user} = {
       isSystemUser = true;

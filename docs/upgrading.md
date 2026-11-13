@@ -84,14 +84,14 @@ primary `group` and its `users.groups` entry with the current `gid`,
 `users.mutableUsers = false`, NixOS also manages the password, so declare it too
 if the account uses one.
 
-RTL now runs only while its enabled backends run, lnd for
+RTL is now bound to the units of its enabled backends, lnd for
 `services.rtl.nodes.lnd` and clightning for `services.rtl.nodes.clightning`.
 RTL sends the lnd admin macaroon and the clightning admin rune to their REST ports
-without checking the certificate. So it now stops when a backend stops, crashes or
-exits, instead of polling a port that another local user could take over. After a
-backend starts, it starts RTL again, unless the other enabled backend is stopped,
-stopping or waiting to restart. Deploying this change restarts each backend that RTL
-uses once, because its unit changes.
+without checking the certificate. So it now stops when a backend's unit stops,
+crashes or exits, instead of polling the port of a stopped backend, which another
+local user could take over. A backend's start starts RTL again once all of RTL's
+backends run. Deploying this change restarts each backend that RTL uses once,
+because its unit changes.
 
 With both backends enabled:
 

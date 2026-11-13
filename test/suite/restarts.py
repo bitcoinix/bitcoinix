@@ -170,8 +170,8 @@ def test_clnrest_admin_rune():
 @test("rtl-stops-with-backend")
 def test_rtl_stops_with_backend():
     # RTL sends the lnd admin macaroon and the clightning admin rune to its
-    # backends without checking their certificate. So it must never run while
-    # a backend is down, and it must come back after the backend is ready.
+    # backends without checking their certificate. So it must stop with a
+    # backend's unit, and start again only after the backend's start finished.
     data = test_data["rtl-credentials"]
     backends = [unit for unit in ("lnd", "clightning") if data[unit]]
     # RestartSec of lnd, clightning and RTL
@@ -210,9 +210,10 @@ def test_rtl_stops_with_backend():
             succeed(f"systemctl start {backend}")
             assert_rtl_started_after(backend)
 
-            # 3. When the backend exits by itself, with no stop job, RTL stops at
-            # once. SIGTERM makes the exit clean, so the later `assert_no_failure`
-            # checks still pass.
+            # 3. When the backend exits by itself, with no stop job, RTL stops
+            # with it. lnd exits cleanly on SIGTERM, so the later
+            # `assert_no_failure` checks of lnd still pass. clightning's exit
+            # can fail, see below. No later test checks clightning for failures.
             backend_before = show(backend, "InvocationID")
             rtl_before = show("rtl", "InvocationID")
             succeed(f"systemctl kill -s TERM {backend}")
@@ -222,10 +223,16 @@ def test_rtl_stops_with_backend():
                     f"[[ $(systemctl show -P InvocationID {backend}) != '{backend_before}' ]]"
                 )
             else:
-                # clightning only restarts on failure
+                # clightning only restarts on failure. With clboss, a torified
+                # `dig` ignores SIGTERM, so the exit can hit the stop timeout and
+                # fail. Then clightning goes from `failed` to `activating` in one
+                # step and restarts after RestartSec, so polling `ActiveState`
+                # alone can miss the stop. Wait for either outcome.
                 machine.wait_until_succeeds(
+                    f"[[ $(systemctl show -P InvocationID {backend}) != '{backend_before}' ]] || "
                     f"[[ $(systemctl show -P ActiveState {backend}) =~ ^({stopped})$ ]]"
                 )
+                # Also fine during or after clightning's own restart
                 succeed(f"systemctl start {backend}")
             assert_rtl_started_after(backend)
             assert show("rtl", "InvocationID") != rtl_before, "RTL was not restarted"
@@ -237,16 +244,24 @@ def test_rtl_stops_with_backend():
                                  - int(show(backend, "InactiveEnterTimestampMonotonic")))
                 assert restart_delay >= (restart_sec - 1) * 1_000_000, \
                     f"lnd restarted {restart_delay / 1_000_000:.1f} s after it exited"
-            # RTL must stop when the backend exits, not later.
+            # RTL must stop when the backend exits, not after a restart delay.
+            # Half of RestartSec leaves time for RTL's own stop.
             delay = (int(show("rtl", "InactiveEnterTimestampMonotonic"))
                      - int(show(backend, "InactiveEnterTimestampMonotonic")))
             assert delay < restart_sec * 1_000_000 / 2, f"RTL kept running without {backend}"
 
     if len(backends) == 2:
-        # 4. While one backend is stopped, the other's start doesn't start RTL,
-        # because RTL would start the stopped one too.
+        # 4. While one backend is stopped, the other's start doesn't start it or
+        # RTL: the hook doesn't pull in RTL's backends, and systemd refuses to
+        # start RTL while a backend that it's bound to is down.
+        since = succeed("date +%s").strip()
         succeed("systemctl stop clightning")
         succeed("systemctl restart lnd")
+        # lnd's start queued a start of RTL, which systemd refused
+        machine.wait_until_succeeds(
+            f"journalctl -u rtl --since @{since} --grep"
+            " 'Bound to unit clightning.service, but unit isn'"
+        )
         assert re.fullmatch(stopped, show("clightning", "ActiveState")), "lnd's start started clightning"
         assert show("rtl", "ActiveState") == "inactive", "RTL runs without clightning"
         succeed("systemctl start clightning")
