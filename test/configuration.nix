@@ -551,20 +551,20 @@ let
           services.lnd.enable = true;
         };
       in {
-        inherit (config.services.clightning) networkDir;
-        lndNetworkDir = config.services.lnd.networkDir;
         network = config.services.bitcoind.network;
+        clnNetworkDir = config.services.clightning.networkDir;
+        lndNetworkDir = config.services.lnd.networkDir;
       }) [ "mainnet" "regtest" ];
       expected = [
         {
-          networkDir = "/var/lib/clightning/bitcoin";
-          lndNetworkDir = "/var/lib/lnd/chain/bitcoin/mainnet";
           network = "mainnet";
+          clnNetworkDir = "/var/lib/clightning/bitcoin";
+          lndNetworkDir = "/var/lib/lnd/chain/bitcoin/mainnet";
         }
         {
-          networkDir = "/var/lib/clightning/regtest";
-          lndNetworkDir = "/var/lib/lnd/chain/bitcoin/regtest";
           network = "regtest";
+          clnNetworkDir = "/var/lib/clightning/regtest";
+          lndNetworkDir = "/var/lib/lnd/chain/bitcoin/regtest";
         }
       ];
     };
