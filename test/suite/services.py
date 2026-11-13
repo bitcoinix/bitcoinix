@@ -173,6 +173,8 @@ def test_charge_lnd():
     # charge-lnd is a oneshot service that is started by a timer under regular operation
     succeed("systemctl start charge-lnd")
     assert_no_failure("charge-lnd")
+    # Explicit credential paths must work without a synthetic mainnet datadir.
+    succeed("test ! -e /var/lib/charge-lnd/lnddir-proxy")
 
     def request(method, path, *, user="charge-lnd",
                 macaroon="/run/lnd/charge-lnd.macaroon", input_cmd="printf '{}'"):

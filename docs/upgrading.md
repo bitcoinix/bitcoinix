@@ -55,6 +55,12 @@ Remove conflicting overrides unless needed for a custom deployment. If you set
 `services.mempool.frontend.staticContentRoot`, update that custom frontend too.
 The web interface stays at the same URL; reload it after deploying.
 
+Charge-LND now reads the configured LND certificate and
+`/run/lnd/charge-lnd.macaroon` directly, without a proxy data directory.
+If you selected custom credentials with `--lnddir` in
+`services.charge-lnd.extraFlags`, replace it with explicit `--tlscert` and
+`--macaroon` flags. Default configurations need no changes.
+
 After migrating your configuration, set `nix-bitcoin.configVersion = "0.2.0";`.
 
 ## Upgrading to config version 0.1.6
