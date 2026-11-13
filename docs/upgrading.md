@@ -84,6 +84,13 @@ primary `group` and its `users.groups` entry with the current `gid`,
 `users.mutableUsers = false`, NixOS also manages the password, so declare it too
 if the account uses one.
 
+RTL now keeps the two-factor authentication (2FA) that you set up in its web
+interface across restarts. Before, each restart turned 2FA off without a warning.
+If you lose the authenticator, delete `RTL-Config.json` in RTL's data dir
+(`/var/lib/rtl` by default) and restart RTL. `RTL-Config.json` holds the 2FA
+secret and is now readable only by RTL's user. Before, members of group `rtl`
+could read it too.
+
 After migrating your configuration, set `nix-bitcoin.configVersion = "0.1.6";`.
 
 ## Upgrading to config version 0.1.5

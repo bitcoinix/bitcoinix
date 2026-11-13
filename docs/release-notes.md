@@ -38,8 +38,10 @@ paths under `nbPython3Packages` remain available.
 
 Two-factor authentication set up in the RTL web interface now survives restarts.
 Each start still resets the other web interface settings in `RTL-Config.json` to
-the Nix configuration. To turn 2FA off without the authenticator, see
-[Connect to RTL](services.md#connect-to-rtl).
+the Nix configuration. `RTL-Config.json` is now readable only by RTL's user. To
+turn 2FA off without the authenticator, see
+[Connect to RTL](services.md#connect-to-rtl). See also
+[Upgrading to config version 0.1.6](upgrading.md#upgrading-to-config-version-016).
 
 ## 0.1.5
 
