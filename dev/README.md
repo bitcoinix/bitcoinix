@@ -26,9 +26,18 @@ when pull requests are opened, updated or reopened. A single `github-script` ste
 applies the path rules defined in the workflow and adds `type: feature` for added
 definition files and `type: removal` for deleted ones (`modules/**/*.nix` and
 `pkgs/**/*.nix`). Both type labels can apply to the same PR. Edits to existing
-files and file renames do not trigger these type labels. Labels are only added, so
-previously applied labels remain.
-Other type labels, status and breaking labels are applied manually.
+files and file renames do not trigger these type labels. Area and type labels are
+only added, so previously applied labels remain.
+
+The workflow also adds `status: rebase needed` to open PRs with merge conflicts
+against their current target branch, and removes it when they merge cleanly.
+It checks all open PRs on PR creation, updates, reopening and edits (including
+target branch changes), on pushes to any branch, and hourly. It can also be run
+manually from the Actions tab. Unknown mergeability results are retried; if GitHub
+has not finished calculating, the label stays unchanged until a later run.
+Failing checks, missing reviews and being behind the target branch do not by
+themselves cause this label. The workflow uses only the GitHub API and never
+checks out PR code. Other type, status and breaking labels are applied manually.
 
 To edit area labels, change the `areaRules` lists near the top of the workflow.
 Each label can have `directories` (recursive, with a trailing `/`), `files` (exact

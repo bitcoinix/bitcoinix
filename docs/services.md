@@ -106,9 +106,19 @@ already deploy with.
 The onion service and your node's IP address reach the same sshd, with the same host
 keys. Internet scanners index SSH host keys by IP address, so anyone who learns the
 onion address can look up its host key and find your node's IP address. To keep them
-apart, don't expose SSH to the internet: set `services.openssh.openFirewall = false`
-and connect through the onion service or a VPN. Or let only your own Tor client reach
-the onion service with
+apart, don't expose SSH to the internet:
+
+- First switch your deployment to the onion alias (step 4), also `--build-host` if it
+  points to the node, and check that a deploy works. New SSH connections to the IP
+  address fail once the port is closed.
+- Set `services.openssh.openFirewall = false`, and remove any other firewall rule that
+  opens the SSH port to the internet. To keep SSH over a VPN, open the port on that
+  interface, e.g. `networking.firewall.interfaces.wg0.allowedTCPPorts = [ 22 ];`.
+- Before you deploy the firewall change, open a root SSH session over the IP address.
+  Keep it open until a new root login through the onion service works, and keep
+  console access in case Tor fails on the node.
+
+Or let only your own Tor client reach the onion service with
 [client authorization](https://community.torproject.org/onion-services/advanced/client-auth/)
 (`services.tor.relay.onionServices.sshd.authorizedClients`).
 
@@ -183,6 +193,11 @@ starting RTL starts a stopped backend too. So during maintenance of one backend,
 leave RTL stopped. RTL doesn't check its backends' certificates, so a local process
 that takes the clnrest port before clnrest does can still get the clightning rune.
 lnd stops when it can't use its REST port, so RTL then stays down.
+
+Two-factor authentication that you set up in RTL stays on across restarts. If you
+lose the authenticator, delete `RTL-Config.json` in RTL's data dir
+(`/var/lib/rtl` by default) and restart RTL. bitcoinix then writes a new one
+without the 2FA secret.
 
 ### Use ZEUS (mobile Lightning wallet) via Tor
 1. Install [ZEUS](https://zeusln.app)
