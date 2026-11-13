@@ -511,6 +511,13 @@ let
         [ true false ];
       expected = [ true true ];
     };
+    testRemovedNetworkNameHelper = {
+      expr = lib.any (lib.hasInfix "services.bitcoind.makeNetworkName")
+        (failedAssertions (evaluate {
+          services.bitcoind.makeNetworkName = mainnet: regtest: mainnet;
+        }));
+      expected = true;
+    };
     testNetworkMigration = {
       expr = map (module: (builtins.tryEval (evaluate {
         imports = [ module ];
@@ -518,10 +525,11 @@ let
       }).system.stateVersion).success) [
         { services.bitcoind.regtest = true; }
         { services.bitcoind.regtest = false; }
+        { services.bitcoind.makeNetworkName = mainnet: regtest: mainnet; }
         { services.bitcoind.network = "regtest"; }
         {}
       ];
-      expected = [ false false true true ];
+      expected = [ false false false true true ];
     };
     testNetworkServiceIntegration = {
       expr = map (network: let
@@ -534,20 +542,17 @@ let
         inherit (config.services.clightning) networkDir;
         lndNetworkDir = config.services.lnd.networkDir;
         network = config.services.bitcoind.network;
-        legacyName = config.services.bitcoind.makeNetworkName "main" "regtest";
       }) [ "mainnet" "regtest" ];
       expected = [
         {
           networkDir = "/var/lib/clightning/bitcoin";
           lndNetworkDir = "/var/lib/lnd/chain/bitcoin/mainnet";
           network = "mainnet";
-          legacyName = "main";
         }
         {
           networkDir = "/var/lib/clightning/regtest";
           lndNetworkDir = "/var/lib/lnd/chain/bitcoin/regtest";
           network = "regtest";
-          legacyName = "regtest";
         }
       ];
     };

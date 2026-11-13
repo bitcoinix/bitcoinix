@@ -153,10 +153,6 @@ let
           Use regtest for a local regression testing network.
         '';
       };
-      makeNetworkName = mkOption {
-        readOnly = true;
-        default = mainnet: regtest: { inherit mainnet regtest; }.${config.services.bitcoind.network};
-      };
       proxy = mkOption {
         type = types.nullOr types.str;
         default = if cfg.tor.proxy then config.nix-bitcoin.torClientAddressWithPort else null;
