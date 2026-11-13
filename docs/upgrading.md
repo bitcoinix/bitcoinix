@@ -33,6 +33,14 @@ If you explicitly set `services.bitcoind.regtest = false;`, remove it or set
 network for the whole deployment; existing network-specific paths and ports
 are unchanged.
 
+The read-only `services.bitcoind.makeNetworkName` helper has been removed.
+Replace calls such as `config.services.bitcoind.makeNetworkName "bitcoin" "regtest"`
+with a mapping keyed by the selected network:
+
+```nix
+{ mainnet = "bitcoin"; regtest = "regtest"; }.${config.services.bitcoind.network}
+```
+
 After migrating your configuration, set `nix-bitcoin.configVersion = "0.2.0";`.
 
 ## Upgrading to config version 0.1.6

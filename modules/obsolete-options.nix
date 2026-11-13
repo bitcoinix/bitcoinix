@@ -19,6 +19,11 @@ let
 
 in {
   imports = [
+    (mkRemovedOptionModule [ "services" "bitcoind" "makeNetworkName" ] ''
+      Select network-specific values using `config.services.bitcoind.network` instead.
+      See docs/upgrading.md, "Upgrading to config version 0.2.0".
+    '')
+
     (mkRemovedOptionModule [ "services" "bitcoind" "regtest" ] ''
       Use `services.bitcoind.network = "regtest";` instead of `services.bitcoind.regtest = true;`.
       For false, remove the old option; the network defaults to "mainnet".
