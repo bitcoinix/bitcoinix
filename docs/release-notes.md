@@ -3,6 +3,26 @@
 For configuration migrations reported during evaluation, follow the
 [upgrading guide](upgrading.md).
 
+## 0.2.0
+
+bitcoinix now uses a single `nixpkgs` input tracking `nixos-unstable` for its system
+and packages. `nix-bitcoin.useVersionLockedPkgs` defaults to `true`. Review the
+[0.2.0 migration guide](upgrading.md#upgrading-to-config-version-020) for the system
+input, package customization, reverse-path filtering, FUSE, I2P validation and
+systemd-nspawn changes. Non-flake module imports, disabling version-locked
+packages, or overriding bitcoinix's nixpkgs input now also move the formerly
+separately pinned unstable service packages with the caller's nixpkgs.
+
+The pinned TrustedCoin package carries a local initialization patch until a release
+includes the [upstream startup fix](https://github.com/nbd-wtf/trustedcoin/pull/44).
+The pinned electrs package supplies the missing pkg-config and zstd build inputs.
+
+The generated `pkgs/pinned.nix` file has been removed. Package selection and
+local overrides now live together in `pkgs/default.nix`; the public
+`legacyPackages.<system>.pinned` paths remain available. The deployment shell and
+package imports without an explicit `pkgs` still read the lock file through
+`pkgs/nixpkgs-pinned.nix`; non-flake NixOS module imports use the system's `pkgs`.
+
 ## 0.1.6
 
 RTL now uses the nixpkgs package. Replace explicit flake references to

@@ -102,15 +102,13 @@ sudo ./test/run-tests.sh container          # fast container; needs systemd + ro
   dependency** — order matters; register new service modules in the right group.
 - `pkgs/` defines derivations; `pkgs/lib.nix` holds shared security hardening
   (systemd sandboxing, user/isolation helpers) used across services.
-- nixpkgs is pinned to `nixos-26.05`, plus a `nixpkgs-unstable` input for pinned
-  packages. `nix-bitcoin.useVersionLockedPkgs` opts a system
-  into the flake's pinned nixpkgs.
+- The single `nixpkgs` input tracks `nixos-unstable`. `nix-bitcoin.useVersionLockedPkgs`
+  defaults to true and selects the flake's pinned unstable nixpkgs for services.
 - Always update `flake.lock` via `helper/update-flake.sh`; never hand-edit it or
   run `nix flake update` / `nix flake lock` directly. The helper keeps
-  `pkgs/pinned.nix`, `versions.json` and `docs/versions-table.md` in sync with
-  the locked inputs.
-- `pkgs/pinned.nix` is **generated** by `helper/update-flake.sh` (packages are
-  pinned to stable vs. unstable by version comparison) — don't hand-edit it.
+  `versions.json` and `docs/versions-table.md` in sync with the locked inputs.
+- `pkgs/default.nix` selects nixpkgs service packages in its `pinned` attribute set
+  and applies local overrides. The version manifest reads this selection directly.
 - Only `x86_64-linux` and `aarch64-linux` are supported and tested.
 - No Nix formatter/linter is set up; `nix flake check` and `./test/shellcheck.sh`
   are the static checks. Shellcheck also covers shebang'd extensionless files.
@@ -210,6 +208,6 @@ Pages under `docs/` must be listed in `docs/SUMMARY.md` to appear in the mdBook 
   against the modules. Keep pages short and task-oriented and link to the module
   source or the options search for details.
 
-## NixOS release bumps
+## Nixpkgs updates
 
-`./helper/update-flake.sh 26.05`, then treewide re-check `TODO-EXTERNAL` comments.
+`./helper/update-flake.sh`, then treewide re-check `TODO-EXTERNAL` comments.

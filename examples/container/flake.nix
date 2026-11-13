@@ -14,7 +14,6 @@
     nix-bitcoin.url = "github:bitcoinix/bitcoinix/v0.1.5";
 
     nixpkgs.follows = "nix-bitcoin/nixpkgs";
-    nixpkgs-unstable.follows = "nix-bitcoin/nixpkgs-unstable";
     extra-container.follows = "nix-bitcoin/extra-container";
   };
 
@@ -33,6 +32,9 @@
           containers.mynode = {
             # Always start container along with the container host
             autoStart = true;
+
+            # Core Lightning needs these calls to lock its signing keys in memory.
+            extraFlags = [ "--system-call-filter=@memlock" ];
 
             # This assigns the following addresses:
             # Host IP:      10.250.0.1

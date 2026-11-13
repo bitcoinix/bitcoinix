@@ -7,13 +7,6 @@ cd "${BASH_SOURCE[0]%/*}/../.."
 expected=$(mktemp)
 trap 'rm -f "$expected"' EXIT
 
-# versionsFile recomputes each package's channel, so it can't catch a hand-edited pinned.nix
-nix eval --raw -f helper/update-flake.nix pinnedFile > "$expected"
-if ! diff -u pkgs/pinned.nix "$expected"; then
-    echo "error: pkgs/pinned.nix is out of date or was edited by hand. Run helper/update-flake.sh and commit the generated files." >&2
-    exit 1
-fi
-
 nix eval --json -f helper/update-flake.nix versionsFile | jq . > "$expected"
 if ! diff -u versions.json "$expected"; then
     echo "error: versions.json is out of date. Run helper/update-flake.sh and commit the generated files." >&2

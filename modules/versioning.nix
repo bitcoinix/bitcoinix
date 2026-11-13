@@ -518,6 +518,66 @@ let
         See docs/upgrading.md, "Upgrading to config version 0.1.6".
       '';
     }
+    {
+      version = "0.2.0";
+      message = ''
+        bitcoinix now uses only unstable nixpkgs via the `nixpkgs` flake input.
+        Remove follows declarations for the removed `nixpkgs-unstable` input.
+        In the flake NixOS module, `nix-bitcoin.useVersionLockedPkgs` now defaults
+        to true. Packages use bitcoinix's tested revision unless you override its
+        nixpkgs input, for example with `bitcoinix.inputs.nixpkgs.follows`.
+        Your system's nixpkgs.overlays and nixpkgs.config do not apply to these
+        packages. Setting the option to false retains system customizations, but
+        ALL nixpkgs service packages then follow your system's pin. Non-flake
+        module imports also use the system pin and do not provide this option.
+        These setups no longer independently pin lnd, clightning and the other
+        formerly unstable packages. Pin your nixpkgs and review daemon versions
+        before updates: downgrades may be incompatible with existing databases.
+        The system itself must use unstable nixpkgs regardless of this option.
+        Systems following bitcoinix/nixpkgs move the whole OS to unstable.
+        NixOS 26.05 fails before this notice with an error such as
+        "The option `services.i2pd.checkConfig' does not exist".
+        Custom calls to `lib.mkNbPkgs` or `pkgs/default.nix` must drop
+        `pkgsUnstable`; `pinned` now contains only `pkgs` and the package entries.
+        See docs/upgrading.md, "Upgrading to config version 0.2.0".
+      '';
+    }
+    {
+      version = "0.2.0";
+      condition = config.networking.firewall.enable
+        && config.networking.firewall.checkReversePath == "loose";
+      message = ''
+        Unstable NixOS changes networking.firewall.checkReversePath from true
+        (strict) to "loose", accepting sources reachable through any interface.
+        To retain strict checking, set networking.firewall.checkReversePath = true;
+        after reviewing your routing and VPN requirements.
+        See docs/upgrading.md, "Upgrading to config version 0.2.0".
+      '';
+    }
+    {
+      version = "0.2.0";
+      condition = !config.programs.fuse.enable;
+      message = ''
+        Unstable NixOS disables programs.fuse.enable by default. If you use
+        non-root FUSE mounts, such as an sshfs backup target, set
+        programs.fuse.enable = true; to retain the privileged mount helper.
+        Encrypted Core Lightning replication enables it automatically.
+        See docs/upgrading.md, "Upgrading to config version 0.2.0".
+      '';
+    }
+    {
+      version = "0.2.0";
+      condition = config.boot.isNspawnContainer && config.services.clightning.enable;
+      message = ''
+        On the unstable package/system base, Core Lightning in systemd-nspawn
+        needs memory-locking syscalls allowed for its signing keys.
+        For custom systemd-nspawn containers, add
+        `containers.<name>.extraFlags = [ "--system-call-filter=@memlock" ];`
+        to the host configuration. Without this, lightning_hsmd aborts at startup.
+        The bitcoinix container examples and test runner already allow these calls.
+        See docs/upgrading.md, "Upgrading to config version 0.2.0".
+      '';
+    }
   ];
 
   missingOnionAccessUsers = let
@@ -568,7 +628,11 @@ in
   options = versioningOptions;
 
   config = {
-    # Force evaluation. An actual option value is never assigned
-    system = optionalAttrs (builtins.length incompatibleChanges > 0) (builtins.throw errorMsg);
+    # Use the normal NixOS assertion path. A conditional definition of `system`
+    # recurses when a migration checks users whose defaults depend on system.tools.
+    assertions = [{
+      assertion = incompatibleChanges == [];
+      message = errorMsg;
+    }];
   };
 }

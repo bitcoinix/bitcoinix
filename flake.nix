@@ -5,8 +5,7 @@
   '';
 
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-26.05";
-    nixpkgs-unstable.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
     flake-utils.url = "github:numtide/flake-utils";
     extra-container = {
       url = "github:extra-container/extra-container/v1.0.1";
@@ -15,7 +14,7 @@
     };
   };
 
-  outputs = { self, nixpkgs, nixpkgs-unstable, flake-utils, ... }:
+  outputs = { self, nixpkgs, flake-utils, ... }:
     let
       supportedSystems = [
         "x86_64-linux"
@@ -29,9 +28,8 @@
         mkNbPkgs = {
           system
           , pkgs ? nixpkgs.legacyPackages.${system}
-          , pkgsUnstable ? nixpkgs-unstable.legacyPackages.${system}
         }:
-          import ./pkgs { inherit pkgs pkgsUnstable; };
+          import ./pkgs { inherit pkgs; };
 
         test = {
           inherit (test) scenarios;
@@ -50,18 +48,24 @@
         options = with lib; {
           nix-bitcoin.useVersionLockedPkgs = mkOption {
             type = types.bool;
-            default = false;
+            default = true;
             description = ''
               Use the nixpkgs version locked by this flake for `nix-bitcoin.pkgs`.
               Only relevant if you are using a nixpkgs version for evaluating your system
               that differs from the one that is locked by this flake (via input `nixpkgs`).
-              If this is the case, enabling this option may result in a more stable system
-              because the bitcoinix services use the exact pkgs versions that are tested
-              by bitcoinix.
+              If this is the case, enabling this option uses the tested package set
+              for bitcoinix services, unless you override this flake's nixpkgs input
+              (for example with `bitcoinix.inputs.nixpkgs.follows`).
               The downsides are increased evaluation times and increased system
-              closure size.
+              closure size. The system's nixpkgs.overlays and nixpkgs.config do
+              not apply to these pinned packages. System evaluation requires
+              unstable nixpkgs regardless of this option.
 
-              If `false`, the default system pkgs are used.
+              If `false`, the default system pkgs are used. Use an unstable nixpkgs
+              for your system; release branches are not supported.
+              All nixpkgs service packages then follow your system's pin, including
+              lnd and clightning. Review their versions before updating: downgrades
+              may be incompatible with existing databases.
             '';
           };
         };
@@ -71,7 +75,7 @@
 
           nix-bitcoin.pkgs =
             if config.nix-bitcoin.useVersionLockedPkgs
-            then (self.lib.mkNbPkgs { inherit (config.nixpkgs) system; }).modulesPkgs
+            then (self.lib.mkNbPkgs { inherit (pkgs.stdenv.hostPlatform) system; }).modulesPkgs
             else (self.lib.mkNbPkgs { inherit (pkgs.stdenv.hostPlatform) system; inherit pkgs; }).modulesPkgs;
         };
       };

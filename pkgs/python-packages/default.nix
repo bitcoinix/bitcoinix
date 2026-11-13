@@ -1,6 +1,6 @@
-pkgsUnstable: python3:
+pkgs: python3:
 {
-  nbPython3Packages = pkgsUnstable.python3Packages;
+  nbPython3Packages = pkgs.python3Packages;
 
   # Re-enable `hwi`, which is unaffected by `CVE-2024-23342` because it doesn't
   # use python pkg `ecdsa` for signing. It no longer evaluates in nixpkgs after

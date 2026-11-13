@@ -2,12 +2,7 @@ let
   nixpkgsPinned = import ./nixpkgs-pinned.nix;
 in
 # Set default values for use without flakes
-{ pkgs ? import <nixpkgs> { config = {}; overlays = []; }
-, pkgsUnstable ? import nixpkgsPinned.nixpkgs-unstable {
-    inherit (pkgs.stdenv.hostPlatform) system;
-    config = {};
-    overlays = [];
-  }
+{ pkgs ? import nixpkgsPinned.nixpkgs { config = {}; overlays = []; }
 }:
 let self = {
   clightning-plugins = pkgs.lib.recurseIntoAttrs (
@@ -24,7 +19,7 @@ let self = {
 
   inherit (self.pyPkgs.nbPython3PackagesWithUnlockedEcdsa) hwi;
 
-  pyPkgs = import ./python-packages pkgsUnstable pkgs.python3;
+  pyPkgs = import ./python-packages pkgs pkgs.python3;
   inherit (self.pyPkgs)
     nbPython3Packages;
 
@@ -33,7 +28,33 @@ let self = {
   # Internal pkgs
   krops = import ./krops { inherit pkgs; };
 
-  pinned = import ./pinned.nix pkgs pkgsUnstable;
+  pinned = {
+    inherit (pkgs)
+      bitcoind
+      btcpayserver
+      charge-lnd
+      clboss
+      clightning
+      extra-container
+      fulcrum
+      lnd
+      lndconnect
+      lndinit
+      nbxplorer
+      rtl;
+
+    inherit pkgs;
+
+    trustedcoin = pkgs.trustedcoin.overrideAttrs (old: {
+      patches = (old.patches or []) ++ [ ./trustedcoin/wait-for-initialization.patch ];
+    });
+    # TODO-EXTERNAL: Remove when nixpkgs electrs declares its zstd build inputs.
+    # zstd-sys uses pkg-config to find the system library.
+    electrs = pkgs.electrs.overrideAttrs (old: {
+      nativeBuildInputs = (old.nativeBuildInputs or []) ++ [ pkgs.pkg-config ];
+      buildInputs = (old.buildInputs or []) ++ [ pkgs.zstd ];
+    });
+  };
 
   modulesPkgs = self // self.pinned;
 }; in self

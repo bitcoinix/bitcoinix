@@ -1,0 +1,72 @@
+Subject: [PATCH] Wait for initialization before handling RPC requests
+
+The plugin library runs OnInit concurrently with RPC handlers. Wait until the
+network and RPC client have been initialized before handling requests. Otherwise
+an early regtest getchaininfo request can report a zero tip, causing Core
+Lightning to reject its existing database after a restart.
+
+Upstream tracking: https://github.com/nbd-wtf/trustedcoin/pull/44
+The upstream fix also handles missing tip sources and startup retries. Remove
+this local initialization gate when upgrading to a release containing that fix.
+
+diff --git a/main.go b/main.go
+--- a/main.go
++++ b/main.go
+@@ -36,7 +36,8 @@
+ 		"signet":  "38332",
+ 		"regtest": "18443",
+ 	}
+-	bitcoind *rpcclient.Client
++	bitcoind    *rpcclient.Client
++	initialized = make(chan struct{})
+ )
+ 
+ func esploras(network string) (ss []string) {
+@@ -68,6 +69,7 @@
+ 				Description:     "Get the bitcoin block at a given height",
+ 				LongDescription: "",
+ 				Handler: func(p *plugin.Plugin, params plugin.Params) (resp any, errCode int, err error) {
++					<-initialized
+ 					height := params.Get("height").Int()
+ 
+ 					blockUnavailable := map[string]any{
+@@ -98,6 +100,7 @@
+ 				Description:     "Get the chain id, the header count, the block count and whether this is IBD.",
+ 				LongDescription: "",
+ 				Handler: func(p *plugin.Plugin, params plugin.Params) (resp any, errCode int, err error) {
++					<-initialized
+ 					tip, err := getTip()
+ 					if err != nil {
+ 						return nil, 20, fmt.Errorf("failed to get tip: %s", err.Error())
+@@ -132,6 +135,7 @@
+ 				Description:     "Get the Bitcoin feerate in sat/kilo-vbyte.",
+ 				LongDescription: "",
+ 				Handler: func(p *plugin.Plugin, params plugin.Params) (resp any, errCode int, err error) {
++					<-initialized
+ 					estfees, err := getFeeRates(p.Network)
+ 					if err != nil {
+ 						p.Logf("estimatefees error: %s", err.Error())
+@@ -146,6 +150,7 @@
+ 				Description:     "Send a raw transaction to the Bitcoin network.",
+ 				LongDescription: "",
+ 				Handler: func(p *plugin.Plugin, params plugin.Params) (resp any, errCode int, err error) {
++					<-initialized
+ 					hex := params.Get("tx").String()
+ 
+ 					return sendRawTransaction(hex), 0, nil
+@@ -156,6 +161,7 @@
+ 				Description:     "Get informations about an output, identified by a {txid} an a {vout}",
+ 				LongDescription: "",
+ 				Handler: func(p *plugin.Plugin, params plugin.Params) (resp any, errCode int, err error) {
++					<-initialized
+ 					txid := params.Get("txid").String()
+ 					vout := params.Get("vout").Int()
+ 
+@@ -171,6 +177,7 @@
+ 			},
+ 		},
+ 		OnInit: func(p *plugin.Plugin) {
++			defer close(initialized)
+ 			network = p.Network
+ 
+ 			// we will try to use a local bitcoind

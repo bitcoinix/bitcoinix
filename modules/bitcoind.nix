@@ -329,7 +329,7 @@ let
   # with mode 0750: only the bitcoin user writes it, group members read it.
   rpcCookieDir = "/run/bitcoind";
 
-  i2pSAM = config.services.i2pd.proto.sam;
+  i2pSAM = config.services.i2pd.settings.sam;
 
   configFile = builtins.toFile "bitcoin.conf" ''
     # We're already logging via journald
@@ -456,7 +456,19 @@ in {
 
     services.i2pd = mkIf (cfg.i2p != false) {
       enable = true;
-      proto.sam.enable = true;
+      settings = {
+        sam = {
+          enabled = true;
+          address = mkDefault "127.0.0.1";
+          port = mkDefault 7656;
+        };
+        # Override NixOS's mkDefault true without preventing explicit opt-ins.
+        http.enabled = mkOverride 900 false;
+        httpproxy.enabled = mkOverride 900 false;
+        socksproxy.enabled = mkOverride 900 false;
+        ntcp2.published = mkDefault false;
+        ssu2.published = mkDefault false;
+      };
     };
 
     systemd.tmpfiles.rules = [

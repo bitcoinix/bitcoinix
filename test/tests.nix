@@ -41,6 +41,12 @@ let
 
       tests.bitcoind = cfg.bitcoind.enable;
 
+      tests.i2pd = cfg.bitcoind.enable && cfg.bitcoind.i2p != false;
+      test.data.i2pd = optionalAttrs config.tests.i2pd {
+        inherit (cfg.i2pd.settings.sam) address port;
+        netns = config.nix-bitcoin.netns-isolation.enable;
+      };
+
       tests.secrets-no-argv = cfg.bitcoind.enable;
       test.data.secrets-no-argv.generator = "${config.nix-bitcoin.generateSecretsScript}";
 
@@ -518,6 +524,21 @@ let
         clightning = true;
         lnconnect-onion-clnrest = true;
       };
+    };
+
+    # Unstable i2pd's build-time check cannot bind the namespace bridge address.
+    # Exercise the actual SAM listener at runtime instead.
+    i2p = {
+      imports = [ scenarios.netnsBase scenarios.i2pLocal ];
+      # Exercise configurable SAM ports and bridge addresses too.
+      nix-bitcoin.netns-isolation.addressblock = 7;
+      services.i2pd.settings.sam.port = 7657;
+    };
+
+    i2pLocal = {
+      services.bitcoind = { enable = true; i2p = true; };
+      # The test only needs SAM; no reseed servers are reachable offline.
+      services.i2pd.settings.reseed = { urls = ""; yggurls = ""; };
     };
 
     # Test the special bitcoin RPC setup that lnd uses when bitcoin is pruned
