@@ -36,6 +36,11 @@ config.nix-bitcoin.pkgs.nbPython3Packages.python.withPackages (ps: [ ps.pyln-cli
 The built-in Python plugins select this interpreter automatically. The package
 paths under `nbPython3Packages` remain available.
 
+RTL now stops when lnd or clightning stops, crashes or exits. Before, it kept sending
+their admin credentials to the port of a stopped backend. A backend's start starts RTL
+again, and with both backends enabled, both must run. See
+[Upgrading to config version 0.1.6](upgrading.md#upgrading-to-config-version-016).
+
 ## 0.1.5
 
 The clnrest package has moved from `nix-bitcoin.pkgs.clnrest` to

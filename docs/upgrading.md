@@ -84,6 +84,22 @@ primary `group` and its `users.groups` entry with the current `gid`,
 `users.mutableUsers = false`, NixOS also manages the password, so declare it too
 if the account uses one.
 
+RTL now runs only while its enabled backends run, lnd for
+`services.rtl.nodes.lnd` and clightning for `services.rtl.nodes.clightning`.
+RTL sends the lnd admin macaroon and the clightning admin rune to their REST ports
+without checking the certificate. So it now stops when a backend stops, crashes or
+exits, instead of polling a port that another local user could take over. After a
+backend starts, it starts RTL again, unless the other enabled backend is stopped,
+stopping or waiting to restart. Deploying this change restarts each backend that RTL
+uses once, because its unit changes.
+
+With both backends enabled:
+
+- Stopping one backend, for example clightning for maintenance, also stops RTL for
+  the other one.
+- Starting RTL starts a stopped backend too. Leave RTL stopped until the maintenance
+  is done. The backend's own start starts RTL again afterwards.
+
 After migrating your configuration, set `nix-bitcoin.configVersion = "0.1.6";`.
 
 ## Upgrading to config version 0.1.5

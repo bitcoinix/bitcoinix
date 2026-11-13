@@ -176,6 +176,11 @@ Open `http://<onion address>` in Tor Browser, using the address from
 The password is in `$secretsDir/rtl-password`.
 See: [Secrets dir](./configuration.md#secrets-dir)
 
+RTL runs only while its backends run. It stops when lnd or clightning stops, crashes
+or exits, and the backend's next start starts it again. With both backends enabled,
+stopping one of them also stops RTL for the other one, and starting RTL starts a
+stopped backend too. So during maintenance of one backend, leave RTL stopped.
+
 ### Use ZEUS (mobile Lightning wallet) via Tor
 1. Install [ZEUS](https://zeusln.app)
 
