@@ -12,8 +12,8 @@ let
       };
       port = mkOption {
         type = types.port;
-        default = if !cfg.regtest then 8333 else 18444;
-        defaultText = "if !cfg.regtest then 8333 else 18444";
+        default = { mainnet = 8333; regtest = 18444; }.${config.nix-bitcoin.network};
+        defaultText = "8333 on mainnet, 18444 on regtest";
         description = "Port to listen for peer connections.";
       };
       onionPort = mkOption {
@@ -83,8 +83,8 @@ let
         };
         port = mkOption {
           type = types.port;
-          default = if !cfg.regtest then 8332 else 18443;
-          defaultText = "if !cfg.regtest then 8332 else 18443";
+          default = { mainnet = 8332; regtest = 18443; }.${config.nix-bitcoin.network};
+          defaultText = "8332 on mainnet, 18443 on regtest";
           description = "Port to listen for JSON-RPC connections.";
         };
         threads = mkOption {
@@ -145,18 +145,13 @@ let
           }));
         };
       };
-      regtest = mkOption {
-        type = types.bool;
-        default = false;
-        description = "Enable regtest mode.";
-      };
       network = mkOption {
         readOnly = true;
-        default = if cfg.regtest then "regtest" else "mainnet";
+        default = config.nix-bitcoin.network;
       };
       makeNetworkName = mkOption {
         readOnly = true;
-        default = mainnet: regtest: if cfg.regtest then regtest else mainnet;
+        default = mainnet: regtest: { inherit mainnet regtest; }.${config.nix-bitcoin.network};
       };
       proxy = mkOption {
         type = types.nullOr types.str;
@@ -338,7 +333,7 @@ let
 
     startupnotify=/run/current-system/systemd/bin/systemd-notify --ready
 
-    ${optionalString cfg.regtest ''
+    ${optionalString (config.nix-bitcoin.network == "regtest") ''
       regtest=1
       [regtest]
     ''}

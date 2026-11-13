@@ -19,6 +19,11 @@ let
 
 in {
   imports = [
+    (mkRemovedOptionModule [ "services" "bitcoind" "regtest" ] ''
+      Use `nix-bitcoin.network = "regtest";` instead of `services.bitcoind.regtest = true;`.
+      For false, remove the old option; the network defaults to "mainnet".
+    '')
+
     (mkRenamedOptionModule [ "services" "bitcoind" "bind" ] [ "services" "bitcoind" "address" ])
     (mkRenamedOptionModule [ "services" "bitcoind" "rpcallowip" ] [ "services" "bitcoind" "rpc" "allowip" ])
     (mkRenamedOptionModule [ "services" "bitcoind" "rpcthreads" ] [ "services" "bitcoind" "rpc" "threads" ])

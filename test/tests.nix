@@ -58,7 +58,7 @@ let
       test.data.bitcoind-rest = {
         inherit (cfg.bitcoind.rest) enable;
         rpcPort = cfg.bitcoind.rpc.port;
-        chain = cfg.bitcoind.makeNetworkName "main" "regtest";
+        chain = ({ mainnet = "main"; regtest = "regtest"; }.${config.nix-bitcoin.network});
       };
 
       services.bitcoind = {
@@ -468,7 +468,7 @@ let
       tests.lnd-restart-on-clean-exit = config.services.lnd.enable;
       test.data.num_blocks = 100;
 
-      services.bitcoind.regtest = true;
+      nix-bitcoin.network = "regtest";
       systemd.services.bitcoind.postStart = mkAfter ''
         cli=${config.services.bitcoind.cli}/bin/bitcoin-cli
         if ! $cli listwallets | ${pkgs.jq}/bin/jq -e 'index("test")'; then

@@ -25,6 +25,16 @@ This fetches the latest release, verifies the signature on its release tag and u
 It refuses to switch to a release older than the one currently pinned. To downgrade on purpose,
 run `fetch-release.sh` with `releaseVersion=<version>` and write its output to `nix-bitcoin-release.nix`.
 
+## Upgrading to config version 0.2.0
+
+Replace `services.bitcoind.regtest = true;` with `nix-bitcoin.network = "regtest";`.
+If you explicitly set `services.bitcoind.regtest = false;`, remove it or set
+`nix-bitcoin.network = "mainnet";` (the default). The new option selects the
+network for the whole deployment; existing network-specific paths and ports
+are unchanged.
+
+After migrating your configuration, set `nix-bitcoin.configVersion = "0.2.0";`.
+
 ## Upgrading to config version 0.1.6
 
 `services.lnd.lndconnect.onion` and

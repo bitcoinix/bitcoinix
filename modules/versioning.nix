@@ -275,7 +275,7 @@ let
         bitcoind = config.services.bitcoind;
       in ''
         bitcoind's RPC authentication cookie has moved from
-        `${bitcoind.dataDir}/${optionalString bitcoind.regtest "regtest/"}.cookie`
+        `${bitcoind.dataDir}/${optionalString (config.nix-bitcoin.network == "regtest") "regtest/"}.cookie`
         to `/run/bitcoind/.cookie`.
 
         Update external RPC clients and scripts that read the old cookie path.
@@ -338,7 +338,7 @@ let
       version = "0.1.3";
       condition = config.services.electrs.enable;
       message = let
-        dbPath = "${config.services.electrs.dataDir}/${config.services.bitcoind.makeNetworkName "bitcoin" "regtest"}";
+        dbPath = "${config.services.electrs.dataDir}/${({ mainnet = "bitcoin"; regtest = "regtest"; }.${config.nix-bitcoin.network})}";
       in ''
         electrs 0.12.0 uses a new index format and must rebuild its index from scratch.
         It does not convert or delete the old index: until it is removed, electrs
@@ -578,6 +578,16 @@ let
         restart RTL. RTL-Config.json, which holds the 2FA secret, is now readable
         only by RTL's user, not by group rtl.
         See docs/upgrading.md, "Upgrading to config version 0.1.6".
+      '';
+    }
+    {
+      version = "0.2.0";
+      condition = options.services.bitcoind.regtest.isDefined;
+      message = ''
+        services.bitcoind.regtest has been replaced by the deployment-wide
+        nix-bitcoin.network option. Replace true with nix-bitcoin.network = "regtest";
+        or remove the old option for mainnet (the default).
+        See docs/upgrading.md, "Upgrading to config version 0.2.0".
       '';
     }
   ];

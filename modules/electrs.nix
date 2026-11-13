@@ -49,7 +49,7 @@ let
 
   # electrs 0.12 keeps its index in the same path as earlier versions but can't
   # read their format. A marker file next to the index identifies a 0.12 index.
-  dbPath = "${cfg.dataDir}/${bitcoind.makeNetworkName "bitcoin" "regtest"}";
+  dbPath = "${cfg.dataDir}/${({ mainnet = "bitcoin"; regtest = "regtest"; }.${config.nix-bitcoin.network})}";
   bindexMarker = "${dbPath}.bindex";
   # Exit status for an old index, excluded from restarts
   oldIndexStatus = 78;
@@ -113,7 +113,7 @@ in {
           fi
           exec ${config.nix-bitcoin.pkgs.electrs}/bin/electrs \
           --log-filters=INFO \
-          --network=${bitcoind.makeNetworkName "bitcoin" "regtest"} \
+          --network=${({ mainnet = "bitcoin"; regtest = "regtest"; }.${config.nix-bitcoin.network})} \
           --db-dir='${cfg.dataDir}' \
           --daemon-dir='${bitcoind.dataDir}' \
           --electrum-rpc-addr=${cfg.address}:${toString cfg.port} \
