@@ -470,8 +470,8 @@ the name, user or permissions gives the macaroon a new ID. Each time lnd starts,
 bitcoinix deletes the root key of every ID from 7953919891889717248 to
 7954201366866427903 (`0x6e62000000000000` to `0x6e62ffffffffffff`) that no
 configured macaroon uses. If it deleted a root key, it restarts lnd once more,
-which closes the connections that use these macaroons. If this restart fails,
-it stops lnd. So when you change or
+which closes the connections that use these macaroons. If this restart fails
+while the old lnd process still runs, it stops lnd. So when you change or
 remove a macaroon, its copies stop working when lnd restarts during the
 deployment. Until then, a leaked copy keeps working. Copies created before
 bitcoinix 0.1.6 are an exception: they use root key 0 and stay valid until you

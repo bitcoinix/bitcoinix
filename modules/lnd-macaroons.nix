@@ -85,21 +85,35 @@ let
 
   # Restarts lnd after deleting stale root keys, unless lnd was stopped meanwhile.
   # `--job-mode=fail` keeps a queued stop from being replaced by the restart.
-  # Fail closed: if the restart fails, stop lnd, as the streams opened with the
-  # deleted root keys may still be open.
+  # Fail closed: if the restart fails while the old lnd process still runs, stop
+  # lnd, as the streams opened with the deleted root keys may still be open.
+  # Each start gives lnd a new InvocationID, so the old process still runs if lnd
+  # is active with the ID from before the restart. Otherwise the old process is
+  # gone, for example when only the new start failed. Then `Restart=` starts lnd
+  # again, and a stop would cancel that.
   restartLnd = nbLib.script "lnd-restart-after-macaroon-cleanup" ''
+    invocation=$(${systemctl} show -P InvocationID lnd.service)
     if ! ${systemctl} try-restart --job-mode=fail lnd.service; then
-      echo "Failed to restart lnd after deleting macaroon root keys. Stop lnd." >&2
-      ${systemctl} stop lnd.service
+      if [[ $(${systemctl} show -P InvocationID lnd.service) == "$invocation" ]] &&
+        ${systemctl} is-active --quiet lnd.service; then
+        echo "Failed to restart lnd after deleting macaroon root keys. Stop lnd." >&2
+        ${systemctl} stop lnd.service
+      else
+        echo "Failed to restart lnd after deleting macaroon root keys." \
+          "The old lnd process was stopped." >&2
+      fi
       exit 1
     fi
   '';
 
-  # Runs as the lnd user. Creates an empty lncli profile file if there is none.
+  # Runs as the lnd user. Creates an lncli profile file without profiles if there
+  # is none or it's empty, for example after a crash. lncli parses the file also
+  # with an empty --profile, and an empty file makes it fail. Leave a non-empty
+  # file alone: the lnd user owns it.
   createProfileFile = nbLib.script "lncli-create-profile-file" ''
     dir=${escapeShellArg lncliDir}
     umask 077
-    [[ -e $dir/profiles.json ]] || { mkdir -p "$dir" && echo "{}" > "$dir/profiles.json"; }
+    [[ -s $dir/profiles.json ]] || { mkdir -p "$dir" && echo "{}" > "$dir/profiles.json"; }
   '';
 
   # This script runs as root, because setting the macaroon owners needs root.

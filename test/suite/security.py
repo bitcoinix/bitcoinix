@@ -216,6 +216,13 @@ def test_lnd_macaroons():
         create_macaroons,
         f"rm -r {home}/.lncli",
     )
+    # A crash can leave the profile file empty, which lncli can't parse
+    succeed(
+        f"{as_lnd} mkdir -p {home}/.lncli",
+        f"{as_lnd} touch {home}/.lncli/profiles.json",
+        create_macaroons,
+        f"rm -r {home}/.lncli",
+    )
 
     # Admin macaroon is a symlink to a root-only file.
     # The file must not be read and sent to lnd.
