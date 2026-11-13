@@ -7,7 +7,7 @@ with lib;
     bitcoind = config.services.bitcoind;
   in ''
     bitcoind's RPC authentication cookie has moved from
-    `${bitcoind.dataDir}/${optionalString bitcoind.regtest "regtest/"}.cookie`
+    `${bitcoind.dataDir}/${optionalString (config.nix-bitcoin.network == "regtest") "regtest/"}.cookie`
     to `/run/bitcoind/.cookie`.
 
     Update external RPC clients and scripts that read the old cookie path.

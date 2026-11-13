@@ -41,7 +41,7 @@ let
     };
     networkDir = mkOption {
       readOnly = true;
-      default = "${cfg.dataDir}/chain/bitcoin/${bitcoind.network}";
+      default = "${cfg.dataDir}/chain/bitcoin/${config.nix-bitcoin.network}";
       description = "The network data directory.";
     };
     tor-socks = mkOption {
@@ -151,7 +151,7 @@ let
     rpclisten=${cfg.rpcAddress}:${toString cfg.rpcPort}
     restlisten=${cfg.restAddress}:${toString cfg.restPort}
 
-    bitcoin.${bitcoind.network}=1
+    bitcoin.${config.nix-bitcoin.network}=1
     bitcoin.node=bitcoind
 
     ${optionalString (cfg.tor.proxy) "tor.active=true"}

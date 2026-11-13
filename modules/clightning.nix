@@ -124,7 +124,7 @@ let
 
   inherit (config.services) bitcoind;
 
-  network = bitcoind.makeNetworkName "bitcoin" "regtest";
+  network = ({ mainnet = "bitcoin"; regtest = "regtest"; }.${config.nix-bitcoin.network});
   configFile = pkgs.writeText "config" ''
     network=${network}
     ${optionalString (!cfg.useBcliPlugin) "disable-plugin=bcli"}

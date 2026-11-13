@@ -4,7 +4,7 @@ with lib;
 {
   condition = config.services.electrs.enable;
   message = let
-    dbPath = "${config.services.electrs.dataDir}/${config.services.bitcoind.makeNetworkName "bitcoin" "regtest"}";
+    dbPath = "${config.services.electrs.dataDir}/${({ mainnet = "bitcoin"; regtest = "regtest"; }.${config.nix-bitcoin.network})}";
   in ''
     electrs 0.12.0 uses a new index format and must rebuild its index from scratch.
     It does not convert or delete the old index: until it is removed, electrs
