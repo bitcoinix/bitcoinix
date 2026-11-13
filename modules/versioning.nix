@@ -87,7 +87,11 @@ in
   options = versioningOptions;
 
   config = {
-    # Force evaluation. An actual option value is never assigned
-    system = optionalAttrs (builtins.length incompatibleChanges > 0) (builtins.throw errorMsg);
+    # Use the normal NixOS assertion path. A conditional definition of `system`
+    # recurses when a migration checks users whose defaults depend on system.tools.
+    assertions = [{
+      assertion = incompatibleChanges == [];
+      message = errorMsg;
+    }];
   };
 }

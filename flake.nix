@@ -54,7 +54,8 @@
               Only relevant if you are using a nixpkgs version for evaluating your system
               that differs from the one that is locked by this flake (via input `nixpkgs`).
               If this is the case, enabling this option uses the tested package set
-              for bitcoinix services.
+              for bitcoinix services, unless you override this flake's nixpkgs input
+              (for example with `bitcoinix.inputs.nixpkgs.follows`).
               The downsides are increased evaluation times and increased system
               closure size. The system's nixpkgs.overlays and nixpkgs.config do
               not apply to these pinned packages. System evaluation requires
@@ -62,6 +63,9 @@
 
               If `false`, the default system pkgs are used. Use an unstable nixpkgs
               for your system; release branches are not supported.
+              All nixpkgs service packages then follow your system's pin, including
+              lnd and clightning. Review their versions before updating: downgrades
+              may be incompatible with existing databases.
             '';
           };
         };
