@@ -245,8 +245,8 @@ def test_lnd_wallet_init():
 @test("rtl-stops-with-backend")
 def test_rtl_stops_with_backend():
     # RTL sends the lnd admin macaroon and the clightning admin rune to its
-    # backends without checking their certificate. So it must stop with a
-    # backend's unit, and start again only after the backend's start finished.
+    # backends. So it must stop with a backend's unit, and start again only
+    # after the backend's start finished.
     data = test_data["rtl-credentials"]
     backends = [unit for unit in ("lnd", "clightning") if data[unit]]
     # RestartSec of lnd, clightning and RTL

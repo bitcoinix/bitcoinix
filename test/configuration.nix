@@ -746,6 +746,38 @@ let
         renamedAccount = [ true ];
       };
     };
+    # A `mkForce` on `NODE_OPTIONS` must not drop RTL's preload unnoticed
+    testRtlNodeOptions = let
+      fails = env: lib.any (lib.hasInfix "NODE_OPTIONS` must contain")
+        (failedAssertions (evaluate {
+          services.rtl = { enable = true; nodes.lnd.enable = true; };
+          systemd.services.rtl.environment = env;
+        }));
+    in {
+      expr = {
+        default = fails {};
+        forced = fails { NODE_OPTIONS = lib.mkForce "--max-old-space-size=512"; };
+      };
+      expected = { default = false; forced = true; };
+    };
+    testRtlServerUrlOverride = let
+      fails = extraConfig: lib.any (lib.hasInfix "Remove `Settings.lnServerUrl`")
+        (failedAssertions (evaluate {
+          services.rtl = { enable = true; nodes.lnd = { enable = true; inherit extraConfig; }; };
+        }));
+    in {
+      expr = {
+        default = fails {};
+        other = fails { Settings.themeColor = "TEAL"; };
+        override = fails { Settings.lnServerUrl = "http://127.0.0.1:18080"; };
+        # RTL treats an empty `lnImplementation` as LND and sends the macaroon
+        otherBackend = fails {
+          lnImplementation = "";
+          Settings.lnServerUrl = "https://127.0.0.1:3010";
+        };
+      };
+      expected = { default = false; other = false; override = true; otherBackend = true; };
+    };
     # lndconnect reads the lnd user's copy, so only the clnrest access is checked
     testVersioningOperatorAccess = {
       expr = {

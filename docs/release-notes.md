@@ -66,6 +66,14 @@ RTL now stops when lnd or clightning stops, crashes or exits. Before, it kept se
 their admin credentials to the port of a stopped backend. A backend's start starts RTL
 again, and with both backends enabled, both must run.
 
+RTL now checks TLS certificates. Before, it sent the lnd admin macaroon and the
+clightning admin rune to any server on a backend's port. RTL has no option for this,
+so bitcoinix loads a small Node module into RTL. A connection to a backend must present
+the backend's pinned certificate: `services.lnd.certPath` for lnd, or clnrest's
+`server.pem`. Other HTTPS connections get the normal checks against the system CAs.
+See [Upgrading to config version 0.1.6](upgrading.md#upgrading-to-config-version-016)
+for what no longer works.
+
 Two-factor authentication set up in the RTL web interface now survives restarts.
 Each start still resets the other web interface settings in `RTL-Config.json` to
 the Nix configuration. `RTL-Config.json` is now readable only by RTL's user. To

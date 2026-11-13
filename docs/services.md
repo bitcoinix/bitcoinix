@@ -190,9 +190,17 @@ RTL is bound to the units of its backends. It stops when the lnd or clightning u
 stops, crashes or exits, and the backend's next start starts it again. With both
 backends enabled, stopping one of them also stops RTL for the other one, and
 starting RTL starts a stopped backend too. So during maintenance of one backend,
-leave RTL stopped. RTL doesn't check its backends' certificates, so a local process
-that takes the clnrest port before clnrest does can still get the clightning rune.
-lnd stops when it can't use its REST port, so RTL then stays down.
+leave RTL stopped.
+
+A connection from RTL to a backend's address and port must present that backend's
+pinned certificate: `services.lnd.certPath` for lnd, or `server.pem` in clnrest's cert
+dir (clightning's network dir, or `clnrest-certs`). So a local process that takes a
+backend's port gets neither the lnd macaroon nor the clightning rune. Every other HTTPS
+connection gets the normal certificate and hostname checks against the system CAs.
+RTL doesn't start when `LN_SERVER_URL` or `LND_SERVER_URL` is set in its environment.
+To use another server with a self-signed certificate, for example a swap server set
+through `extraConfig`, add its certificate to RTL's environment with
+`systemd.services.rtl.environment.NODE_EXTRA_CA_CERTS`.
 
 Two-factor authentication that you set up in RTL stays on across restarts. If you
 lose the authenticator, delete `RTL-Config.json` in RTL's data dir
