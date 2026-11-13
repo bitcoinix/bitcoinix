@@ -53,7 +53,7 @@ let
   };
 
   bitcoin = evaluate { services.bitcoind.enable = true; };
-  regtest = evaluate { services.bitcoind.enable = true; services.bitcoind.network = "regtest"; };
+  regtest = evaluate { services.bitcoind = { enable = true; network = "regtest"; }; };
   electrs = evaluate { services.electrs.enable = true; };
   prunedElectrs = evaluate {
     services.electrs.enable = true;
