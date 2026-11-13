@@ -116,6 +116,7 @@ let
 
       tests.rtl = cfg.rtl.enable;
       tests.rtl-credentials = cfg.rtl.enable;
+      tests.rtl-stops-with-backend = cfg.rtl.enable;
       test.data.rtl-credentials = {
         inherit (cfg.rtl) dataDir user group;
         lnd = if cfg.rtl.nodes.lnd.enable then { inherit (cfg.lnd) networkDir user; } else null;
@@ -148,10 +149,18 @@ let
       };
 
       tests.lnd = cfg.lnd.enable;
+      tests.lnd-wallet-init = cfg.lnd.enable;
+      test.data.lnd-wallet-init = if cfg.lnd.enable then {
+        inherit (cfg.lnd) dataDir networkDir user group;
+        preStart = toString config.systemd.services.lnd.serviceConfig.ExecStartPre;
+      } else null;
       tests.lnd-macaroons = cfg.lnd.enable && cfg.lnd.macaroons != {};
+      # Also without custom macaroons, as lnd still deletes stale ones then
+      tests.lnd-macaroon-revocation = cfg.lnd.enable;
       test.data.lnd-macaroons = {
         inherit (cfg.lnd) dataDir networkDir user;
         users = mapAttrs (_: macaroon: macaroon.user) cfg.lnd.macaroons;
+        rootKeyIds = mapAttrs (_: macaroon: macaroon.rootKeyId) cfg.lnd.macaroons;
       };
       services.lnd = {
         port = 9736;
@@ -327,9 +336,10 @@ let
       nix-bitcoin = {
         generateSecrets = mkForce false;
         setupSecrets = true;
-        secrets = genAttrs [ "first" "second" ] (_: {
+        secrets = genAttrs [ "first" "second" "empty" ] (name: {
           user = "nobody";
           group = "nogroup";
+          allowEmpty = name == "empty";
         });
       };
       systemd.services.supply-test-secrets = {
@@ -346,6 +356,7 @@ let
           ${config.nix-bitcoin.generateSecretsScript}
           printf first-secret > first
           printf second-secret > second
+          touch empty
         '';
       };
       tests.setup-secrets-supplied = true;

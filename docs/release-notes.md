@@ -41,6 +41,35 @@ config.nix-bitcoin.pkgs.nbPython3Packages.python.withPackages (ps: [ ps.pyln-cli
 The built-in Python plugins select this interpreter automatically. The package
 paths under `nbPython3Packages` remain available.
 
+`setup-secrets` now fails when a declared secret file is empty or isn't a regular
+file. Set `nix-bitcoin.secrets.<name>.allowEmpty = true` for a secret that may be
+empty. Secret generation now fails when a TLS, WireGuard or replication SSH private
+key is empty, and it doesn't replace the key. lnd now stops when `wallet.db` isn't a
+regular file, for example a symlink to a missing file. While lnd has no wallet yet,
+it also stops when its seed file is a symlink to a missing file, and its error for an
+empty seed file names the file. lnd now creates its seed and wallet through temporary
+files, so a failed wallet creation no longer leaves a partial `wallet.db` that
+blocks later starts.
+
+Each custom lnd macaroon (`services.lnd.macaroons`, used by BTCPay Server and
+charge-lnd) now has its own root key. You can revoke one of them, and the other
+macaroons and lnd's admin macaroon stay valid. The revocation needs an lnd restart.
+When you change or remove a macaroon, its old copies stop working when lnd restarts
+during the deployment. Copies made before 0.1.6 use root key 0 and stay valid until
+you revoke all macaroons. See [Custom macaroons](services.md#custom-macaroons).
+
+RTL now stops when lnd or clightning stops, crashes or exits. Before, it kept sending
+their admin credentials to the port of a stopped backend. A backend's start starts RTL
+again, and with both backends enabled, both must run.
+
+Two-factor authentication set up in the RTL web interface now survives restarts.
+Each start still resets the other web interface settings in `RTL-Config.json` to
+the Nix configuration. `RTL-Config.json` is now readable only by RTL's user. To
+turn 2FA off without the authenticator, see
+[Connect to RTL](services.md#connect-to-rtl).
+
+See also [Upgrading to config version 0.1.6](upgrading.md#upgrading-to-config-version-016).
+
 ## 0.1.5
 
 The clnrest package has moved from `nix-bitcoin.pkgs.clnrest` to

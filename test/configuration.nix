@@ -265,6 +265,11 @@ let
     services.btcpayserver = { enable = true; lightningBackend = "clightning"; };
     services.clightning = { user = "cln-custom"; group = "cln-rpc"; };
   };
+  lndMacaroon = name: macaroon: evaluate {
+    services.lnd = { enable = true; macaroons.${name} = macaroon; };
+  };
+  lndMacaroonId = name: user: permissions:
+    (lndMacaroon name { inherit user permissions; }).services.lnd.macaroons.${name}.rootKeyId;
   replicationHostKeyWarnings = replication: builtins.filter
     (lib.hasInfix "disables SSH host key checking")
     (evaluate {
@@ -452,6 +457,14 @@ let
       ];
       expected = [ false true true true ];
     }) [ "currencyrate" "rebalance" ]);
+  # Secret generation with the replication SSH key, run by the check below
+  replicationGenerator = (evaluate {
+    services.clightning = {
+      enable = true;
+      replication = { enable = true; sshfs.destination = "user@host:dir"; };
+    };
+  }).nix-bitcoin.generateSecretsScript;
+
   # The preset's preStart lines, run by the check below against a scratch data dir
   remoteRpcUser = "rpc$USER'$(id)";
   remotePresetPreStart = pkgs.writeText "bitcoind-remote-prestart"
@@ -651,6 +664,20 @@ let
       ];
       expected = [ false true true true ];
     };
+    testEmptySecretsMigration = {
+      expr = map (case: (builtins.tryEval (evaluate {
+        nix-bitcoin.configVersion = case.version;
+        nix-bitcoin.setupSecrets = case.setupSecrets;
+        services.lnd.enable = case.lnd;
+      }).system.stateVersion).success) [
+        { version = "0.1.5"; setupSecrets = true; lnd = false; }
+        { version = "0.1.5"; setupSecrets = false; lnd = true; }
+        { version = "0.1.5"; setupSecrets = false; lnd = false; }
+        { version = "0.1.6"; setupSecrets = true; lnd = true; }
+        { version = null; setupSecrets = true; lnd = true; }
+      ];
+      expected = [ false false true true true ];
+    };
     testBackupsFollowPostgresqlCompression = let
       includes = compression: let
         list = builtins.readFile (backupsWithCompression compression).services.duplicity.includeFileList;
@@ -799,6 +826,57 @@ let
       expr = lib.elem "cln-rpc" btcpayserverCustomClightningGroup.users.users.btcpayserver.extraGroups;
       expected = true;
     };
+    testLndMacaroonRootKeyIds = let
+      info = ''{"entity":"info","action":"read"}'';
+      onchain = ''{"entity":"onchain","action":"read"}'';
+      id = lndMacaroonId "app" "app" "${info},${onchain}";
+    in {
+      expr = {
+        equivalent = map (permissions: lndMacaroonId "app" "app" permissions == id) [
+          " ${onchain} ,\n${info}"
+          "${info},${onchain},${info}"
+          ''{"action":"read","entity":"info"},${onchain}''
+        ];
+        changed = map (other: other != id) [
+          (lndMacaroonId "app2" "app" "${info},${onchain}")
+          (lndMacaroonId "app" "app2" "${info},${onchain}")
+          (lndMacaroonId "app" "app" info)
+          (lndMacaroonId "app" "app" ''${info},{"entity":"onchain","action":"write"}'')
+        ];
+        # 0x6e62000000000000 to 0x6e62ffffffffffff
+        inRange = builtins.stringLength id == 19
+          && id >= "7953919891889717248" && id <= "7954201366866427903";
+      };
+      expected = {
+        equivalent = [ true true true ];
+        changed = [ true true true true ];
+        inRange = true;
+      };
+    };
+    testLndMacaroonRejectsInvalidPermissions = {
+      expr = map (permissions:
+        map (lib.hasInfix "services.lnd.macaroons.app.permissions must be")
+          (failedAssertions (lndMacaroon "app" { user = "app"; inherit permissions; }))
+      ) [
+        ""
+        ''"info:read"''
+        ''{"entity":"info"}''
+        ''{"entity":"info","action":1}''
+        ''{"entity":"info","action":"read","caveat":"x"}''
+        ''{"entity":"uri","action":"/a:b"}''
+      ];
+      expected = [ [ true ] [ true ] [ true ] [ true ] [ true ] [ true ] ];
+    };
+    testLndMacaroonRejectsUnsafeNames = let
+      # `<name>.macaroon` must fit the 255 byte limit for file names
+      nameOfLength = length: lib.concatStrings (lib.genList (_: "a") length);
+    in {
+      expr = map (name:
+        map (lib.hasInfix "may only contain letters")
+          (failedAssertions (lndMacaroon name { user = "app"; permissions = ''{"entity":"info","action":"read"}''; }))
+      ) [ "../lnd/app" "a/b" ".app" "my app" "app.v2" (nameOfLength 246) (nameOfLength 247) ];
+      expected = [ [ true ] [ true ] [ true ] [ true ] [] [] [ true ] ];
+    };
     testReplicationWarnsWithoutHostKeyCheck = {
       expr = map (replication: builtins.length (replicationHostKeyWarnings replication)) [
         { sshfs.destination = "user@host:dir"; }
@@ -826,6 +904,41 @@ else
       cat data/bitcoin.conf >&2
       exit 1
     fi
+
+    # The replication SSH key is created when it's absent. An empty key, or a
+    # symlink to a missing file, fails and is kept. A missing, empty or wrong
+    # `.pub` is rebuilt from an unencrypted key.
+    mkdir gen
+    (
+      cd gen
+      key=clightning-replication-ssh-key
+      fail() { echo "Replication SSH key: $*" >&2; exit 1; }
+      ${replicationGenerator}
+      [[ -z $(find . -name "$key.??????") ]] || fail "a temp file or dir was left behind"
+      pub=$(< $key.pub)
+      for breakPub in "rm $key.pub" ": > $key.pub" "echo ssh-ed25519 wrong > $key.pub"; do
+        eval "$breakPub"
+        ${replicationGenerator}
+        [[ $(< $key.pub) == "$pub" ]] || fail "'$breakPub' wasn't repaired"
+      done
+      : > $key
+      if ${replicationGenerator} 2> err; then fail "an empty key was accepted"; fi
+      grep -q "Key file '$key' is empty" err || fail "unexpected error: $(< err)"
+      [[ ! -s $key ]] || fail "an empty key was replaced"
+      rm $key && ln -s missing $key
+      if ${replicationGenerator} 2> /dev/null; then fail "a symlink to a missing key was accepted"; fi
+      [[ -L $key ]] || fail "a symlink to a missing key was replaced"
+      # Identities whose private key can't be read here keep their `.pub`: an
+      # encrypted key, and a public key whose private key is in an SSH agent
+      rm $key && ${pkgs.openssh}/bin/ssh-keygen -t ed25519 -q -N secret -C "" -f $key
+      publicKey=$(< $key.pub)
+      for identity in encrypted public-only; do
+        if [[ $identity == public-only ]]; then echo "$publicKey" > $key; fi
+        echo kept > $key.pub
+        ${replicationGenerator} || fail "the $identity identity failed"
+        [[ $(< $key.pub) == kept ]] || fail "the .pub of the $identity identity was changed"
+      done
+    )
 
     echo '${toString (builtins.length (builtins.attrNames tests))} configuration tests passed' > "$out"
   ''

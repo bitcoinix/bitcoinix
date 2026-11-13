@@ -58,7 +58,7 @@ makeTestVM {
     };
   };
 
-  testScript =  ''
+  testScript = { nodes, ... }: ''
     import base64
     import urllib.parse as Url
     from types import SimpleNamespace
@@ -253,5 +253,21 @@ makeTestVM {
           server.succeed(f"cp -p /tmp/wg-peer-public-key.orig {key_file}")
           server.succeed(f"systemctl start {unit}")
           server.succeed(f"wg show wg-nb allowed-ips | grep -qxF '{pubkey}\t10.10.0.2/32'")
+
+      with subtest("secret generation keeps private keys and rebuilds public keys"):
+          gen_dir = "/tmp/generate-secrets"
+          generate = f"cd {gen_dir} && ${nodes.server.nix-bitcoin.generateSecretsScript}"
+          priv, pub = f"{gen_dir}/wg-peer-private-key", f"{gen_dir}/wg-peer-public-key"
+          server.succeed(f"mkdir -m 700 {gen_dir}", generate)
+          expected = server.succeed(f"wg pubkey < {priv}")
+          # A missing, empty or wrong public key is rebuilt from the private key
+          for break_pub in [f"rm {pub}", f"truncate -s 0 {pub}", f"wg genkey | wg pubkey > {pub}"]:
+              server.succeed(break_pub, generate)
+              assert server.succeed(f"cat {pub}") == expected
+          # An empty private key fails and is kept: a new key breaks the client
+          server.succeed(f"truncate -s 0 {priv}")
+          status, out = server.execute(f"{generate} 2>&1")
+          assert status != 0 and "Key file 'wg-peer-private-key' is empty or a symlink" in out, out
+          server.succeed(f"[[ ! -s {priv} ]]")
   '';
 }

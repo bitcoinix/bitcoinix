@@ -41,7 +41,8 @@ class RunnerTests(unittest.TestCase):
         expected = [
             "electrs", "stop-electrs", "netns-isolation", "hardening-ro-paths",
             "backups", "restart-bitcoind", "config-replace", "clnrest-admin-rune",
-            "regtest", "lnd-restart-on-clean-exit", "trustedcoin", "setup-secrets",
+            "regtest", "lnd-restart-on-clean-exit", "lnd-macaroon-revocation",
+            "trustedcoin", "setup-secrets",
             "setup-secrets-supplied",
         ]
         self.context["enabled_tests"] = set(expected)

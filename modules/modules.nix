@@ -14,6 +14,7 @@
     ./clightning-plugins
     ./clightning-replication.nix
     ./lnd.nix
+    ./lnd-macaroons.nix
     ./charge-lnd.nix
     ./lndconnect.nix # Requires onion-addresses.nix
     ./rtl.nix

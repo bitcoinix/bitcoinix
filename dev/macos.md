@@ -150,6 +150,7 @@ nb nix eval .#checks.aarch64-linux.module-config.testCount
 nb nix build --no-link \
   .#checks.aarch64-linux.module-config \
   .#checks.aarch64-linux.test-runner \
+  .#checks.aarch64-linux.lnd-macaroon-filters \
   .#checks.aarch64-linux.cve-tools
 
 # Build a package, replacing clightning-plugins/clnrest with the package being changed.
