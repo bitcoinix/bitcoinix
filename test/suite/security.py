@@ -384,8 +384,134 @@ def test_rtl_credentials():
         check(script, cln["user"], admin_rune, f"{data_dir}/clightning-admin-rune",
               f"printf 'LIGHTNING_RUNE=\"%s\"\\n' \"$(cat {admin_rune})\"",
               invalid_contents=("", "null\n"))
+        cert = f"{cln['networkDir']}/server.pem"
+        check(script, cln["user"], cert, f"{data_dir}/clnrest-cert.pem", f"cat {cert}")
 
     succeed(f"rm -r {canary} {canary_dir}")
+
+
+@test("rtl-backend-certs")
+def test_rtl_backend_certs():
+    # RTL sends the lnd macaroon and the clightning rune with
+    # `rejectUnauthorized: false`. With its preload, a connection to a backend
+    # must present the backend's pinned cert, and every other connection gets the
+    # normal checks against the system CAs. Run RTL's own HTTP client like RTL:
+    # as its user, with its environment.
+    assert_running("rtl")
+    pid = succeed("systemctl show -P MainPID rtl").strip()
+    # `bin/rtl` runs `node <rtl>/rtl.js`
+    node, rtl_js = succeed(f"tr '\\0' ' ' < /proc/{pid}/cmdline").split()[:2]
+    request_js = f"{os.path.dirname(rtl_js)}/backend/utils/request.js"
+    env = shlex.split(succeed("systemctl show -P Environment rtl"))
+    pins_file = next(var.split("=", 1)[1] for var in env if var.startswith("RTL_BACKEND_CERTS="))
+    pins = succeed_json(f"cat {pins_file}")
+    # Each backend URL in RTL's config has a pin. RTL renames `Settings` when it starts.
+    conf = f"{test_data['rtl-credentials']['dataDir']}/RTL-Config.json"
+    urls = succeed(f"jq -r '.nodes[] | (.settings // .Settings).lnServerUrl' {conf}").split()
+    assert sorted(urls) == sorted(pins), (urls, pins)
+
+    def rtl_node(args, extra_env=""):
+        return (f"timeout 20 runuser -u {test_data['rtl-credentials']['user']} --"
+                f" env {shlex.join(env)} {extra_env} {node} {args}")
+
+    # Sends a GET with RTL's HTTP client, as RTL does for its backends.
+    # Prints `ok`, the HTTP error status or the error code.
+    get = ("const { default: request } = await import(process.argv[1]);"
+           "await request.get({ url: process.argv[2], rejectUnauthorized: false, json: true,"
+           " headers: { 'Grpc-Metadata-macaroon': '00' } })"
+           ".then(() => console.log('ok'),"
+           " (error) => console.log(error.statusCode ?? error.error.code));"
+           "process.exit();")
+
+    def rtl_get(url, extra_env=""):
+        args = f"--input-type=module -e {shlex.quote(get)} {request_js} {url}"
+        return succeed(rtl_node(args, extra_env)).strip()
+
+    cert_error = r"[A-Z_]*(CERT|SIGNATURE)[A-Z_]*"
+
+    # A TLS server with a throwaway cert. It logs the request bytes it receives
+    # and each closed connection. No `$`: systemd-run would expand it.
+    # With clightning, clnrest's own CA issues the cert. A pin of that CA instead
+    # of clnrest's server cert would let it pass.
+    fake = "/run/rtl-test-fake-backend"
+    fake_port = 7443
+    fake_url = f"https://127.0.0.1:{fake_port}"
+    server = ("const fs = require('fs'); const [dir, port] = process.argv.slice(1);"
+              "require('tls').createServer("
+              " { key: fs.readFileSync(dir + '/key'), cert: fs.readFileSync(dir + '/cert') },"
+              " (socket) => socket.on('data', (data) => {"
+              " fs.appendFileSync(dir + '/received', data);"
+              " socket.end('HTTP/1.1 200 OK\\r\\nContent-Length: 0\\r\\n\\r\\n'); }))"
+              ".on('connection', (tcp) => tcp.on('close',"
+              " () => fs.appendFileSync(dir + '/closed', '\\n')))"
+              ".listen(port, '127.0.0.1')")
+    cln = test_data["rtl-credentials"]["clightning"]
+    issuer_ca = f"{cln['networkDir']}/ca.pem" if cln else ""
+    issuer = f" -CA {issuer_ca} -CAkey {cln['networkDir']}/ca-key.pem" if cln else ""
+    succeed(
+        f"mkdir {fake}",
+        "openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 -nodes -days 1"
+        f" -subj /CN=localhost -addext subjectAltName=IP:127.0.0.1{issuer}"
+        f" -keyout {fake}/key -out {fake}/cert 2>/dev/null",
+        f"systemd-run --unit=rtl-test-fake-backend {node} -e {shlex.quote(server)} {fake} {fake_port}",
+    )
+    wait_for_open_port("127.0.0.1", fake_port)
+
+    def fake_get(pins=None, extra_env=""):
+        """Returns the result and the request bytes that the fake server received"""
+        if pins:
+            succeed(f"echo {shlex.quote(json.dumps(pins))} > {fake}/pins")
+            extra_env += f" RTL_BACKEND_CERTS={fake}/pins"
+        succeed(f"rm -f {fake}/received {fake}/closed")
+        result = rtl_get(fake_url, extra_env)
+        machine.wait_until_succeeds(f"[[ -s {fake}/closed ]]")
+        return result, succeed(f"cat {fake}/received 2>/dev/null || true")
+
+    # With its own cert pinned, the fake server gets the request
+    result, received = fake_get({fake_url: f"{fake}/cert"})
+    assert result == "ok" and received.startswith("GET / "), (result, received)
+    # A server that isn't a backend must have a cert from a system CA
+    result, received = fake_get()
+    assert re.fullmatch(cert_error, result) and received == "", (result, received)
+    # NODE_EXTRA_CA_CERTS adds its cert and issuer. The cert names the server's IP.
+    succeed(f"cat {fake}/cert {issuer_ca} > {fake}/extra-cas")
+    result, received = fake_get(extra_env=f"NODE_EXTRA_CA_CERTS={fake}/extra-cas")
+    assert result == "ok" and received.startswith("GET / "), (result, received)
+
+    for url, cert in pins.items():
+        with machine.nested(f"backend: {url}"):
+            # The backend itself passes. Its answer to the fake credential doesn't matter.
+            assert_str_matches(rtl_get(url), r"^(ok|\d{3})$")
+            # Another spelling of the backend's address has no pin, so the backend's
+            # cert fails the system CAs. Before, RTL sent the credential this way.
+            parsed = urlparse(url)
+            alias = f"https://[::ffff:{parsed.hostname}]:{parsed.port}"
+            assert re.fullmatch(cert_error, rtl_get(alias)), alias
+            # A server on the backend's address with another cert gets nothing.
+            # Only the first cert in a pin file counts.
+            succeed(f"cat {cert} {fake}/cert > {fake}/certs")
+            result, received = fake_get({fake_url: f"{fake}/certs"})
+            assert re.fullmatch(cert_error, result) and received == "", (result, received)
+
+    # RTL doesn't start without valid pins, or with a backend URL from its
+    # environment, which may even use plain HTTP
+    bad_pins = {
+        "empty": {fake_url: f"{fake}/empty"},
+        "http": {"http://127.0.0.1:8080": f"{fake}/cert"},
+    }
+    succeed(f"touch {fake}/empty", *(
+        f"echo {shlex.quote(json.dumps(content))} > {fake}/{name}.json"
+        for name, content in bad_pins.items()
+    ))
+    for bad_env, error in [("RTL_BACKEND_CERTS=", "RTL_BACKEND_CERTS is not set"),
+                           (f"RTL_BACKEND_CERTS={fake}/empty.json", "holds no PEM certificate"),
+                           (f"RTL_BACKEND_CERTS={fake}/http.json", "isn't an HTTPS URL"),
+                           ("LN_SERVER_URL=http://127.0.0.1:18080", "LN_SERVER_URL is set"),
+                           ("LND_SERVER_URL=http://127.0.0.1:18080", "LND_SERVER_URL is set")]:
+        status, output = machine.execute(f"{rtl_node('-e 0', bad_env)} 2>&1")
+        assert status != 0 and error in output, output
+
+    succeed("systemctl stop rtl-test-fake-backend", f"rm -r {fake}")
 
 
 @test("onion-addresses")
