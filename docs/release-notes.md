@@ -36,6 +36,13 @@ config.nix-bitcoin.pkgs.nbPython3Packages.python.withPackages (ps: [ ps.pyln-cli
 The built-in Python plugins select this interpreter automatically. The package
 paths under `nbPython3Packages` remain available.
 
+Each custom lnd macaroon (`services.lnd.macaroons`, used by BTCPay Server and
+charge-lnd) now has its own root key. You can revoke one of them, and the other
+macaroons and lnd's admin macaroon stay valid. The revocation needs an lnd restart.
+When you change or remove a macaroon, its old copies stop working when lnd restarts
+during the deployment. Copies made before 0.1.6 use root key 0 and stay valid until
+you revoke all macaroons. See [Custom macaroons](services.md#custom-macaroons).
+
 RTL now stops when lnd or clightning stops, crashes or exits. Before, it kept sending
 their admin credentials to the port of a stopped backend. A backend's start starts RTL
 again, and with both backends enabled, both must run.

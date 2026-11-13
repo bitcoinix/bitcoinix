@@ -143,9 +143,12 @@ let
 
       tests.lnd = cfg.lnd.enable;
       tests.lnd-macaroons = cfg.lnd.enable && cfg.lnd.macaroons != {};
+      # Also without custom macaroons, as lnd still deletes stale ones then
+      tests.lnd-macaroon-revocation = cfg.lnd.enable;
       test.data.lnd-macaroons = {
         inherit (cfg.lnd) dataDir networkDir user;
         users = mapAttrs (_: macaroon: macaroon.user) cfg.lnd.macaroons;
+        rootKeyIds = mapAttrs (_: macaroon: macaroon.rootKeyId) cfg.lnd.macaroons;
       };
       services.lnd = {
         port = 9736;

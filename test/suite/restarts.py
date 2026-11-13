@@ -295,3 +295,133 @@ def test_lnd_restart_on_clean_exit():
     machine.wait_until_succeeds("runuser -u operator -- lncli getinfo")
     for unit in timers:
         succeed(f"systemctl start {unit}")
+
+
+# Impure: restarts lnd and deletes the root key of a configured macaroon
+@test("lnd-macaroon-revocation")
+def test_lnd_macaroon_revocation():
+    # Custom macaroons have their own root keys, with IDs in a reserved range.
+    # Each time lnd starts, lnd-create-macaroons deletes every root key in this
+    # range that no configured macaroon uses, which revokes all their copies.
+    # Then it restarts lnd once, which closes the streams opened with them.
+    data = test_data["lnd-macaroons"]
+    configured = data["rootKeyIds"]
+    first, last = 0x6E62 << 48, (0x6E63 << 48) - 1
+    lncli = "runuser -u operator -- lncli"
+    # Readable by the lncli wrapper, which runs as the lnd user
+    copies = "/run/lnd-macaroon-revocation-test"
+    restart_message = "Restart lnd to close the connections of deleted macaroons"
+
+    def count_logs(message):
+        return f"journalctl -b -q -o cat -u lnd | grep -cF '{message}' || true"
+
+    def call(macaroon):
+        # This --macaroonpath overrides the admin macaroon of the lncli wrapper
+        status, output = machine.execute(f"{lncli} --macaroonpath {macaroon} getinfo 2>&1")
+        return status == 0, output
+
+    def assert_valid(macaroon):
+        valid, output = call(macaroon)
+        assert valid, (macaroon, output)
+
+    def assert_revoked(macaroon, error):
+        valid, output = call(macaroon)
+        assert not valid and error in output, (macaroon, output)
+
+    def copy_configured(name):
+        copy = f"{copies}/{name}.macaroon"
+        succeed(f"install -m 400 -o {data['user']} /run/lnd/{name}.macaroon {copy}")
+        info = succeed_json(f"{lncli} printmacaroon --macaroon_file {copy}")
+        assert info["root_key_id"] == configured[name], (name, info)
+        # getinfo, which checks the macaroons, needs info:read
+        if "info:read" not in info["permissions"]:
+            return None
+        assert_valid(copy)
+        return copy
+
+    def bake(root_key_id):
+        path = f"{copies}/{root_key_id}.macaroon"
+        succeed(f"{lncli} bakemacaroon --root_key_id {root_key_id} --save_to {path} info:read")
+        return path
+
+    succeed("systemctl start lnd")
+    machine.wait_until_succeeds(f"{lncli} getinfo")
+    succeed(f"install -d -m 700 -o {data['user']} {copies}")
+    saved = {name: copy_configured(name) for name in configured}
+    stale = {root_key_id: bake(root_key_id) for root_key_id in (first, last)}
+    outside = [first - 1, last + 1, 1]
+    kept = [bake(root_key_id) for root_key_id in outside]
+    # Revoke a configured macaroon by hand. charge-lnd reads its macaroon on
+    # each run, so no running service keeps the revoked copy.
+    rebaked = "charge-lnd" if saved.get("charge-lnd") else None
+    if rebaked:
+        succeed(f"{lncli} deletemacaroonid {configured[rebaked]}")
+
+    restarts = int(succeed(count_logs(restart_message)))
+    failures = int(succeed(count_logs("Failed with result")))
+    runtime_dir = succeed("stat -c %i /run/lnd")
+    succeed("systemctl restart lnd")
+    # Deleting the stale root keys restarted lnd once more. That start found
+    # nothing stale, so it didn't restart lnd again.
+    machine.wait_until_succeeds(
+        f"! {current_run_log_has_string('lnd', restart_message)}"
+        " && systemctl is-active lnd && [[ -z $(systemctl list-jobs --no-legend lnd.service) ]]"
+    )
+    assert int(succeed(count_logs(restart_message))) == restarts + 1, "lnd wasn't restarted"
+    assert int(succeed(count_logs("Failed with result"))) == failures, "lnd failed"
+    # Services may read the macaroons while lnd restarts
+    assert succeed("stat -c %i /run/lnd") == runtime_dir, "/run/lnd was removed"
+    machine.wait_until_succeeds(f"{lncli} getinfo")
+
+    root_key_ids = succeed_json(f"{lncli} listmacaroonids")["root_key_ids"]
+    for root_key_id, macaroon in stale.items():
+        assert str(root_key_id) not in root_key_ids, root_key_ids
+        assert_revoked(macaroon, f"root key with id {root_key_id} doesn't exist")
+    # Root key 0 belongs to the admin macaroon used by lncli above
+    for root_key_id in [0, *outside, *configured.values()]:
+        assert str(root_key_id) in root_key_ids, (root_key_id, root_key_ids)
+    for macaroon in kept:
+        assert_valid(macaroon)
+    for name, macaroon in saved.items():
+        if name == rebaked:
+            # lnd baked a new root key for the same ID
+            assert_revoked(macaroon, "signature mismatch after caveat verification")
+            copy_configured(name)
+        elif macaroon:
+            # Copies survive a restart that doesn't change the macaroon
+            assert_valid(macaroon)
+
+    for root_key_id in outside:
+        succeed(f"{lncli} deletemacaroonid {root_key_id}")
+    succeed(f"rm -r {copies}")
+
+    # The restart after deleting root keys must not undo a stop that came
+    # first. A stop also removes the macaroons.
+    # charge-lnd `requires` lnd, so pause its timer.
+    timers = ["charge-lnd.timer"] if "charge-lnd" in enabled_tests else []
+    script = succeed(
+        "systemctl show lnd -p ExecStartPost --value"
+        " | grep -oE '/nix/store/[^ ]+-lnd-create-macaroons' | head -1"
+    ).strip()
+    restart_lnd = succeed(
+        f"grep -oE '/nix/store/[^ ]+-lnd-restart-after-macaroon-cleanup' {script} | head -1"
+    ).strip()
+    succeed(*[f"systemctl stop {unit}" for unit in timers], "systemctl stop lnd", "! test -e /run/lnd")
+    succeed(restart_lnd)
+    assert_full_match("systemctl show -P ActiveState lnd", "inactive\n")
+    # A stop of lnd waits while a unit that runs after lnd stops. If the
+    # restart can't run then, it stops lnd and fails.
+    succeed(
+        "systemctl start lnd",
+        "systemd-run --unit=lnd-test-slow-stop --remain-after-exit"
+        " -p After=lnd.service -p Requires=lnd.service"
+        " -p 'ExecStop=/run/current-system/sw/bin/sleep 5' /run/current-system/sw/bin/true",
+        "systemctl stop --no-block lnd",
+    )
+    machine.wait_until_succeeds("systemctl list-jobs --no-legend lnd.service | grep -w stop")
+    status, output = machine.execute(f"{restart_lnd} 2>&1")
+    assert status != 0, output
+    # If lnd was already stopping, the script exits without waiting for it
+    machine.wait_until_succeeds("[[ $(systemctl show -P ActiveState lnd) == inactive ]]")
+    succeed("systemctl start lnd", *[f"systemctl start {unit}" for unit in timers])
+    machine.wait_until_succeeds(f"{lncli} getinfo")

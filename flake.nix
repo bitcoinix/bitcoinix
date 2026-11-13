@@ -105,6 +105,12 @@
             python ${./test/runner-tests.py} ${pkgs.writeText "test-suite.py" (import ./test/lib/test-script.nix)}
             touch "$out"
           '';
+          lnd-macaroon-filters = pkgs.runCommand "nix-bitcoin-lnd-macaroon-filters" {
+            nativeBuildInputs = [ pkgs.python3 pkgs.jq ];
+          } ''
+            python ${./test/lnd-macaroon-filters-tests.py} ${./modules/lnd-macaroons}
+            touch "$out"
+          '';
           cve-tools = pkgs.runCommand "nix-bitcoin-cve-tools" {
             nativeBuildInputs = [ pkgs.python3 ];
           } ''

@@ -42,6 +42,7 @@ TEST_PHASES = (
     ("post-restart", (
         "regtest",
         "lnd-restart-on-clean-exit",
+        "lnd-macaroon-revocation",
         "trustedcoin",
     )),
     ("secrets", (
