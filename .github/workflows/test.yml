@@ -85,6 +85,8 @@ jobs:
           - netnsRegtest
           - wireguard-lndconnect
           - setup-secrets
+          - unbeholden-wallet-electrs
+          - unbeholden-wallet-electrs-netns
     needs: build_test_drivers
     if: needs.build_test_drivers.outputs.run_scenario_tests == 'true'
     steps:

@@ -333,6 +333,26 @@ def test_mempool():
     assert_full_match("ss -ltnH 'sport = :3306' | awk '{print $4}'", r"127\.0\.0\.1:3306\n")
 
 
+@test("unbeholden-wallet")
+def test_unbeholden_wallet():
+    assert_running("unbeholden-wallet")
+    url = f"{ip('unbeholden-wallet')}:60846"
+    wait_for_open_port(ip("unbeholden-wallet"), 60846)
+    assert_matches(f"curl {url}", "<title>Unbeholden Wallet</title>")
+    status = f"curl -s -o /dev/null -w '%{{http_code}}' {url}"
+    assert_full_match(f"{status} -H 'Host: evil.example'", "403")
+    for host in test_data["unbeholden-wallet"]["allowedHosts"]:
+        assert_full_match(f"{status} -H 'Host: {host}'", "200")
+    # Mainnet fixtures never sync, so their Electrum backend may not listen.
+    if "regtest" not in enabled_tests:
+        return
+    backend = test_data["unbeholden-wallet"]["electrumServer"]
+    request = '{"jsonrpc":"2.0","id":1,"method":"server.version","params":["test","1.4"]}'
+    machine.wait_until_succeeds(
+        f"echo '{request}' | websocat -n1 ws://{url}/electrum | grep -qi {backend}"
+    )
+
+
 @test("nodeinfo")
 def test_nodeinfo():
     status, _ = machine.execute("systemctl is-enabled --quiet onion-addresses 2> /dev/null")

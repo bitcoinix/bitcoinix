@@ -5,6 +5,11 @@ For configuration migrations reported during evaluation, follow the
 
 ## 0.1.6
 
+New service: [Unbeholden Wallet](services.md#connect-to-unbeholden-wallet), a watch-only
+wallet that runs in the browser and hands transactions to an air-gapped signer over QR
+codes. Enable it with `services.unbeholden-wallet.enable = true;`. It connects to electrs,
+or to Fulcrum with `services.unbeholden-wallet.electrumServer = "fulcrum"`.
+
 RTL now uses the nixpkgs package. Replace explicit flake references to
 `packages.<system>.rtl` or `legacyPackages.<system>.rtl` with
 `legacyPackages.<system>.pinned.rtl`. For example, build it with

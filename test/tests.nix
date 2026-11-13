@@ -37,6 +37,8 @@ let
         (mkIfTest "lnconnect-clnrest-cert" [ openssl ])
         # Needed to trace the commands run by secret generation
         (mkIfTest "secrets-no-argv" [ strace ])
+        # Talks to the Electrum relay
+        (mkIfTest "unbeholden-wallet" [ websocat ])
       ]);
 
       tests.bitcoind = cfg.bitcoind.enable;
@@ -139,6 +141,11 @@ let
       services.mempool = {
         electrumServer = "fulcrum";
         settings.MEMPOOL.POOLS_JSON_URL = mkIf config.test.noConnections "disable-pool-fetching";
+      };
+
+      tests.unbeholden-wallet = cfg.unbeholden-wallet.enable;
+      test.data.unbeholden-wallet = {
+        inherit (cfg.unbeholden-wallet) electrumServer allowedHosts;
       };
 
       tests.lnd = cfg.lnd.enable;
@@ -375,6 +382,8 @@ let
       services.lnd.lndconnect = { enable = true; onion = true; };
       services.charge-lnd.enable = true;
       services.mempool.enable = true;
+      services.unbeholden-wallet.enable = true;
+      services.unbeholden-wallet.electrumServer = "fulcrum";
       services.electrs.enable = true;
       services.fulcrum.enable = true;
       services.btcpayserver.enable = true;
@@ -420,6 +429,8 @@ let
       test.features.clightningPlugins = true;
       services.rtl.enable = true;
       services.mempool.enable = true;
+      services.unbeholden-wallet.enable = true;
+      services.unbeholden-wallet.electrumServer = "fulcrum";
       services.lnd.enable = true;
       services.lnd.lndconnect.enable = true;
       services.charge-lnd.enable = true;
@@ -529,6 +540,25 @@ let
         clightning = true;
         lnconnect-onion-clnrest = true;
       };
+    };
+
+    unbeholden-wallet-electrs = {
+      imports = [ scenarios.regtestBase ];
+      services.unbeholden-wallet.enable = true;
+      services.unbeholden-wallet.allowedHosts = [ "wallet.test" ];
+    };
+
+    unbeholden-wallet-fulcrum = {
+      imports = [ scenarios.unbeholden-wallet-electrs ];
+      services.unbeholden-wallet.electrumServer = "fulcrum";
+    };
+
+    unbeholden-wallet-electrs-netns = {
+      imports = with scenarios; [ unbeholden-wallet-electrs netnsBase ];
+    };
+
+    unbeholden-wallet-fulcrum-netns = {
+      imports = with scenarios; [ unbeholden-wallet-fulcrum netnsBase ];
     };
 
     # Test the special bitcoin RPC setup that lnd uses when bitcoin is pruned

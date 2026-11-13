@@ -28,7 +28,7 @@ KEV_MIRROR = ("https://raw.githubusercontent.com/cisagov/kev-data/refs/heads/dev
 NIX = ["nix", "--extra-experimental-features", "nix-command flakes"]
 SCAN_TARGET = ("representative node toplevel (secure-node preset: tor, operator, nodeinfo; "
                "bitcoind + clightning/clnrest + lnd + charge-lnd + electrs + fulcrum + "
-               "btcpayserver/nbxplorer + mempool + rtl + backups), runtime closure")
+               "btcpayserver/nbxplorer + mempool + rtl + unbeholden-wallet + backups), runtime closure")
 TRIAGE = [
     "Triage: fix the package upstream in nixpkgs and move the pin (`helper/update-flake.sh`),",
     "or override it in `pkgs/` until nixpkgs catches up; whitelist only vulnix pname collisions",
