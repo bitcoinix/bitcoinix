@@ -228,9 +228,29 @@ in {
           # the password in its argv, readable by every local user through
           # /proc/<pid>/cmdline while it runs. jq also escapes it as JSON.
           (nbLib.script "rtl-setup-config" ''
-            ${pkgs.jq}/bin/jq --rawfile pw '${secretsDir}/rtl-password' \
-              '.multiPass = ($pw | sub("\n+$"; ""))' ${configFile} \
-              > '${cfg.dataDir}/RTL-Config.json'
+            conf='${cfg.dataDir}/RTL-Config.json'
+            # RTL keeps the 2FA secret set up in its UI in this file as `secret2FA`
+            # and enables 2FA when it is set. So carry it over from the old file,
+            # which jq also reads itself. Ignore a missing or empty file, or one that
+            # jq doesn't read as exactly one object.
+            old=/dev/null
+            if [[ -s $conf ]] && ${pkgs.jq}/bin/jq -es 'length == 1 and (.[0] | type == "object")' "$conf" >/dev/null 2>&1; then
+              old=$conf
+            elif [[ -e $conf ]]; then
+              # For example after a crash while RTL rewrote the file
+              echo "Warning: Ignore '$conf', which isn't a single JSON object." \
+                   "2FA is off until you set it up again." >&2
+            fi
+            # Write to a temp file. `>` would truncate "$conf" before jq reads it.
+            tmp=$(mktemp "$conf.XXXXXX")
+            trap 'rm -f "$tmp"' EXIT
+            ${pkgs.jq}/bin/jq --rawfile pw '${secretsDir}/rtl-password' --slurpfile old "$old" '
+              .multiPass = ($pw | sub("\n+$"; ""))
+              | ($old[0].secret2FA? // null) as $secret
+              | if ($secret | type) == "string" and $secret != ""
+                then .secret2FA = $secret else . end
+            ' ${configFile} > "$tmp"
+            mv -f "$tmp" "$conf"
           '')
         ]
         ++ optional cfg.nodes.lnd.enable

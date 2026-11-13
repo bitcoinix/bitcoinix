@@ -186,6 +186,11 @@ Open `http://<onion address>` in Tor Browser, using the address from
 The password is in `$secretsDir/rtl-password`.
 See: [Secrets dir](./configuration.md#secrets-dir)
 
+Two-factor authentication that you set up in RTL stays on across restarts. If you
+lose the authenticator, delete `RTL-Config.json` in RTL's data dir
+(`/var/lib/rtl` by default) and restart RTL. bitcoinix then writes a new one
+without the 2FA secret.
+
 ### Use ZEUS (mobile Lightning wallet) via Tor
 1. Install [ZEUS](https://zeusln.app)
 
