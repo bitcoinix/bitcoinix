@@ -270,9 +270,6 @@ let
   };
   lndMacaroonId = name: user: permissions:
     (lndMacaroon name { inherit user permissions; }).services.lnd.macaroons.${name}.rootKeyId;
-  btcpayLnd = evaluate {
-    services.btcpayserver = { enable = true; lightningBackend = "lnd"; };
-  };
   replicationHostKeyWarnings = replication: builtins.filter
     (lib.hasInfix "disables SSH host key checking")
     (evaluate {
@@ -857,16 +854,6 @@ let
           (failedAssertions (lndMacaroon name { user = "app"; permissions = ''{"entity":"info","action":"read"}''; }))
       ) [ "../lnd/app" "a/b" ".app" "my app" "app.v2" (nameOfLength 246) (nameOfLength 247) ];
       expected = [ [ true ] [ true ] [ true ] [ true ] [] [] [ true ] ];
-    };
-    testBtcpayserverRestartsOnNewMacaroon = {
-      expr = {
-        triggers = btcpayLnd.systemd.services.btcpayserver.restartTriggers;
-        failedAssertions = failedAssertions btcpayLnd;
-      };
-      expected = {
-        triggers = [ btcpayLnd.services.lnd.macaroons.btcpayserver.rootKeyId ];
-        failedAssertions = [];
-      };
     };
     testReplicationWarnsWithoutHostKeyCheck = {
       expr = map (replication: builtins.length (replicationHostKeyWarnings replication)) [

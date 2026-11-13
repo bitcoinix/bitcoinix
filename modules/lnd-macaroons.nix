@@ -89,8 +89,8 @@ let
   # lnd, as the streams opened with the deleted root keys may still be open.
   # Each start gives lnd a new InvocationID, so the old process still runs if lnd
   # is active with the ID from before the restart. Otherwise the old process is
-  # gone, for example when only the new start failed. Then `Restart=` starts lnd
-  # again, and a stop would cancel that.
+  # gone or already stopping, for example when only the new start failed. Then
+  # `Restart=` starts lnd again, and a stop would cancel that.
   restartLnd = nbLib.script "lnd-restart-after-macaroon-cleanup" ''
     invocation=$(${systemctl} show -P InvocationID lnd.service)
     if ! ${systemctl} try-restart --job-mode=fail lnd.service; then
@@ -100,7 +100,7 @@ let
         ${systemctl} stop lnd.service
       else
         echo "Failed to restart lnd after deleting macaroon root keys." \
-          "The old lnd process was stopped." >&2
+          "The old lnd process has stopped or is stopping." >&2
       fi
       exit 1
     fi

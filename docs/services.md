@@ -490,7 +490,8 @@ macaroon. Restart it on deployments that change the macaroon:
 systemd.services.myapp.restartTriggers = [ config.services.lnd.macaroons.myapp.rootKeyId ];
 ```
 
-BTCPay Server already does this, and charge-lnd reads its macaroon on each run.
+BTCPay Server reads its macaroon for each request to lnd, and charge-lnd for each
+run.
 
 #### Revoke a macaroon
 

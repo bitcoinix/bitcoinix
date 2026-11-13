@@ -315,6 +315,7 @@ def test_lnd_macaroon_revocation():
     machine.wait_until_succeeds("systemctl list-jobs --no-legend lnd.service | grep -w stop")
     status, output = machine.execute(f"{restart_lnd} 2>&1")
     assert status != 0, output
-    assert_full_match("systemctl show -P ActiveState lnd", "inactive\n")
+    # If lnd was already stopping, the script exits without waiting for it
+    machine.wait_until_succeeds("[[ $(systemctl show -P ActiveState lnd) == inactive ]]")
     succeed("systemctl start lnd", *[f"systemctl start {unit}" for unit in timers])
     machine.wait_until_succeeds(f"{lncli} getinfo")

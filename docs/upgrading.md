@@ -97,8 +97,8 @@ custom macaroons. Keep lnd's macaroons enabled: the `no-macaroons` option isn't
 supported.
 
 When lnd restarts during the deployment, bitcoinix creates the custom macaroons with
-their new root keys, and BTCPay Server restarts to read its new macaroon. Restart other
-services that read a custom macaroon only at startup; see
+their new root keys. BTCPay Server and charge-lnd read their new macaroons without a
+restart. Restart other services that read a custom macaroon only at startup; see
 [Custom macaroons](./services.md#custom-macaroons). Copies of custom macaroons created
 before this change use root key 0, like the admin macaroon, and stay valid. To revoke
 them, see [Revoke all macaroons](./services.md#revoke-all-macaroons).

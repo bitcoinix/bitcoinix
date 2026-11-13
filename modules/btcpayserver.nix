@@ -232,10 +232,6 @@ in {
       wants = [ "nbxplorer.service" ]
               ++ optional (cfg.btcpayserver.lightningBackend != null) "${cfg.btcpayserver.lightningBackend}.service";
       after = requires ++ wants;
-      # btcpayserver reads the lnd macaroon only at startup. A new root key ID
-      # revokes the macaroon it holds, so restart it to read the new one.
-      restartTriggers = optional (cfg.btcpayserver.lightningBackend == "lnd")
-        cfg.lnd.macaroons.btcpayserver.rootKeyId;
       serviceConfig = nbLib.defaultHardening // {
         ExecStart = ''
           ${cfg.btcpayserver.package}/bin/btcpayserver --conf=${configFile} \
