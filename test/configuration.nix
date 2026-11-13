@@ -714,6 +714,20 @@ let
         map (lib.elem "nix-bitcoin-secrets.target") [ wants after ];
       expected = [ true true ];
     };
+    testChargeLndCredentialMigration = {
+      expr = map (case: (builtins.tryEval (evaluate {
+        nix-bitcoin.configVersion = case.version;
+        services.charge-lnd = { enable = case.enable; extraFlags = case.flags; };
+      }).system.stateVersion).success) [
+        { version = "0.1.6"; enable = true; flags = [ "--lnddir" "/custom/lnd" ]; }
+        { version = "0.1.6"; enable = true; flags = [ "--lnddir=/custom/lnd" ]; }
+        { version = "0.1.6"; enable = false; flags = [ "--lnddir=/custom/lnd" ]; }
+        { version = "0.1.6"; enable = true; flags = []; }
+        { version = "0.1.6"; enable = true; flags = [ "--tlscert" "/custom/cert" "--macaroon" "/custom/macaroon" ]; }
+        { version = "0.2.0"; enable = true; flags = [ "--lnddir=/custom/lnd" ]; }
+      ];
+      expected = [ false false true true true true ];
+    };
     testMempoolNetworks = {
       expr = map (network: let
         config = evaluate {
