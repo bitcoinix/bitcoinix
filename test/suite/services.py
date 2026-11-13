@@ -311,6 +311,13 @@ def test_mempool():
     machine.wait_until_succeeds(
         current_run_log_has_string("mempool", "Mempool Server is running on port 8999")
     )
+    network = test_data["mempool"]["network"]
+    assert succeed_json(f"cat {conf}")["MEMPOOL"]["NETWORK"] == network
+    frontend_config = succeed(f"curl -fsSL {ip('nginx')}:60845/resources/config.js")
+    root_network = "" if network == "mainnet" else network
+    assert f"window.__env.ROOT_NETWORK = '{root_network}';" in frontend_config
+    assert f"window.__env.MAINNET_ENABLED = {str(network == 'mainnet').lower()};" in frontend_config
+    assert f"window.__env.REGTEST_ENABLED = {str(network == 'regtest').lower()};" in frontend_config
     assert_matches(f"curl -L {ip('nginx')}:60845", "mempool - Bitcoin Explorer")
     # No cache validators, and no 304 for the store's 1970 timestamp
     headers = succeed(f"curl -sI -H 'If-Modified-Since: Thu, 01 Jan 1970 00:00:01 GMT' {ip('nginx')}:60845")
