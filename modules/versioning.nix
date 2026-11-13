@@ -9,6 +9,7 @@
 
 with lib;
 let
+  nbLib = config.nix-bitcoin.lib;
   versioningOptions = {
     nix-bitcoin.configVersion = mkOption {
       type = with types; nullOr str;
@@ -338,7 +339,7 @@ let
       version = "0.1.3";
       condition = config.services.electrs.enable;
       message = let
-        dbPath = "${config.services.electrs.dataDir}/${config.nix-bitcoin.lib.networkName { mainnet = "bitcoin"; }}";
+        dbPath = "${config.services.electrs.dataDir}/${nbLib.networkName { mainnet = "bitcoin"; }}";
       in ''
         electrs 0.12.0 uses a new index format and must rebuild its index from scratch.
         It does not convert or delete the old index: until it is removed, electrs
@@ -589,7 +590,7 @@ let
         services.bitcoind.network option. Replace true with services.bitcoind.network = "regtest";
         or remove the old option for mainnet (the default).
         The makeNetworkName helper has also been removed. Use
-        config.nix-bitcoin.lib.networkName { mainnet = "bitcoin"; } instead
+        nbLib.networkName { mainnet = "bitcoin"; } instead
         to override mainnet's name while passing other network names through unchanged.
         See docs/upgrading.md, "Upgrading to config version 0.2.0".
       '';

@@ -5,7 +5,8 @@ let
   # Included in all scenarios
   baseConfig = { config, pkgs, ... }: with lib; let
     cfg = config.services;
-    inherit (config.nix-bitcoin.lib.test) mkIfTest;
+    nbLib = config.nix-bitcoin.lib;
+    inherit (nbLib.test) mkIfTest;
   in {
     imports = [
       ./lib/test-lib.nix
@@ -58,7 +59,7 @@ let
       test.data.bitcoind-rest = {
         inherit (cfg.bitcoind.rest) enable;
         rpcPort = cfg.bitcoind.rpc.port;
-        chain = config.nix-bitcoin.lib.networkName { mainnet = "main"; };
+        chain = nbLib.networkName { mainnet = "main"; };
       };
 
       services.bitcoind = {
