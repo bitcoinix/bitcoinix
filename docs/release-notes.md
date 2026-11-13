@@ -36,6 +36,14 @@ config.nix-bitcoin.pkgs.nbPython3Packages.python.withPackages (ps: [ ps.pyln-cli
 The built-in Python plugins select this interpreter automatically. The package
 paths under `nbPython3Packages` remain available.
 
+Each custom lnd macaroon (`services.lnd.macaroons`, used by BTCPay Server and
+charge-lnd) now has its own root key. You can revoke one of them, and the other
+macaroons and lnd's admin macaroon stay valid. The revocation needs an lnd restart.
+When you change or remove a macaroon, its old copies stop working when lnd restarts
+during the deployment. Copies made before 0.1.6 use root key 0 and stay valid until
+you revoke all macaroons. See [Custom macaroons](services.md#custom-macaroons) and
+[Upgrading to config version 0.1.6](upgrading.md#upgrading-to-config-version-016).
+
 ## 0.1.5
 
 The clnrest package has moved from `nix-bitcoin.pkgs.clnrest` to
