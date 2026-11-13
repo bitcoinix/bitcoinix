@@ -38,10 +38,12 @@ TEST_PHASES = (
         "config-replace",
         "clnrest-admin-rune",
         "lnd-wallet-init",
+        "rtl-stops-with-backend",
     )),
     ("post-restart", (
         "regtest",
         "lnd-restart-on-clean-exit",
+        "lnd-macaroon-revocation",
         "trustedcoin",
     )),
     ("secrets", (

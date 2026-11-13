@@ -108,6 +108,13 @@ in {
       The joinmarket project is no longer maintained. The upstream project is
       archived:
       https://github.com/JoinMarket-Org/joinmarket-clientserver/releases/tag/v0.9.12
+      Your JoinMarket wallet (`wallets/wallet.jmdat`) and its seed phrase
+      (`jm-wallet-seed`) stay in its data dir, `/var/lib/joinmarket` by default,
+      but `services.backups` no longer includes that dir. To keep backing it up,
+      add the dir to `services.backups.extraFiles`. To move the funds, restore
+      the seed phrase in a JoinMarket install outside bitcoinix, which no longer
+      ships JoinMarket. The wallet's password stays in `jm-wallet-password` in
+      the secrets dir.
     '')
     (mkRemovedOptionModule [ "services" "joinmarket-ob-watcher" ] ''
       The joinmarket-ob-watcher is no longer maintained.

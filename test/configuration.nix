@@ -265,6 +265,11 @@ let
     services.btcpayserver = { enable = true; lightningBackend = "clightning"; };
     services.clightning = { user = "cln-custom"; group = "cln-rpc"; };
   };
+  lndMacaroon = name: macaroon: evaluate {
+    services.lnd = { enable = true; macaroons.${name} = macaroon; };
+  };
+  lndMacaroonId = name: user: permissions:
+    (lndMacaroon name { inherit user permissions; }).services.lnd.macaroons.${name}.rootKeyId;
   replicationHostKeyWarnings = replication: builtins.filter
     (lib.hasInfix "disables SSH host key checking")
     (evaluate {
@@ -820,6 +825,57 @@ let
     testBtcpayserverJoinsClightningGroup = {
       expr = lib.elem "cln-rpc" btcpayserverCustomClightningGroup.users.users.btcpayserver.extraGroups;
       expected = true;
+    };
+    testLndMacaroonRootKeyIds = let
+      info = ''{"entity":"info","action":"read"}'';
+      onchain = ''{"entity":"onchain","action":"read"}'';
+      id = lndMacaroonId "app" "app" "${info},${onchain}";
+    in {
+      expr = {
+        equivalent = map (permissions: lndMacaroonId "app" "app" permissions == id) [
+          " ${onchain} ,\n${info}"
+          "${info},${onchain},${info}"
+          ''{"action":"read","entity":"info"},${onchain}''
+        ];
+        changed = map (other: other != id) [
+          (lndMacaroonId "app2" "app" "${info},${onchain}")
+          (lndMacaroonId "app" "app2" "${info},${onchain}")
+          (lndMacaroonId "app" "app" info)
+          (lndMacaroonId "app" "app" ''${info},{"entity":"onchain","action":"write"}'')
+        ];
+        # 0x6e62000000000000 to 0x6e62ffffffffffff
+        inRange = builtins.stringLength id == 19
+          && id >= "7953919891889717248" && id <= "7954201366866427903";
+      };
+      expected = {
+        equivalent = [ true true true ];
+        changed = [ true true true true ];
+        inRange = true;
+      };
+    };
+    testLndMacaroonRejectsInvalidPermissions = {
+      expr = map (permissions:
+        map (lib.hasInfix "services.lnd.macaroons.app.permissions must be")
+          (failedAssertions (lndMacaroon "app" { user = "app"; inherit permissions; }))
+      ) [
+        ""
+        ''"info:read"''
+        ''{"entity":"info"}''
+        ''{"entity":"info","action":1}''
+        ''{"entity":"info","action":"read","caveat":"x"}''
+        ''{"entity":"uri","action":"/a:b"}''
+      ];
+      expected = [ [ true ] [ true ] [ true ] [ true ] [ true ] [ true ] ];
+    };
+    testLndMacaroonRejectsUnsafeNames = let
+      # `<name>.macaroon` must fit the 255 byte limit for file names
+      nameOfLength = length: lib.concatStrings (lib.genList (_: "a") length);
+    in {
+      expr = map (name:
+        map (lib.hasInfix "may only contain letters")
+          (failedAssertions (lndMacaroon name { user = "app"; permissions = ''{"entity":"info","action":"read"}''; }))
+      ) [ "../lnd/app" "a/b" ".app" "my app" "app.v2" (nameOfLength 246) (nameOfLength 247) ];
+      expected = [ [ true ] [ true ] [ true ] [ true ] [] [] [ true ] ];
     };
     testReplicationWarnsWithoutHostKeyCheck = {
       expr = map (replication: builtins.length (replicationHostKeyWarnings replication)) [

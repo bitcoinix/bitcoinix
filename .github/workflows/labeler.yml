@@ -2,13 +2,20 @@ name: Pull request labels
 
 on:
   pull_request_target:
-    types: [opened, synchronize, reopened]
+    types: [opened, synchronize, reopened, edited]
+  # A push can introduce or resolve conflicts in PRs targeting any branch.
+  push:
+    branches: ['**']
+  schedule:
+    - cron: '17 * * * *'
+  workflow_dispatch:
 
 permissions:
   pull-requests: write
 
 jobs:
   labeler:
+    if: github.event_name == 'pull_request_target'
     runs-on: ubuntu-latest
     steps:
       # Keep this workflow free of PR checkouts or PR code execution: it has write access
@@ -109,11 +116,77 @@ jobs:
               if (status === 'added') labels.add('type: feature');
               if (status === 'removed') labels.add('type: removal');
             }
-            // Only add labels; other type labels, status and breaking labels are manual.
+            // Only add area/type labels here; the rebase job manages its status label.
             if (labels.size > 0) {
               await github.rest.issues.addLabels({
                 ...context.repo,
                 issue_number: context.issue.number,
                 labels: [...labels]
               });
+            }
+
+  rebase:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # Serialize label updates. Every run checks all open PRs, so replacing a pending
+    # run with a newer event cannot lose a check for a different PR or base branch.
+    concurrency:
+      group: pull-request-rebase-labels
+      cancel-in-progress: false
+    steps:
+      # API only, including for fork PRs: never check out or execute PR code here.
+      - name: Update merge conflict labels
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const label = 'status: rebase needed';
+            const {setTimeout: sleep} = require('node:timers/promises');
+            let pending = await github.paginate(github.rest.pulls.list, {
+              ...context.repo,
+              state: 'open',
+              per_page: 100
+            });
+
+            // GitHub computes mergeability asynchronously. Retry unknown results
+            // in batches so one slow PR does not delay checks of the others.
+            for (let attempt = 0; attempt < 5 && pending.length > 0; attempt++) {
+              if (attempt > 0) await sleep(5000);
+              const retry = [];
+              for (const {number} of pending) {
+                const {data: pr} = await github.rest.pulls.get({
+                  ...context.repo,
+                  pull_number: number
+                });
+                if (pr.state !== 'open') continue;
+                if (typeof pr.mergeable !== 'boolean') {
+                  retry.push(pr);
+                  continue;
+                }
+
+                // mergeable describes conflicts with this PR's current base.
+                // mergeable_state also reflects checks/reviews and being behind.
+                const hasLabel = pr.labels.some(item => item.name === label);
+                if (!pr.mergeable && !hasLabel) {
+                  await github.rest.issues.addLabels({
+                    ...context.repo,
+                    issue_number: number,
+                    labels: [label]
+                  });
+                } else if (pr.mergeable && hasLabel) {
+                  try {
+                    await github.rest.issues.removeLabel({
+                      ...context.repo,
+                      issue_number: number,
+                      name: label
+                    });
+                  } catch (error) {
+                    // A maintainer may have already removed it since the GET.
+                    if (error.status !== 404) throw error;
+                  }
+                }
+              }
+              pending = retry;
+            }
+            for (const {number} of pending) {
+              core.warning(`PR #${number}: mergeability is still unknown; keeping labels unchanged until the next run.`);
             }
