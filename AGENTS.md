@@ -152,7 +152,7 @@ and add a `mkRemovedOptionModule` with the reason to `modules/obsolete-options.n
 ## Breaking changes
 
 Any change that breaks functionality from the user's point of view **must** add an
-entry to `changes` in `modules/versioning.nix`, so users hit it at evaluation time
+entry in `modules/versioning/<version>/<identifier>.nix`, so users hit it at evaluation time
 when they update. A release note alone is not enough. This includes:
 
 - a removed or renamed option, or a removed module/service (also add a
@@ -171,13 +171,19 @@ Do not add a config-version notice or bump solely for these changes.
 
 For each entry:
 
-- `version` is the next release (bump only the last component). Append at the end of
-  `changes`; several entries per version are fine.
+- `<version>` is the next release (bump only the last component). Choose a short,
+  descriptive `<identifier>` for each change; several files per version are fine.
+  Each file is a function taking `{ config, options, lib, ... }` (only declare the
+  arguments it uses) and returning `{ condition = ...; message = ...; }`.
+  `modules/versioning.nix` supplies the version from the directory name and loads
+  notices in increasing version order, then alphabetically by filename. It appends
+  a reference to the matching version section in `docs/upgrading.md` for versions
+  0.1.0 and newer.
 - Set `condition` so only affected users see it, e.g. users who already set the
   new value don't.
 - The `message` says what changed and what to do. Put longer migration steps in
-  `docs/upgrading.md` under "Upgrading to config version <version>" and refer to
-  that section from the message.
+  `docs/upgrading.md` under "Upgrading to config version <version>"; the message
+  does not need to repeat the reference to that section.
 - Set `nix-bitcoin.configVersion` in `examples/configuration.nix` to that version
   unless it already is. Leave the deployment examples alone: each one sets the
   `configVersion` of the release it pins, CI builds them with the latest one, and a
@@ -195,8 +201,8 @@ Pages under `docs/` must be listed in `docs/SUMMARY.md` to appear in the mdBook 
   changes, in `docs/release-notes.md` under `## <version>`, newest version first.
   Add to the upcoming release; edit released sections only to fix errors. Link to
   `docs/upgrading.md` for configuration migrations instead of duplicating their steps.
-- Upgrade notes: every `changes` entry with a non-trivial migration gets text in
-  `docs/upgrading.md`. Each version has one `## Upgrading to config version <version>`
+- Upgrade notes: every entry under `modules/versioning/` with a non-trivial migration
+  gets text in `docs/upgrading.md`. Each version has one `## Upgrading to config version <version>`
   section, newest version first, ending with the line that sets `configVersion`.
   Add to the section of the upcoming release; never edit sections of released versions
   except to fix errors.
@@ -204,7 +210,7 @@ Pages under `docs/` must be listed in `docs/SUMMARY.md` to appear in the mdBook 
   and `examples/` and update or remove every mention. Docs must not describe features
   that no longer exist.
 - Code that points into the docs must stay valid when a page or heading moves:
-  `modules/versioning.nix`, `modules/obsolete-options.nix`, runtime messages (e.g.
+  `modules/versioning/`, `modules/obsolete-options.nix`, runtime messages (e.g.
   `modules/electrs.nix`), `helper/makeShell.nix`, `examples/` and `README.md`.
 - Only document what the code does; check option names, defaults, paths and commands
   against the modules. Keep pages short and task-oriented and link to the module

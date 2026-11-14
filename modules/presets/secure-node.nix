@@ -13,7 +13,7 @@ in {
   ];
 
   options = {
-    # Used by ../versioning.nix
+    # Used by ../versioning/0.0.65/secure-node-secrets-dir.nix
     nix-bitcoin.secure-node-preset-enabled = {};
   };
 
