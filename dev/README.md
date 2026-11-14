@@ -197,8 +197,8 @@ and no GitHub release assets. Signing needs the maintainer's key, so this cannot
 
 Before tagging, review the version's section in [the release notes](../docs/release-notes.md)
 and make sure it covers notable changes, including package and flake-attribute changes.
-Breaking module or service changes also need a `changes` entry in
-`modules/versioning.nix`, with non-trivial migrations documented in
+Breaking module or service changes also need an entry in
+`modules/versioning/<version>/<identifier>.nix`, with non-trivial migrations documented in
 [the upgrading guide](../docs/upgrading.md).
 
 ```bash
