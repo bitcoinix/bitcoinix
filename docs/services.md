@@ -36,6 +36,8 @@ See `nodeinfo --help`.
 `nodeinfo` and `jq` are included in the `secure-node.nix` preset. Without the preset,
 set `nix-bitcoin.nodeinfo.enable = true` and install `jq` for the example above.
 
+#### Troubleshoot onion addresses
+
 The `onion-addresses` service only publishes valid Tor v3 onion addresses. If a
 hostname file is unreadable, contains invalid content, or takes more than 10 seconds
 to read, its address is omitted. Other valid addresses are still published, but
@@ -103,6 +105,8 @@ already deploy with.
    `deployment.targetHost` or krops' `target`. All of them connect through `ssh`, so
    they use the alias.
 
+#### Keep the node's IP address private
+
 The onion service and your node's IP address reach the same sshd, with the same host
 keys. Internet scanners index SSH host keys by IP address, so anyone who learns the
 onion address can look up its host key and find your node's IP address. To keep them
@@ -139,6 +143,8 @@ service, which the `secure-node.nix` and `enable-tor.nix` presets create.
 #### Desktop requirements
 * [Tor](https://support.torproject.org/little-t-tor/), listening on its default SOCKS port 9050
 * [Electrum](https://electrum.org/#download)
+
+#### Connect your wallet
 
 1. Enable electrs in your configuration:
     ```nix
@@ -186,6 +192,8 @@ Open `http://<onion address>` in Tor Browser, using the address from
 The password is in `$secretsDir/rtl-password`.
 See: [Secrets dir](./configuration.md#secrets-dir)
 
+#### Backend maintenance
+
 RTL is bound to the units of its backends. It stops when the lnd or clightning unit
 stops, crashes or exits, and the backend's next start starts it again. With both
 backends enabled, stopping one of them also stops RTL for the other one, and
@@ -193,6 +201,8 @@ starting RTL starts a stopped backend too. So during maintenance of one backend,
 leave RTL stopped. RTL doesn't check its backends' certificates, so a local process
 that takes the clnrest port before clnrest does can still get the clightning rune.
 lnd stops when it can't use its REST port, so RTL then stays down.
+
+#### Reset two-factor authentication
 
 Two-factor authentication that you set up in RTL stays on across restarts. If you
 lose the authenticator, delete `RTL-Config.json` in RTL's data dir
@@ -218,6 +228,8 @@ ssh -L 60846:127.0.0.1:60846 operator@bitcoin-node
 
 With `netns-isolation`, use the address from `nodeinfo | jq -r '.["unbeholden-wallet"].local_address'`
 instead.
+
+#### Access from another device
 
 Browsers only allow the camera, which scans the signed transaction, on `localhost` or
 over https. To use the wallet from another device without a tunnel, put an https reverse
@@ -351,6 +363,8 @@ Connecting ZEUS through a WireGuard tunnel is much faster than using Tor. The
 mobile device. To use your own VPN instead, see
 [Connecting without Tor or WireGuard](#connecting-without-tor-or-wireguard).
 
+#### WireGuard requirements
+
 The preset requires:
 - the NixOS firewall (`networking.firewall.enable`, set by the `secure-node.nix` preset)
   with the iptables backend. `networking.nftables` and `services.firewalld` must be
@@ -361,6 +375,8 @@ The preset binds the LND and clnrest REST servers to `0.0.0.0` and only allows R
 connections from the WireGuard peer through the firewall. It also sets `tor.enforce = false`
 for the service whose connection helper you enable (see
 [Connecting without Tor or WireGuard](#connecting-without-tor-or-wireguard)).
+
+#### Set up WireGuard and ZEUS
 
 1. Install [ZEUS](https://zeusln.app) and
    [WireGuard](https://www.wireguard.com/install/) on your mobile device.
@@ -389,24 +405,8 @@ for the service whose connection helper you enable (see
      };
    };
    ```
-   The preset guards the REST API with `networking.firewall.extraCommands` rules. They need
-   the iptables firewall backend and `iptables` on the firewall service's PATH, and firewalld
-   isn't supported. `networking.nftables` can stay enabled if you set
-   `networking.firewall.backend = "iptables"` and `networking.firewall.package = pkgs.iptables`
-   (or add `pkgs.iptables` to `networking.firewall.extraPackages`). Then put your own nftables
-   rules in `networking.nftables.tables` and keep `networking.nftables.flushRuleset = false`.
-   Flushing the ruleset deletes the preset's rules. It's on by default when
-   `networking.nftables.ruleset` or `rulesetFile` is set or `system.stateVersion` is older than 23.11.
-   Don't name a table `filter` in the `ip` or `ip6` family, since iptables keeps its rules there.
-   Neither applies when the firewall runs `pkgs.iptables-legacy`, whose rules live outside the
-   nftables ruleset: set it as `networking.firewall.package`, or keep the default nftables
-   package and put it first in `networking.firewall.extraPackages`.
-   iptables-legacy needs a kernel with legacy xtables (`CONFIG_NETFILTER_XTABLES_LEGACY`,
-   or `CONFIG_IP_NF_IPTABLES_LEGACY` on older kernels).
-   The default kernel doesn't enable them, and `firewall.service` then fails to start.
-   `pkgs.linuxPackages_6_12` has them, so set `boot.kernelPackages` to it and reboot.
-   If you fix either of these on a running node, run `systemctl restart firewall` once after
-   deploying, since the first reload still runs the old deletions.
+   For custom firewall configurations, review
+   [WireGuard firewall compatibility](#wireguard-firewall-compatibility) before deploying.
 
 3. Deploy your configuration.
 
@@ -451,6 +451,29 @@ for the service whose connection helper you enable (see
 
 To print the connection URL as text instead, run `lndconnect-wg --url` or
 `lnconnect-clnrest-wg --url`.
+
+#### WireGuard firewall compatibility
+
+The preset guards the REST API with `networking.firewall.extraCommands` rules. They need
+the iptables firewall backend and `iptables` on the firewall service's PATH, and firewalld
+isn't supported. `networking.nftables` can stay enabled if you set
+`networking.firewall.backend = "iptables"` and `networking.firewall.package = pkgs.iptables`
+(or add `pkgs.iptables` to `networking.firewall.extraPackages`). Then put your own nftables
+rules in `networking.nftables.tables` and keep `networking.nftables.flushRuleset = false`.
+Flushing the ruleset deletes the preset's rules. It's on by default when
+`networking.nftables.ruleset` or `rulesetFile` is set or `system.stateVersion` is older than 23.11.
+Don't name a table `filter` in the `ip` or `ip6` family, since iptables keeps its rules there.
+
+Neither applies when the firewall runs `pkgs.iptables-legacy`, whose rules live outside the
+nftables ruleset: set it as `networking.firewall.package`, or keep the default nftables
+package and put it first in `networking.firewall.extraPackages`.
+iptables-legacy needs a kernel with legacy xtables (`CONFIG_NETFILTER_XTABLES_LEGACY`,
+or `CONFIG_IP_NF_IPTABLES_LEGACY` on older kernels).
+The default kernel doesn't enable them, and `firewall.service` then fails to start.
+`pkgs.linuxPackages_6_12` has them, so set `boot.kernelPackages` to it and reboot.
+
+If you fix either of these on a running node, run `systemctl restart firewall` once after
+deploying, since the first reload still runs the old deletions.
 
 <a id="initialize-a-trezor-for-bitcoin-cores-hardware-wallet-interface"></a>
 
@@ -519,6 +542,8 @@ services.lnd.macaroons.myapp = {
 };
 ```
 
+#### Root keys and configuration changes
+
 Each custom macaroon has its own lnd root key. Its ID,
 `services.lnd.macaroons.<name>.rootKeyId`, is derived from the name, user and
 permissions, so copies of the macaroon stay valid when lnd restarts. A change of
@@ -538,6 +563,8 @@ bitcoinix creates the macaroons and deletes the stale root keys with `lncli`,
 lnd's admin macaroon and gRPC. It does this each time lnd starts, also without
 custom macaroons, so lnd must keep its macaroons enabled: the `no-macaroons`
 option isn't supported.
+
+#### Restart services after macaroon changes
 
 A service that reads its macaroon only at startup must restart to read the new
 macaroon. Restart it on deployments that change the macaroon:
