@@ -27,11 +27,15 @@ run `fetch-release.sh` with `releaseVersion=<version>` and write its output to `
 
 ## Upgrading to config version 0.2.0
 
+#### Bitcoin network selection
+
 Replace `services.bitcoind.regtest = true;` with `services.bitcoind.network = "regtest";`.
 If you explicitly set `services.bitcoind.regtest = false;`, remove it or set
 `services.bitcoind.network = "mainnet";` (the default). The new option selects the
 network for the whole deployment; existing network-specific paths and ports
 are unchanged.
+
+#### Network name overrides
 
 The read-only `services.bitcoind.makeNetworkName` helper has been removed.
 Replace calls such as `config.services.bitcoind.makeNetworkName "bitcoin" "regtest"`
@@ -44,6 +48,8 @@ nbLib.networkName { mainnet = "bitcoin"; }
 This returns `"bitcoin"` on mainnet and `"regtest"` on regtest. Unmapped network
 names pass through unchanged.
 
+#### Mempool follows the selected network
+
 Mempool now identifies as regtest in both its backend and frontend when
 `services.bitcoind.network = "regtest";`. Previously it identified as mainnet
 while connecting to the regtest node. It automatically clears disk caches
@@ -54,6 +60,8 @@ Review overrides in `services.mempool.frontend.settings`: regtest defaults to
 Remove conflicting overrides unless needed for a custom deployment. If you set
 `services.mempool.frontend.staticContentRoot`, update that custom frontend too.
 The web interface stays at the same URL; reload it after deploying.
+
+#### Charge-LND credential paths
 
 Charge-LND now reads the configured LND certificate and
 `/run/lnd/charge-lnd.macaroon` directly, without a proxy data directory.

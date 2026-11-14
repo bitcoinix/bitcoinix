@@ -553,6 +553,25 @@ let
       ];
       expected = [ false false false true true ];
     };
+    testHistoricalNetworkMigrationPaths = {
+      expr = map (network: let
+        notices = (evaluate {
+          services.bitcoind.network = network;
+          services.electrs.enable = true;
+          nix-bitcoin.configVersion = "0.1.1";
+          _module.check = false;
+        }).nix-bitcoin.versioning.incompatibleChanges;
+      in {
+        cookie = lib.any (lib.hasInfix
+          "/var/lib/bitcoind/${lib.optionalString (network == "regtest") "regtest/"}.cookie") notices;
+        index = lib.any (lib.hasInfix
+          "/var/lib/electrs/${if network == "mainnet" then "bitcoin" else "regtest"}") notices;
+      }) [ "mainnet" "regtest" ];
+      expected = [
+        { cookie = true; index = true; }
+        { cookie = true; index = true; }
+      ];
+    };
     testNetworkNameOverrides = {
       expr = map (config: let
         inherit (config.nix-bitcoin.lib) networkName;
