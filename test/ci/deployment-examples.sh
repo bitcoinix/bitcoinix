@@ -17,7 +17,7 @@ trap 'rm -rf "$tmpDir"' EXIT
 
 # The examples set the configVersion of the release they pin. Build them with the
 # latest configVersion of this checkout, which may have newer versioning entries.
-configVersion=$(sed -n 's/^ *version = "\([0-9.]*\)";$/\1/p' "$repo/modules/versioning.nix" | sort -V | tail -1)
+configVersion=$(find "$repo/modules/versioning" -mindepth 1 -maxdepth 1 -type d -printf '%f\n' | sort -V | tail -1)
 
 # Copy an example, so that locking doesn't write to the checkout, set its
 # configVersion and lock its bitcoinix input to this checkout

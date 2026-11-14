@@ -541,3 +541,11 @@ By default, clnrest's certificates and rune are stored in Core Lightning's netwo
 and remain covered by the Core Lightning backup.
 
 After migrating your configuration, set `nix-bitcoin.configVersion = "0.1.1";`.
+
+## Upgrading to config version 0.1.0
+
+When using `lndconnect` or `lnconnect` without Tor, explicitly set the REST listen
+address for LAN or VPN access. It now defaults to localhost. See
+[Connecting without Tor or WireGuard](./services.md#connecting-without-tor-or-wireguard).
+
+After migrating your configuration, set `nix-bitcoin.configVersion = "0.1.0";`.
