@@ -27,6 +27,8 @@ run `fetch-release.sh` with `releaseVersion=<version>` and write its output to `
 
 ## Upgrading to config version 0.1.6
 
+#### Operator access to Lightning onion addresses
+
 `services.lnd.lndconnect.onion` and
 `services.clightning.plugins.clnrest.lnconnect.onion` now give the operator user
 access to the `lnd-rest` and `clnrest` onion addresses only when
@@ -71,6 +73,8 @@ role disabled, choose one of the following:
   an enabled account in `users.users` and use one of the options above for it, or
   disable `clnrest.lnconnect.onion`.
 
+#### Onion address access requires declared users
+
 `nix-bitcoin.onionAddresses.access` now accepts only users that are defined and
 enabled in `users.users`, and evaluation fails if it names any other user. Before,
 it also accepted accounts created outside the configuration, for example with
@@ -83,6 +87,8 @@ primary `group` and its `users.groups` entry with the current `gid`,
 `extraGroups`, `description`, `home`, `homeMode` and `shell`. With
 `users.mutableUsers = false`, NixOS also manages the password, so declare it too
 if the account uses one.
+
+#### Secret file validation
 
 `setup-secrets` now fails when a declared secret file is empty or isn't a regular
 file, as it does when one is missing. Then services can't read any secret until
@@ -104,6 +110,8 @@ empty files, for example with `find /etc/nix-bitcoin-secrets -maxdepth 1 -type f
   the HMAC of the matching password to each one: the `<salt>$<hmac>` part of its
   `rpcauth=` line, as printed by Bitcoin Core's `share/rpcauth/rpcauth.py`. Or set
   `allowEmpty` for them.
+
+#### lnd seed validation and wallet creation
 
 lnd now stops with an error when `wallet.db` in lnd's network dir isn't a regular
 file, for example a symlink to a moved or unmounted wallet. Before, lnd tried to
@@ -131,6 +139,8 @@ mv /var/lib/lnd/chain/bitcoin/mainnet/wallet.db /var/lib/lnd/chain/bitcoin/mainn
 systemctl start lnd
 ```
 
+#### Separate root keys for custom lnd macaroons
+
 Each custom lnd macaroon (`services.lnd.macaroons`, also used by BTCPay Server and
 charge-lnd) now has its own root key, with an ID from 7953919891889717248 to
 7954201366866427903 (`0x6e62000000000000` to `0x6e62ffffffffffff`). Each time lnd
@@ -150,6 +160,8 @@ restart. Restart other services that read a custom macaroon only at startup; see
 before this change use root key 0, like the admin macaroon, and stay valid. To revoke
 them, see [Revoke all macaroons](./services.md#revoke-all-macaroons).
 
+#### Custom lnd macaroon file permissions
+
 Each custom lnd macaroon is now readable only by its `user`, with mode `0400`.
 Before, the user's primary group could read it too. For a user like `operator`,
 that's the group `users`, which normal users get by default. So other normal users
@@ -158,6 +170,8 @@ copied it, and such copies stay valid. To revoke them, see
 [Revoke all macaroons](./services.md#revoke-all-macaroons). If a program reads a
 custom macaroon as another user, through the group, give the program its own
 macaroon in `services.lnd.macaroons`.
+
+#### RTL stops with its backends
 
 RTL is now bound to the units of its enabled backends, lnd for
 `services.rtl.nodes.lnd` and clightning for `services.rtl.nodes.clightning`.
@@ -175,6 +189,8 @@ With both backends enabled:
 - Starting RTL starts a stopped backend too. Leave RTL stopped until the maintenance
   is done. The backend's own start starts RTL again afterwards.
 
+#### RTL two-factor authentication persists across restarts
+
 RTL now keeps the two-factor authentication (2FA) that you set up in its web
 interface across restarts. Before, each restart turned 2FA off without a warning.
 If you lose the authenticator, delete `RTL-Config.json` in RTL's data dir
@@ -189,6 +205,8 @@ After migrating your configuration, set `nix-bitcoin.configVersion = "0.1.6";`.
 Currencyrate, rebalance and mempool's `settings.CORE_RPC.PASSWORD` each
 have a migration notice. Review the changes for each one you use before updating
 your config version.
+
+#### Currencyrate plugin replacement
 
 The Python currencyrate plugin has been replaced by Rust `cln-currencyrate`.
 Keep `services.clightning.plugins.currencyrate.enable = true`, but update any
@@ -212,6 +230,8 @@ After deploying, check that `lightning-cli help currencyconvert` and
 `lightning-cli help listcurrencyrates` list the new RPCs. A live conversion such
 as `lightning-cli currencyconvert 100 USD` also needs reachable price sources.
 
+#### Rebalance routing changes
+
 The rebalance plugin now uses Core Lightning's `askrene` routing. If you enable
 `services.clightning.plugins.rebalance.enable`, update custom scripts and
 configuration before deploying:
@@ -224,6 +244,8 @@ configuration before deploying:
   no longer control route selection or hop limits.
 - Update scripts that read `rebalancereport`: its `getroute_method`,
   `maxhops_threshold` and `msatfactor` fields have been removed.
+
+#### mempool RPC password moves to the secrets directory
 
 mempool no longer accepts `services.mempool.settings.CORE_RPC.PASSWORD`. Its
 settings are copied to the world-readable Nix store, so evaluation now fails when
@@ -238,6 +260,8 @@ After addressing these changes, set `nix-bitcoin.configVersion = "0.1.5";`.
 
 ## Upgrading to config version 0.1.3
 
+#### Bitcoin Knots support removed
+
 Bitcoin Knots support and the `services.bitcoind.package` option have been removed.
 Remove `services.bitcoind.package` from your configuration, including explicit
 selections of Bitcoin Core. The daemon, `bitcoin-cli` and Core Lightning now use
@@ -245,6 +269,8 @@ selections of Bitcoin Core. The daemon, `bitcoin-cli` and Core Lightning now use
 included in bitcoinix's pinned packages. If you used Knots, review any
 Knots-specific settings in `services.bitcoind.extraConfig` before deploying
 with Bitcoin Core.
+
+#### electrs index rebuild
 
 electrs 0.12.0 switched to [bindex](https://github.com/romanz/bindex-rs), which uses
 a new index format. electrs must rebuild its index from scratch, and it does not
@@ -268,6 +294,8 @@ If you roll back to the previous config after electrs 0.12 has started once, als
 remove the marker file `/var/lib/electrs/bitcoin.bindex`. Otherwise the index check
 is skipped on the next upgrade.
 
+#### electrs requires Bitcoin Core REST access
+
 electrs 0.12.0 also requires Bitcoin Core 31 or later. It reads blocks through
 bitcoind's REST interface, which bitcoinix enables automatically
 (`services.bitcoind.rest.enable`). REST is served without
@@ -281,6 +309,8 @@ unauthenticated REST access for these sources. Evaluation also fails if
 move RPC sources to `services.bitcoind.rpc.allowip`, or review the raw and included
 settings and set `services.bitcoind.rest.allowUncheckedConfig = true`.
 electrs no longer connects to bitcoind's whitelisted P2P port.
+
+#### Service runtime paths become read-only
 
 Services using `nix-bitcoin.lib.defaultHardening`, including Bitcoin Core, Core
 Lightning and LND, now see `/run` and `/dev` (including `/dev/shm`) as read-only.
@@ -296,6 +326,8 @@ that must remain writable. See
 for an example. If you have no custom code writing outside the allowed
 directories, no script changes are needed.
 
+#### mempool database migration
+
 mempool 3.3 migrates its MariaDB database from schema version 97 to 106 on the
 first start of the backend. The migration can't be undone: rolling back the
 NixOS generation keeps the migrated database, and mempool 3.2 has no downgrade
@@ -305,6 +337,8 @@ dump it before deploying:
 mysqldump --single-transaction mempool > mempool-3.2.sql
 ```
 Run this as root, and replace `mempool` if you set `services.mempool.database.name`.
+
+#### Secret setup sandbox
 
 `setup-secrets` now runs in a sandbox whenever `nix-bitcoin.setupSecrets` is
 enabled, including when `nix-bitcoin.generateSecrets` enables it automatically.
@@ -343,6 +377,8 @@ After migrating your configuration, set `nix-bitcoin.configVersion = "0.1.3";`.
 
 ## Upgrading to config version 0.1.2
 
+#### Bitcoin Core RPC cookie location
+
 bitcoind's RPC authentication cookie now lives at `/run/bitcoind/.cookie` for both
 mainnet and regtest. The runtime directory allows the bitcoind service group to
 read the cookie while preventing group members from replacing it.
@@ -361,11 +397,15 @@ An old cookie can remain in the data directory after an unclean shutdown before
 the upgrade. Once the upgraded bitcoind is running, that old cookie is stale and
 can be removed. bitcoind creates a new cookie in `/run/bitcoind` each time it starts.
 
+#### mempool backend listen address
+
 The mempool backend now listens on `services.mempool.address` (default
 `127.0.0.1`) instead of all interfaces. With network namespace isolation enabled,
 it listens on its namespace address. Access through the nginx frontend is
 unchanged. If you access the backend API directly from another host, set
 `services.mempool.address` to the node's LAN or VPN address.
+
+#### MariaDB listens on localhost by default
 
 The MariaDB server enabled by mempool now listens on `127.0.0.1` by default.
 mempool itself uses MariaDB's Unix socket and needs no connection changes. If
@@ -373,12 +413,16 @@ other clients access this database server over the network, explicitly set
 `services.mysql.settings.mysqld.bind-address` to the desired listen address.
 Existing explicit values of this option take precedence over the new default.
 
+#### LND restarts after a clean exit
+
 LND now restarts automatically after a clean exit, so it can recover after its
 chain backend health check shuts it down. By default, `lncli stop` also causes
 LND to restart after 10 seconds. To keep LND stopped for maintenance, use
 `sudo systemctl stop lnd` and update any scripts that relied on `lncli stop`
 leaving it down. Start it again with `sudo systemctl start lnd` when maintenance
 is complete.
+
+#### BTCPay Server restricts requests to private networks
 
 BTCPay Server 2.4.5 blocks outbound requests to private network addresses by
 default to prevent server-side request forgery. This affects webhooks, invoice
@@ -403,6 +447,8 @@ After updating any affected clients and settings, set
 `nix-bitcoin.configVersion = "0.1.2";`.
 
 ## Upgrading to config version 0.1.1
+
+#### Liquid support removed
 
 Liquid support has been removed, including the Elements daemon, liquid-swap, and
 BTCPay Server's LBTC integration. Liquid peg-outs were suspended after the
@@ -433,10 +479,14 @@ the data directory. Earlier versions, including the `elementsd` package in
 nixpkgs 26.05, lack the fix for that bug.
 Delete the files above once you no longer need them.
 
+#### netns-exec wrapper removed
+
 The `netns-exec` wrapper has been removed. Its namespace allowlist had been empty
 since JoinMarket was removed, so it rejected every namespace. To run a command in a
 service network namespace, use `sudo ip netns exec nb-<service> <command>`.
 If you set `nix-bitcoin.netns-isolation.allowedUser`, remove it from your configuration.
+
+#### Lightning Pool and Lightning Loop support removed
 
 Lightning Pool and Lightning Loop support, including RTL's Loop integration, has
 also been removed. Remove `services.lightning-pool`, `services.lightning-loop`,
@@ -455,6 +505,8 @@ Loop Out has revealed its preimage, its sweep must confirm before the HTLC expir
 otherwise the swap amount is lost. Pool account funds stay locked until the
 account expires; to recover them, run `poold` with the retained data directory.
 
+#### BTCPay Server wallet UTXO scanning disabled by default
+
 BTCPay Server's wallet UTXO scan is now disabled by default. The `btcpayserver`
 RPC user no longer has permission to call `scantxoutset`, because a scan can keep
 bitcoind busy for minutes. If you use this feature, explicitly restore permission:
@@ -466,6 +518,8 @@ services.bitcoind.rpc.users.btcpayserver.rpcwhitelist = [ "scantxoutset" ];
 If you do not use wallet UTXO scanning, leave it disabled and acknowledge the
 change by updating the config version below.
 
+#### charge-lnd macaroon permissions restricted
+
 The charge-lnd macaroon now grants read access and write access only to
 `UpdateChannelPolicy` and `UpdateChanStatus`. The previous broad `offchain:write`
 grant also allowed sending payments and abandoning channels. LND regenerates
@@ -475,11 +529,15 @@ with their original permissions. Do not reuse them. If another application used
 this macaroon, give it a separate macaroon with the permissions it needs via
 `services.lnd.macaroons`.
 
+#### lnconnect-clnrest server certificate corrected
+
 `lnconnect-clnrest` now includes clnrest's server certificate (`server.pem`) in
 direct connection URLs. Previously it included the mutual-TLS client certificate
 (`client.pem`), which did not match the certificate presented by clnrest. Regenerate
 direct connection URLs and reconnect clients. Tor and WireGuard URLs use `--nocert`
 and are unaffected.
+
+#### c-lightning-REST replaced by clnrest
 
 c-lightning-REST support has been removed because it is no longer maintained.
 Remove `services.clightning-rest` (or the legacy `services.rtl.cl-rest`) and any
@@ -543,6 +601,8 @@ and remain covered by the Core Lightning backup.
 After migrating your configuration, set `nix-bitcoin.configVersion = "0.1.1";`.
 
 ## Upgrading to config version 0.1.0
+
+#### Lightning REST APIs listen on localhost by default
 
 When using `lndconnect` or `lnconnect` without Tor, explicitly set the REST listen
 address for LAN or VPN access. It now defaults to localhost. See
