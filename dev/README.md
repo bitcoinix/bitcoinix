@@ -200,6 +200,8 @@ and make sure it covers notable changes, including package and flake-attribute c
 Breaking module or service changes also need an entry in
 `modules/versioning/<version>/<identifier>.nix`, with non-trivial migrations documented in
 [the upgrading guide](../docs/upgrading.md).
+Each change entry in the release notes and upgrading guide starts with a descriptive
+fourth-level heading (`#### <title>`) within its version section.
 
 ```bash
 helper/make-release.sh <version>    # e.g. 0.1.0, without the leading "v"

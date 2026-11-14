@@ -199,11 +199,14 @@ Pages under `docs/` must be listed in `docs/SUMMARY.md` to appear in the mdBook 
 
 - Release notes: record notable release changes, including package and flake-attribute
   changes, in `docs/release-notes.md` under `## <version>`, newest version first.
+  Start each change entry with a descriptive fourth-level heading (`#### <title>`).
   Add to the upcoming release; edit released sections only to fix errors. Link to
   `docs/upgrading.md` for configuration migrations instead of duplicating their steps.
 - Upgrade notes: every entry under `modules/versioning/` with a non-trivial migration
   gets text in `docs/upgrading.md`. Each version has one `## Upgrading to config version <version>`
   section, newest version first, ending with the line that sets `configVersion`.
+  Start each change entry with a descriptive fourth-level heading (`#### <title>`),
+  keeping its explanation and migration steps together under that heading.
   Add to the section of the upcoming release; never edit sections of released versions
   except to fix errors.
 - Removed or renamed options, commands, paths and services: grep `README.md`, `docs/`
