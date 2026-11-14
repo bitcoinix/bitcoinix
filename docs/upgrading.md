@@ -161,12 +161,10 @@ macaroon in `services.lnd.macaroons`.
 
 RTL is now bound to the units of its enabled backends, lnd for
 `services.rtl.nodes.lnd` and clightning for `services.rtl.nodes.clightning`.
-RTL sends the lnd admin macaroon and the clightning admin rune to their REST ports
-without checking the certificate. So it now stops when a backend's unit stops,
-crashes or exits, instead of polling the port of a stopped backend, which another
-local user could take over. A backend's start starts RTL again once all of RTL's
-backends run. Deploying this change restarts each backend that RTL uses once,
-because its unit changes.
+It now stops when a backend's unit stops, crashes or exits, instead of polling the
+port of a stopped backend, which another local user could take over. A backend's
+start starts RTL again once all of RTL's backends run. Deploying this change
+restarts each backend that RTL uses once, because its unit changes.
 
 With both backends enabled:
 
@@ -174,6 +172,22 @@ With both backends enabled:
   the other one.
 - Starting RTL starts a stopped backend too. Leave RTL stopped until the maintenance
   is done. The backend's own start starts RTL again afterwards.
+
+RTL now checks TLS certificates. A connection to a backend's address and port must
+present that backend's pinned certificate: `services.lnd.certPath` for lnd, or
+`server.pem` in clnrest's cert dir (clightning's network dir, or `clnrest-certs`).
+Every other HTTPS connection gets the normal certificate and hostname checks against
+the system CAs. These setups no longer work:
+
+- `LN_SERVER_URL` or `LND_SERVER_URL` in RTL's environment. RTL doesn't start.
+- Another URL in `Settings.lnServerUrl` in `services.rtl.nodes.<node>.extraConfig`.
+  Evaluation fails.
+- A proxy in RTL's environment without a `no_proxy` entry for the backend address.
+  RTL then reaches the backend through the proxy, where it has no pin, and the system
+  CAs don't trust the backend's certificate.
+- A server with a self-signed certificate set through `extraConfig`, for example a
+  swap server. To use it, add its certificate with
+  `systemd.services.rtl.environment.NODE_EXTRA_CA_CERTS`.
 
 RTL now keeps the two-factor authentication (2FA) that you set up in its web
 interface across restarts. Before, each restart turned 2FA off without a warning.

@@ -23,6 +23,7 @@ TEST_PHASES = (
         "btcpayserver",
         "rtl",
         "rtl-credentials",
+        "rtl-backend-certs",
         "mempool",
         "unbeholden-wallet",
         "nodeinfo",

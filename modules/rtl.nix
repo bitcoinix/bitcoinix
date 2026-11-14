@@ -157,6 +157,25 @@ let
 
   inherit (nbLib) optionalAttr;
 
+  # RTL connects to this URL, and `pin-backend-certs.cjs` pins the backend's cert for it
+  backendUrl = isLnd: "https://${
+    if isLnd
+    then nbLib.addressWithPort lnd.restAddress lnd.restPort
+    else nbLib.addressWithPort clightning.plugins.clnrest.address clightning.plugins.clnrest.port
+  }";
+
+  # clnrest's server cert, which `rtl-create-clnrest-rune-file` copies from a
+  # dir that RTL can't read. The cert itself, not the CA that issued it: any
+  # cert from that CA would pass, because the pin skips the hostname check.
+  clnrestCertCopy = "${cfg.dataDir}/clnrest-cert.pem";
+
+  # Read by `./rtl/pin-backend-certs.cjs`: for each backend URL, the server's
+  # own cert. RTL can read lnd's cert, which is world-readable.
+  backendCerts = pkgs.writeText "rtl-backend-certs.json" (builtins.toJSON (
+    optionalAttrs cfg.nodes.lnd.enable { ${backendUrl true} = lnd.certPath; } //
+    optionalAttrs cfg.nodes.clightning.enable { ${backendUrl false} = clnrestCertCopy; }
+  ));
+
   node = { isLnd, index }: {
     inherit index;
     lnNode = "Node";
@@ -173,21 +192,26 @@ let
       logLevel = "INFO";
       fiatConversion = cfg.extraCurrency != null;
       ${optionalAttr (cfg.extraCurrency != null) "currencyUnit"} = cfg.extraCurrency;
-      lnServerUrl = "https://${
-        if isLnd
-        then nbLib.addressWithPort lnd.restAddress lnd.restPort
-        else nbLib.addressWithPort clightning.plugins.clnrest.address clightning.plugins.clnrest.port
-      }";
+      lnServerUrl = backendUrl isLnd;
     };
   };
 
-  nodes' =
-    optional cfg.nodes.clightning.enable
-      (recursiveUpdate (node { isLnd = false; index = 1; }) cfg.nodes.clightning.extraConfig) ++
-    optional cfg.nodes.lnd.enable
-      (recursiveUpdate (node { isLnd = true;  index = 2; }) cfg.nodes.lnd.extraConfig);
+  clightningNode = recursiveUpdate (node { isLnd = false; index = 1; })
+    cfg.nodes.clightning.extraConfig;
+  lndNode = recursiveUpdate (node { isLnd = true; index = 2; }) cfg.nodes.lnd.extraConfig;
+
+  nodes' = optional cfg.nodes.clightning.enable clightningNode ++
+           optional cfg.nodes.lnd.enable lndNode;
 
   nodes = if cfg.nodes.reverseOrder then reverseList nodes' else nodes';
+
+  # RTL sends a backend's credential to its URL, which may also be plain HTTP.
+  # So it must be the URL that `pin-backend-certs.cjs` pins for this backend.
+  # Compare by node, as `extraConfig` can also change `lnImplementation`.
+  urlOverrides = let
+    overridden = rtlNode: isLnd: rtlNode.Settings.lnServerUrl or null != backendUrl isLnd;
+  in optional (cfg.nodes.clightning.enable && overridden clightningNode false) "clightning"
+     ++ optional (cfg.nodes.lnd.enable && overridden lndNode true) "lnd";
 
   rtlConfig = {
     # Set at service start from the secret file, see `rtl-setup-config`
@@ -199,6 +223,10 @@ let
   };
 
   configFile = builtins.toFile "config" (builtins.toJSON rtlConfig);
+
+  # Loads `pin-backend-certs.cjs`. Checked by an assertion, because a
+  # `mkForce` on `NODE_OPTIONS` would drop it.
+  requirePins = "--require=${./rtl/pin-backend-certs.cjs}";
 
   inherit (config.services)
     lnd
@@ -217,6 +245,21 @@ in {
       { assertion = cfg.nodes.clightning.enable || cfg.nodes.lnd.enable;
         message = ''
           RTL: At least one of `nodes.lnd.enable` or `nodes.clightning.enable` must be `true`.
+        '';
+      }
+      # Not `hasInfix`: its regex can't contain the store path
+      { assertion = elem requirePins (splitString " "
+          (toString (config.systemd.services.rtl.environment.NODE_OPTIONS or "")));
+        message = ''
+          RTL: `systemd.services.rtl.environment.NODE_OPTIONS` must contain
+          `${requirePins}`. It makes RTL check the TLS certificates of its backends.
+        '';
+      }
+      { assertion = urlOverrides == [];
+        message = ''
+          RTL: Remove `Settings.lnServerUrl` from
+          `services.rtl.nodes.${head urlOverrides}.extraConfig`. RTL checks the TLS
+          certificates of its backends only at the URLs that bitcoinix sets.
         '';
       }
     ];
@@ -238,13 +281,19 @@ in {
 
     systemd.services.rtl = rec {
       # RTL sends the lnd admin macaroon and the clightning admin rune to its
-      # backends without checking their TLS certificate. So it shouldn't run
-      # while a backend is down, when another local process could take over
-      # the backend's port. `bindsTo` with `after` stops RTL whenever a backend
-      # stops, crashes or exits. It doesn't start RTL again when the backend
-      # comes back, so each backend starts RTL from its `ExecStartPost`
-      # (`startRtl`). `after` holds that start until the backend's start job,
-      # including its readiness checks, has finished.
+      # backends, but doesn't check their TLS certificates. So Node preloads
+      # `pin-backend-certs.cjs` (`NODE_OPTIONS`): a connection to a backend must
+      # present the backend's pinned cert, and every other connection gets the
+      # normal checks against the system CAs.
+      # TODO-EXTERNAL: Drop the preload once RTL can verify its backends'
+      # certificates itself.
+      # As a second guard, RTL doesn't run while a backend is down, when
+      # another local process could take over the backend's port.
+      # `bindsTo` with `after` stops RTL whenever a backend stops, crashes or
+      # exits. It doesn't start RTL again when the backend comes back, so each
+      # backend starts RTL from its `ExecStartPost` (`startRtl`). `after` holds
+      # that start until the backend's start job, including its readiness
+      # checks, has finished.
       # Starting RTL through `wantedBy` on the backends would make a backend
       # that sends STOPPING=1 as it shuts down, like lnd, restart at once
       # instead of after its `RestartSec`.
@@ -253,6 +302,8 @@ in {
       after = bindsTo ++ [ "nix-bitcoin-secrets.target" ];
       environment.RTL_CONFIG_PATH = cfg.dataDir;
       environment.DB_DIRECTORY_PATH = cfg.dataDir;
+      environment.NODE_OPTIONS = requirePins;
+      environment.RTL_BACKEND_CERTS = backendCerts;
       serviceConfig = nbLib.defaultHardening // {
         ExecStartPre = [
           # jq reads the password from the file itself. A sed program would carry
@@ -307,6 +358,35 @@ in {
             fi
             printf 'LIGHTNING_RUNE="%s"\n' "$rune" > "$tmpFile"
             installAsRtl '${runePath}'
+
+            # Copy clnrest's cert for `pin-backend-certs.cjs`. Ask clightning for
+            # clnrest's cert dir, because its config can set `clnrest-certs` in
+            # an included or per-network file. Without it, the dir is clnrest's
+            # working dir, the network dir, which is also where a relative dir
+            # starts.
+            # The query fails when clnrest isn't running, for example because
+            # another process took its port. `Restart=on-failure` tries again.
+            if ! response=$(${runuser} -u ${clightning.user} -- \
+                   ${clightning.cli}/bin/lightning-cli listconfigs clnrest-certs) ||
+               ! certsDir=$(${pkgs.jq}/bin/jq -er '.configs["clnrest-certs"].value_str // ""' \
+                   <<< "$response"); then
+              echo "Error: Can't get clnrest's cert dir from clightning: $response" >&2
+              exit 1
+            fi
+            case $certsDir in
+              "") certsDir='${clightning.networkDir}' ;;
+              /*) ;;
+              *) certsDir='${clightning.networkDir}'/$certsDir ;;
+            esac
+            cert=$certsDir/server.pem
+            # clnrest creates the cert before it listens, which clightning's start
+            # waits for. When it's still missing, `Restart=on-failure` tries again.
+            ${runuser} -u ${clightning.user} -- head -c 65536 "$cert" > "$tmpFile"
+            if [[ ! -s $tmpFile ]]; then
+              echo "Error: '$cert' is empty" >&2
+              exit 1
+            fi
+            installAsRtl '${clnrestCertCopy}'
           '');
         ExecStart = "${nbPkgs.rtl}/bin/rtl";
         # Show "rtl" instead of "node" in the journal
