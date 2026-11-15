@@ -63,6 +63,13 @@ Charge-LND reads its certificate and macaroon directly, without staging them
 under a synthetic mainnet directory. Users selecting custom credentials with
 `--lnddir` should follow the [0.2.0 upgrade notes](upgrading.md#upgrading-to-config-version-020).
 
+#### NBXplorer RPC password permissions
+
+BTCPay Server can no longer read NBXplorer's bitcoind RPC password. Only NBXplorer's
+user can read it now. Before, BTCPay Server could read it through the group that
+gives it NBXplorer's API cookie. See
+[Upgrading to config version 0.2.0](upgrading.md#upgrading-to-config-version-020).
+
 ## 0.1.6
 
 #### Tor enforcement allows only local addresses
