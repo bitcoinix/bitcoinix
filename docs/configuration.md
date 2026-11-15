@@ -203,6 +203,22 @@ services.bitcoind = {
 networking.firewall.interfaces.eth0.allowedTCPPorts = [ config.services.bitcoind.rpc.port ];
 ```
 
+To give a LAN client its own RPC user, add it to `services.bitcoind.rpc.users`:
+```nix
+services.bitcoind.rpc.users.alice = {
+  # The part after `rpcauth=alice:` in the output of
+  # Bitcoin Core's `share/rpcauth/rpcauth.py alice`
+  passwordHMAC = "<salt>$<hmac>";
+  # The RPC methods that alice may call. Without this, alice may call all methods.
+  rpcwhitelist = [ "getblockchaininfo" "getblock" ];
+};
+```
+`passwordHMAC` is written to the world-readable Nix store, like `rpcauth` lines in
+`services.bitcoind.extraConfig`. Any local user can read it and test password
+guesses offline. So use a long random password, like the one that `rpcauth.py`
+generates when you don't pass a password. If an RPC user has a weak password,
+change it. The old HMAC stays readable in the Nix store until it is garbage-collected.
+
 ## Allow connections to electrs
 
 ```nix
