@@ -167,8 +167,12 @@ in {
 
     environment.systemPackages = [ cfg.package (hiPrio cfg.cli) ];
 
+    # Group members need to pass through this dir to reach the RPC socket, but
+    # they must not write it. Write access lets them swap `config` between
+    # `preStart` and lightningd reading it, or replace the network dir. Then
+    # they can run code as the clightning user or plant their own `hsm_secret`.
     systemd.tmpfiles.rules = [
-      "d '${cfg.dataDir}' 0770 ${cfg.user} ${cfg.group} - -"
+      "d '${cfg.dataDir}' 0750 ${cfg.user} ${cfg.group} - -"
     ];
 
     systemd.services.clightning = {
@@ -190,8 +194,9 @@ in {
         rm -f '${cfg.networkDir}/lightning-rpc'
 
         # Build the whole config first, then replace the file in one step.
-        # The data dir is writable by the operator, so a redirect into `config`
-        # could follow a symlink or reuse a file owned by the operator.
+        # Older versions let group members write the data dir, so `config` can
+        # be a symlink or a file that one of them owns. A redirect into it would
+        # follow the symlink or reuse the file.
         conf=$(
           cat '${configFile}'
           echo "bitcoin-rpcpassword=$(cat '${config.nix-bitcoin.secretsDir}/bitcoin-rpcpassword-public')"

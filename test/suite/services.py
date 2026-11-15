@@ -125,6 +125,23 @@ def test_clightning():
     info = succeed_json("runuser -u operator -- lightning-cli getinfo")
     assert info["id"], info
 
+    # Group members, like the operator and BTCPay Server, use the RPC socket.
+    # They must not write the data dir, which holds the config that lightningd
+    # loads and the network dir with hsm_secret.
+    data = test_data["clightning"]
+    data_dir, user, group = data["dataDir"], data["user"], data["group"]
+    assert_file_metadata(data_dir, owner=user, group=group, mode="750")
+    # The RPC socket is the only entry that the group or others can write
+    rpc_socket = f"{data['networkDir']}/lightning-rpc"
+    assert_full_match(f"find {shlex.quote(data_dir)} -perm /022", re.escape(f"{rpc_socket}\n"))
+    assert_full_match(f"find {shlex.quote(data_dir)} ! -user {shlex.quote(user)}", "")
+    members = succeed(f"getent group {shlex.quote(group)}").strip().split(":")[3]
+    probe = shlex.quote(f"{data_dir}/group-write-probe")
+    for member in filter(None, members.split(",")):
+        as_member = f"runuser -u {shlex.quote(member)} --"
+        succeed(f"{as_member} lightning-cli getinfo >/dev/null")
+        machine.fail(f"{as_member} touch {probe}")
+
     enabled_plugins = test_data["clightning-plugins"]
     if enabled_plugins:
         plugin_list = succeed("lightning-cli plugin list")
@@ -264,13 +281,14 @@ def test_btcpayserver():
     assert_running("btcpayserver")
     machine.wait_until_succeeds(log_has_string("btcpayserver", "Now listening on"))
     wait_for_open_port(ip("btcpayserver"), 23000)
-    # test lnd custom macaroon
-    info = succeed_json(
-        "runuser -u btcpayserver -- curl -fsS --cacert /secrets/lnd-cert "
-        '--header "Grpc-Metadata-macaroon: $(xxd -ps -u -c 1000 /run/lnd/btcpayserver.macaroon)" '
-        f"-X GET https://{ip('lnd')}:8080/v1/getinfo"
-    )
-    assert info["version"], info
+    if test_data["btcpayserver"]["lightningBackend"] == "lnd":
+        # test lnd custom macaroon
+        info = succeed_json(
+            "runuser -u btcpayserver -- curl -fsS --cacert /secrets/lnd-cert "
+            '--header "Grpc-Metadata-macaroon: $(xxd -ps -u -c 1000 /run/lnd/btcpayserver.macaroon)" '
+            f"-X GET https://{ip('lnd')}:8080/v1/getinfo"
+        )
+        assert info["version"], info
     # Test web server response
     assert_matches(f"curl -fsS -L {ip('btcpayserver')}:23000", "Welcome to BTCPay Server")
 
