@@ -116,6 +116,39 @@ let
       in mapAttrs (_: service: toList (service.serviceConfig.ReadOnlyPaths or []))
         (filterAttrs (_: usesDefaultHardening) config.systemd.services);
 
+      # Services restricted to local addresses (`nix-bitcoin.lib.allowLocalIPAddresses`)
+      tests.tor-enforce = true;
+      test.data.tor-enforce = let
+        # Select units by either part of the restriction, so that a unit that
+        # overrides its allow list or its masks fails the test instead of dropping out
+        isRestricted = service: let serviceConfig = service.serviceConfig; in
+          elem "127.0.0.1/32" (toList (serviceConfig.IPAddressAllow or []))
+          || elem "/run/nscd" (toList (serviceConfig.InaccessiblePaths or []));
+        netns = config.nix-bitcoin.netns-isolation;
+      in {
+        selected = attrNames (filterAttrs (_: isRestricted) config.systemd.services);
+        # The units that must be restricted, independent of how they're selected
+        expected = [ "nb-tor-enforce-custom" ]
+          ++ optional cfg.charge-lnd.enable "charge-lnd"
+          ++ optional cfg.unbeholden-wallet.enable "unbeholden-wallet"
+          ++ optional (cfg.btcpayserver.enable && cfg.nbxplorer.tor.enforce) "nbxplorer"
+          ++ filter (service: cfg.${service}.enable && cfg.${service}.tor.enforce) [
+            "bitcoind" "btcpayserver" "clightning" "electrs" "fulcrum" "lnd" "mempool" "rtl"
+          ];
+        # The complete allow list of each restricted unit
+        allow = [ "127.0.0.1/32" "::1/128" ]
+          ++ optional netns.enable "169.254.${toString netns.addressblock}.0/24";
+      };
+      # A custom unit with the restriction, which must start on every node,
+      # also when no service enforces Tor
+      systemd.services.nb-tor-enforce-custom = mkIfTest "tor-enforce" {
+        wantedBy = [ "multi-user.target" ];
+        serviceConfig = config.nix-bitcoin.lib.allowLocalIPAddresses // {
+          IPAddressDeny = "any";
+          ExecStart = "${pkgs.coreutils}/bin/sleep infinity";
+        };
+      };
+
       tests.rtl = cfg.rtl.enable;
       tests.rtl-credentials = cfg.rtl.enable;
       tests.rtl-backend-certs = cfg.rtl.enable;
@@ -452,6 +485,8 @@ let
         scenarios.secureNode
         ../modules/presets/hardened-extended.nix
       ];
+      # Run test `tor-enforce` with glibc's nscd, which keeps a pid file
+      services.nscd.enableNsncd = false;
     };
 
     netnsBase = { config, pkgs, ... }: {

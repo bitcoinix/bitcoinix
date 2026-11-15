@@ -5,6 +5,17 @@ For configuration migrations reported during evaluation, follow the
 
 ## 0.1.6
 
+#### Tor enforcement allows only local addresses
+
+Services with `tor.enforce` and charge-lnd could reach every link-local address
+`169.254.0.0/16`, including a cloud provider's metadata service, and could resolve
+names through the host's resolver sockets, outside the Tor-only restriction. They
+now reach only localhost and, with netns-isolation, the namespace subnet, and can't
+use the nscd, systemd-resolved, D-Bus and Avahi sockets. netns-isolation rejects
+`addressblock` 169 and 170. Setups that connect such a service to a non-local
+address or by host name need a change, see the
+[upgrade notes](upgrading.md#tor-enforcement-allows-only-local-addresses).
+
 #### Unbeholden Wallet service
 
 New service: [Unbeholden Wallet](services.md#connect-to-unbeholden-wallet), a watch-only

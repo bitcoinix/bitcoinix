@@ -10,6 +10,7 @@ let
       default = 1;
       description = ''
         The address block N in 169.254.N.0/24, used as the prefix for netns addresses.
+        169 and 170 aren't allowed, because those blocks hold cloud metadata addresses.
       '';
     };
 
@@ -104,6 +105,14 @@ in {
         assertion = config.networking.firewall.backend == "iptables"
           && lib.getName config.networking.firewall.package != "nftables";
         message = "`nix-bitcoin.netns-isolation` runs its iptables rules with `networking.firewall.package`, which is the nftables package without an iptables binary when `networking.nftables` is enabled, and firewalld is not supported. Disable `networking.nftables` and `services.firewalld`, or keep `networking.firewall.backend = \"iptables\"` and set `networking.firewall.package` to a package with `bin/iptables`, so that the firewall uses the iptables backend and package.";
+      }
+      {
+        # Services with `tor.enforce` may reach the whole namespace subnet
+        # 169.254.<addressblock>.0/24. Blocks 169 and 170 contain the well-known
+        # cloud metadata addresses (169.254.169.254, 169.254.170.2), so keep the
+        # subnet clear of them.
+        assertion = !(builtins.elem cfg.addressblock [ 169 170 ]);
+        message = "`nix-bitcoin.netns-isolation.addressblock` must not be 169 or 170: the subnet 169.254.${toString cfg.addressblock}.0/24 would include a cloud metadata address, which services with `tor.enforce` are then allowed to reach. Choose a different address block.";
       }
     ];
     networking.dhcpcd.denyInterfaces = [ "nb-br" "nb-veth*" ];

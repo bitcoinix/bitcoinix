@@ -340,6 +340,9 @@ connection for each service that connects to bitcoind, for example electrs:
 ```nix
 systemd.services.electrs.serviceConfig.IPAddressAllow = [ "10.10.0.2" ];
 ```
+These services resolve names in-process from `/etc/hosts`, so a host name that isn't
+there won't resolve. Set `address` to an IP address, or add the name of the other node
+to `networking.hosts`.
 
 electrs reads blocks through bitcoind's REST interface. If you use electrs, set
 `rest=1` on the other node (Bitcoin Core 31 or later). REST is unauthenticated and

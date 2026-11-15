@@ -52,6 +52,8 @@ let
     rawNegatedInclude = { args.extraConfig = "regtest.noincludeconf=0"; expected = false; };
   };
 
+  # A host that only imports the modules
+  modulesOnly = evaluate {};
   bitcoin = evaluate { services.bitcoind.enable = true; };
   regtest = evaluate { services.bitcoind = { enable = true; regtest = true; }; };
   electrs = evaluate { services.electrs.enable = true; };
@@ -249,6 +251,27 @@ let
     imports = [ wireguardNftablesIptablesLegacy ];
     systemd.services.firewall.path = lib.mkBefore [ pkgs.iptables ];
     networking.nftables.ruleset = "table inet extra { }";
+  };
+  torEnforced = evaluate {
+    imports = [ ../modules/presets/enable-tor.nix ];
+    services.electrs.enable = true;
+  };
+  torEnforcedNetns = evaluate {
+    imports = [ ../modules/presets/enable-tor.nix ];
+    services.electrs.enable = true;
+    services.charge-lnd.enable = true;
+    nix-bitcoin.netns-isolation = { enable = true; addressblock = 7; };
+  };
+  torEnforcedAvahi = evaluate {
+    imports = [ ../modules/presets/enable-tor.nix ];
+    services.electrs.enable = true;
+    services.avahi.enable = true;
+  };
+  getNetworkRestriction = config: service: let
+    serviceConfig = config.systemd.services.${service}.serviceConfig;
+  in {
+    allow = serviceConfig.IPAddressAllow;
+    inaccessible = serviceConfig.InaccessiblePaths or [];
   };
   customMempoolUser = evaluate {
     services.mempool = { enable = true; user = "mempool-custom"; };
@@ -834,6 +857,89 @@ let
       expected = {
         undefined = true; current = true; currentFails = [ true ]; defined = false; disabled = true;
       };
+    };
+    testTorEnforceAllowsOnlyLocalhost = {
+      expr = getNetworkRestriction torEnforced "electrs";
+      expected = {
+        allow = [ "127.0.0.1/32" "::1/128" ];
+        inaccessible = [ "/run/nscd" "/run/systemd/resolve" "/run/dbus" ];
+      };
+    };
+    testTorEnforceAllowsOnlyNetnsAddresses = {
+      expr = map (getNetworkRestriction torEnforcedNetns) [ "electrs" "charge-lnd" ];
+      expected = lib.replicate 2 {
+        allow = [ "127.0.0.1/32" "::1/128" "169.254.7.0/24" ];
+        inaccessible = [ "/run/nscd" "/run/systemd/resolve" "/run/dbus" ];
+      };
+    };
+    testTorEnforceMasksAvahiWhenEnabled = {
+      expr = (getNetworkRestriction torEnforcedAvahi "electrs").inaccessible;
+      expected = [ "/run/nscd" "/run/systemd/resolve" "/run/dbus" "/run/avahi-daemon" ];
+    };
+    testNoTorEnforceKeepsNetwork = {
+      expr = getNetworkRestriction bitcoin "bitcoind";
+      expected = { allow = "any"; inaccessible = []; };
+    };
+    testResolverDirsCreated = {
+      # The fail-closed masks have no `-` prefix, so each directory must exist or
+      # the unit won't start; they're created independently of their resolver,
+      # also without `tor.enforce`, for custom units with the restriction.
+      expr = map (config: map (rule: builtins.elem rule config.systemd.tmpfiles.rules) [
+        "d /run/nscd 0755 nscd nscd -"
+        "d /run/systemd/resolve 0755 root root -"
+        "d /run/dbus 0755 root root -"
+      ]) [ torEnforced bitcoin modulesOnly ];
+      expected = lib.replicate 3 [ true true true ];
+    };
+    testResolverDirCreatedForResolved = {
+      # With resolved enabled the resolve dir is created under resolved's user
+      expr = builtins.elem "d /run/systemd/resolve 0755 systemd-resolve systemd-resolve -"
+        (evaluate {
+          imports = [ ../modules/presets/enable-tor.nix ];
+          services.electrs.enable = true;
+          services.resolved.enable = true;
+        }).systemd.tmpfiles.rules;
+      expected = true;
+    };
+    testNscdKeepsRuntimeDirectory = {
+      # Also without `tor.enforce`, for custom units with the restriction
+      expr = map (config: config.systemd.services.nscd.serviceConfig.RuntimeDirectoryPreserve or null)
+        [ torEnforced bitcoin modulesOnly ];
+      expected = [ true true true ];
+    };
+    testNscdStalePidRemovedForGlibc = {
+      # Only glibc's nscd keeps a pid file in the preserved directory
+      expr = map (enableNsncd: lib.any (lib.hasInfix "rm -f /run/nscd/nscd.pid") (lib.toList
+        ((evaluate { services.nscd.enableNsncd = enableNsncd; })
+          .systemd.services.nscd.serviceConfig.ExecStartPre or [])))
+        [ true false ];
+      expected = [ false true ];
+    };
+    testNetnsRejectsMetadataAddressblock = {
+      expr = map (block: builtins.any (lib.hasInfix "must not be 169 or 170") (failedAssertions (evaluate {
+        services.bitcoind.enable = true;
+        nix-bitcoin.netns-isolation = { enable = true; addressblock = block; };
+      }))) [ 1 169 170 ];
+      expected = [ false true true ];
+    };
+    testTorEnforceMigration = {
+      expr = map (module: (builtins.tryEval (evaluate {
+        imports = [ module ];
+        nix-bitcoin.configVersion = "0.1.5";
+      }).system.stateVersion).success) [
+        { services.bitcoind.enable = true; }
+        { services.charge-lnd.enable = true; }
+        { imports = [ ../modules/presets/enable-tor.nix ]; services.bitcoind.enable = true; }
+        # Only nbxplorer enforces Tor. Its unit is created by btcpayserver.enable,
+        # even when the internal nbxplorer.enable is false.
+        {
+          imports = [ ../modules/presets/enable-tor.nix ];
+          services.bitcoind.tor.enforce = false;
+          services.btcpayserver.enable = true;
+          services.nbxplorer.enable = lib.mkForce false;
+        }
+      ];
+      expected = [ true false false false ];
     };
     testMempoolCustomUser = {
       expr = with customMempoolUser; {
