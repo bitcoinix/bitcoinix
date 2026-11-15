@@ -70,6 +70,12 @@ let
 
           This option is also useful if you want to use a custom remote destination,
           like a NFS or SMB share.
+
+          `clightning.service` requires the mounts for this directory, and so does
+          `clightning-replication-mounts.service` if `encrypt` is `true`. They don't
+          start while a mount is missing. systemd can only wait for the mounts it
+          knows, so declare the disk or share in `fileSystems`. It also doesn't
+          follow symlinks, so set this to the mount point or a directory below it.
         '';
       };
       setupDirectory = mkOption {
@@ -121,6 +127,17 @@ let
       sshfsDir
     else
       localDir;
+
+  # systemd splits these path settings at whitespace, unquotes the words and
+  # expands `%` specifiers. So quote the path, which keeps it as one word.
+  unitPath = path: ''"${replaceStrings [ "\\" "\"" "%" ] [ "\\\\" "\\\"" "%%" ] path}"'';
+
+  # Without the mount, the replica would land on the filesystem below the mount
+  # point, usually the primary disk. systemd can only wait for the mounts it
+  # knows, like `fileSystems` entries.
+  localDirMounts = optionalAttrs (localDir != null) {
+    RequiresMountsFor = [ (unitPath localDir) ];
+  };
 in {
   inherit options;
 
@@ -160,6 +177,7 @@ in {
 
     systemd.services.clightning = {
       bindsTo = mkIf useMounts [ "clightning-replication-mounts.service" ];
+      unitConfig = localDirMounts;
       serviceConfig.ReadWritePaths = [
         # We can't simply set `destDir` here because it might point to
         # a FUSE mount.
@@ -169,7 +187,7 @@ in {
         # not by root.
         # (This could be circumvented by FUSE-mounting `destDir` with option `allow_other`,
         # but this would grant access to all users.)
-        (if useMounts then mountsDir else localDir)
+        (if useMounts then mountsDir else unitPath localDir)
       ];
     };
 
@@ -178,6 +196,8 @@ in {
       before = [ "clightning.service" ];
       wants = [ "nix-bitcoin-secrets.target" ];
       after = [ "nix-bitcoin-secrets.target" ];
+      # gocryptfs writes the encrypted replica to `localDir`
+      unitConfig = localDirMounts;
       # Keep mounts alive when clightning stops or crashes. StopPropagatedFrom
       # would stop them after a crash, propagating a stop back through clightning's
       # Requires/BindsTo dependencies and cancelling its automatic restart.

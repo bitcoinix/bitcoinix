@@ -299,11 +299,22 @@ let
   };
   lndMacaroonId = name: user: permissions:
     (lndMacaroon name { inherit user permissions; }).services.lnd.macaroons.${name}.rootKeyId;
+  clightningReplication = replication: {
+    services.clightning = { enable = true; replication = { enable = true; } // replication; };
+  };
   replicationHostKeyWarnings = replication: builtins.filter
     (lib.hasInfix "disables SSH host key checking")
-    (evaluate {
-      services.clightning = { enable = true; replication = { enable = true; } // replication; };
-    }).warnings;
+    (evaluate (clightningReplication replication)).warnings;
+  replicationUnits = replication: (evaluate (clightningReplication replication)).systemd.services;
+  replicationRequiredMounts = replication: let
+    services = replicationUnits replication;
+  in lib.genAttrs [ "clightning" "clightning-replication-mounts" ]
+    (unit: services.${unit}.unitConfig.RequiresMountsFor or null);
+  # A local replica directory, with disks declared at `mountPoints`
+  replicationToLocalMounts = directory: mountPoints: {
+    imports = [ (clightningReplication { local.directory = directory; }) ];
+    fileSystems = lib.genAttrs mountPoints (_: { device = "/dev/disk/by-label/replica"; fsType = "ext4"; });
+  };
   lndconnectOnion = {
     services.lnd = { enable = true; lndconnect = { enable = true; onion = true; }; };
   };
@@ -360,6 +371,7 @@ let
   hasNotice = hasNoticeAt "0.1.5";
   hasOperatorAccessNotice = hasNotice "lnconnect-clnrest now gives the operator user";
   hasAccessUsersNotice = hasNotice "now accepts only users that are defined";
+  hasReplicationMountNotice = hasNotice "clightning now requires the mounts for";
   # A user that exists only outside `users.users`, for example via useradd or LDAP
   onionAccessExternalUser = {
     nix-bitcoin.onionAddresses.access.external-user = [ "bitcoind" ];
@@ -1355,6 +1367,47 @@ let
         { local.directory = "/var/backup/cln"; sshfs.sshOptions = [ "StrictHostKeyChecking=no" ]; }
       ];
       expected = [ 0 1 1 0 ];
+    };
+    # Without its disk, a local replica would land on the disk below the mount point
+    testReplicationRequiresLocalMounts = {
+      expr = map replicationRequiredMounts [
+        { local.directory = "/mnt/replica"; }
+        { local.directory = "/mnt/replica"; encrypt = true; }
+        { sshfs.destination = "user@host:dir"; encrypt = true; }
+      ];
+      expected = [
+        { clightning = [ ''"/mnt/replica"'' ]; clightning-replication-mounts = null; }
+        { clightning = [ ''"/mnt/replica"'' ]; clightning-replication-mounts = [ ''"/mnt/replica"'' ]; }
+        { clightning = null; clightning-replication-mounts = null; }
+      ];
+    };
+    # systemd splits these paths at whitespace and expands `%` specifiers
+    testReplicationQuotesLocalDirectory = let
+      clightning = (replicationUnits { local.directory = ''/mnt/backup disk/"a" \b %c''; }).clightning;
+      quoted = ''"/mnt/backup disk/\"a\" \\b %%c"'';
+    in {
+      expr = {
+        requiresMountsFor = clightning.unitConfig.RequiresMountsFor;
+        readWritePaths = lib.elem quoted clightning.serviceConfig.ReadWritePaths;
+      };
+      expected = { requiresMountsFor = [ quoted ]; readWritePaths = true; };
+    };
+    # Before 0.2.0, clightning started without the mount of its local replica
+    testVersioningReplicationLocalMounts = let
+      onDisk = replicationToLocalMounts "/mnt/replica" [ "/mnt/replica" ];
+    in {
+      expr = {
+        onDisk = hasReplicationMountNotice onDisk;
+        onRoot = hasReplicationMountNotice (replicationToLocalMounts "/var/backup/clightning" [ ]);
+        sshfs = hasReplicationMountNotice (clightningReplication { sshfs.destination = "user@host:dir"; });
+        previous = hasNoticeAt "0.1.6" "clightning now requires the mounts for" onDisk;
+        # Once 0.2.0 is released, a config at 0.2.0 doesn't get the notice
+        acknowledged = hasNoticeAt "0.2.0" "clightning now requires the mounts for" {
+          imports = [ onDisk ];
+          nix-bitcoin.versioning.releasedVersion = "0.2.0";
+        };
+      };
+      expected = { onDisk = true; onRoot = true; sshfs = false; previous = true; acknowledged = false; };
     };
   };
   failures = lib.debug.runTests tests;

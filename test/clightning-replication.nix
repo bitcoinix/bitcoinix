@@ -46,6 +46,19 @@ makeTestVM {
       services.clightning.replication.encrypt = true;
     };
 
+    # The replica's disk is declared, but missing. The space in the path checks
+    # that systemd reads it as one path.
+    replicationLocalMissingDisk = {
+      imports = [ clientBaseConfig ];
+      services.clightning.replication.local.directory = "/mnt/replica disk";
+      # Test VMs ignore `fileSystems`
+      virtualisation.fileSystems."/mnt/replica disk" = {
+        device = "/dev/disk/by-label/missing-replica";
+        fsType = "ext4";
+        options = [ "nofail" "x-systemd.device-timeout=1s" ];
+      };
+    };
+
     replicationRemote = {
       imports = [ clientBaseConfig ];
       nix-bitcoin.generateSecretsCmds.clightning-replication-ssh-key = mkForce ''
@@ -189,5 +202,18 @@ makeTestVM {
               "/var/cache/clightning-replication/plaintext",
               "/var/cache/clightning-replication/sshfs",
           )
+
+      # Runs last, because the switch fails and leaves clightning stopped
+      with subtest("local replication requires its mount"):
+          replica_dir = "/mnt/replica disk"
+          since = client.succeed("date +%s").strip()
+          client.execute(f"{systems['replicationLocalMissingDisk']}/bin/switch-to-configuration test >&2")
+          client.succeed(f"journalctl -u clightning.service --since @{since} | grep -q 'Dependency failed'")
+          client.fail("systemctl is-active clightning.service")
+          client.fail(f"ls '{replica_dir}/lightningd.sqlite3'")
+          # `systemctl show` quotes each path that contains a space
+          for setting in ["RequiresMountsFor", "ReadWritePaths"]:
+              paths = client.succeed(f"systemctl show -p {setting} --value clightning.service")
+              assert f'"{replica_dir}"' in paths, f"{setting}={paths}"
   '';
 }
