@@ -457,8 +457,10 @@ for the service whose connection helper you enable (see
    # For debugging: Show the WireGuard config as text
    nix-bitcoin-wg-connect --text mynode.example.com
    ```
-   Without an argument, `nix-bitcoin-wg-connect` detects your node's external IP by
-   querying public IP lookup services over clearnet.
+   The address is required. `nix-bitcoin-wg-connect` doesn't look up your node's public
+   IP, since that would reveal it to public IP lookup services over clearnet. Behind NAT,
+   your router shows the public IP. For a device that connects only from your local
+   network, you can pass the node's LAN IP instead.
 
    In the WireGuard app, add a tunnel by scanning the QR code.
 

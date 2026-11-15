@@ -27,9 +27,11 @@ iptables -t nat -A PREROUTING -p udp --dport 51821 -j DNAT --to-destination 10.2
 # - Protocol: UDP
 # - Destination: IPv4 of the container host
 
-# 3.2 Print QR code and setup wireguard on the mobile device
-c nix-bitcoin-wg-connect
-c nix-bitcoin-wg-connect --text
+# 3.2 Print QR code and setup wireguard on the mobile device.
+# Set `host` to the IPv4 of the container host that your mobile device reaches.
+host=192.168.1.10
+c nix-bitcoin-wg-connect "$host"
+c nix-bitcoin-wg-connect --text "$host"
 
 # Print QR codes for lnd and clnrest connections via WireGuard
 c lndconnect-wg
