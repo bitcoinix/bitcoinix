@@ -807,17 +807,21 @@ let
         network = config.services.mempool.settings.MEMPOOL.NETWORK;
         rpcPort = config.services.mempool.settings.CORE_RPC.PORT;
         frontend = config.services.mempool.frontend.settings;
+        usesPackagedFrontend = config.services.mempool.frontend.staticContentRoot.drvPath
+          == config.nix-bitcoin.pkgs.mempool-frontend.drvPath;
       }) [ "mainnet" "regtest" ];
       expected = [
         {
           network = "mainnet";
           rpcPort = 8332;
-          frontend = { MAINNET_ENABLED = true; REGTEST_ENABLED = false; ROOT_NETWORK = ""; };
+          frontend = {};
+          usesPackagedFrontend = true;
         }
         {
           network = "regtest";
           rpcPort = 18443;
           frontend = { MAINNET_ENABLED = false; REGTEST_ENABLED = true; ROOT_NETWORK = "regtest"; };
+          usesPackagedFrontend = false;
         }
       ];
     };

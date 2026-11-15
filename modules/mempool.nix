@@ -278,7 +278,8 @@ in {
       ];
     };
 
-    services.mempool.frontend.settings = {
+    # Use the packaged frontend on mainnet, whose defaults already match.
+    services.mempool.frontend.settings = mkIf (bitcoind.network != "mainnet") {
       MAINNET_ENABLED = mkDefault (bitcoind.network == "mainnet");
       REGTEST_ENABLED = mkDefault (bitcoind.network == "regtest");
       # Upstream represents mainnet by the empty string. Keep the selected

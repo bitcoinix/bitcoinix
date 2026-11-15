@@ -78,6 +78,9 @@ If you selected custom credentials with `--lnddir` in
 add the missing credential path explicitly. Configurations already specifying
 both paths, and default configurations, need no changes.
 
+The old `/var/lib/charge-lnd/lnddir-proxy` tree is left behind on existing hosts.
+It is no longer used and can be removed after upgrading.
+
 After migrating your configuration, set `nix-bitcoin.configVersion = "0.2.0";`.
 
 ## Upgrading to config version 0.1.6

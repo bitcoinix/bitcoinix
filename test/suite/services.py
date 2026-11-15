@@ -316,10 +316,14 @@ def test_mempool():
     network = test_data["mempool"]["network"]
     assert succeed_json(f"cat {conf}")["MEMPOOL"]["NETWORK"] == network
     frontend_config = succeed(f"curl -fsSL {ip('nginx')}:60845/resources/config.js")
-    root_network = "" if network == "mainnet" else network
-    assert f"window.__env.ROOT_NETWORK = '{root_network}';" in frontend_config
-    assert f"window.__env.MAINNET_ENABLED = {str(network == 'mainnet').lower()};" in frontend_config
-    assert f"window.__env.REGTEST_ENABLED = {str(network == 'regtest').lower()};" in frontend_config
+    if network == "mainnet":
+        # The packaged frontend uses compiled defaults without runtime overrides.
+        for setting in ("ROOT_NETWORK", "MAINNET_ENABLED", "REGTEST_ENABLED"):
+            assert f"window.__env.{setting} =" not in frontend_config
+    else:
+        assert f"window.__env.ROOT_NETWORK = '{network}';" in frontend_config
+        assert "window.__env.MAINNET_ENABLED = false;" in frontend_config
+        assert f"window.__env.REGTEST_ENABLED = {str(network == 'regtest').lower()};" in frontend_config
     assert_matches(f"curl -L {ip('nginx')}:60845", "mempool - Bitcoin Explorer")
     # No cache validators, and no 304 for the store's 1970 timestamp
     headers = succeed(f"curl -sI -H 'If-Modified-Since: Thu, 01 Jan 1970 00:00:01 GMT' {ip('nginx')}:60845")
