@@ -788,9 +788,14 @@ let
         { version = "0.1.6"; enable = false; flags = [ "--lnddir=/custom/lnd" ]; }
         { version = "0.1.6"; enable = true; flags = []; }
         { version = "0.1.6"; enable = true; flags = [ "--tlscert" "/custom/cert" "--macaroon" "/custom/macaroon" ]; }
+        { version = "0.1.6"; enable = true; flags = [ "--lnddir" "/custom/lnd" "--tlscert" "/custom/cert" ]; }
+        { version = "0.1.6"; enable = true; flags = [ "--lnddir=/custom/lnd" "--macaroon=/custom/macaroon" ]; }
+        { version = "0.1.6"; enable = true; flags = [ "--lnddir" "/custom/lnd" "--tlscert" "/custom/cert" "--macaroon" "/custom/macaroon" ]; }
+        { version = "0.1.6"; enable = true; flags = [ "--lnddir=/custom/lnd" "--tlscert=/custom/cert" "--macaroon=/custom/macaroon" ]; }
+        { version = "0.1.6"; enable = true; flags = [ "--lnddir=/custom/lnd" "--tlscert" "/custom/cert" "--macaroon=/custom/macaroon" ]; }
         { version = "0.2.0"; enable = true; flags = [ "--lnddir=/custom/lnd" ]; }
       ];
-      expected = [ false false true true true true ];
+      expected = [ false false true true true false false true true true true ];
     };
     testMempoolNetworks = {
       expr = map (network: let
