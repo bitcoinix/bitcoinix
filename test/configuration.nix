@@ -527,18 +527,32 @@ let
         [ "testnet" "signet" "" true ];
       expected = [ false false false false ];
     };
-    testRemovedRegtestOption = {
-      expr = map (value: lib.any (lib.hasInfix "services.bitcoind.regtest")
-        (failedAssertions (evaluate { services.bitcoind.regtest = value; })))
-        [ true false ];
-      expected = [ true true ];
+    testLegacyRegtestOption = {
+      expr = map (value: let
+        config = evaluate {
+          services.bitcoind.regtest = value;
+          nix-bitcoin.configVersion = "0.2.0";
+        };
+      in {
+        inherit (config.services.bitcoind) network;
+        warned = lib.any (lib.hasInfix "services.bitcoind.regtest") config.warnings;
+      }) [ true false ];
+      expected = [
+        { network = "regtest"; warned = true; }
+        { network = "mainnet"; warned = true; }
+      ];
+    };
+    testConflictingNetworkOptions = {
+      expr = (builtins.tryEval (evaluate {
+        services.bitcoind = { regtest = true; network = "mainnet"; };
+      }).services.bitcoind.network).success;
+      expected = false;
     };
     testRemovedNetworkNameHelper = {
-      expr = lib.any (lib.hasInfix "services.bitcoind.makeNetworkName")
-        (failedAssertions (evaluate {
-          services.bitcoind.makeNetworkName = mainnet: regtest: mainnet;
-        }));
-      expected = true;
+      expr = (builtins.tryEval (evaluate ({ config, ... }: {
+        services.electrs.dataDir = "/var/lib/electrs/${config.services.bitcoind.makeNetworkName "bitcoin" "regtest"}";
+      })).services.electrs.dataDir).success;
+      expected = false;
     };
     testNetworkMigration = {
       expr = map (module: (builtins.tryEval (evaluate {
@@ -547,27 +561,35 @@ let
       }).system.stateVersion).success) [
         { services.bitcoind.regtest = true; }
         { services.bitcoind.regtest = false; }
-        { services.bitcoind.makeNetworkName = mainnet: regtest: mainnet; }
         { services.bitcoind.network = "regtest"; }
         {}
       ];
-      expected = [ false false false true true ];
+      expected = [ false false true true ];
     };
     testHistoricalNetworkMigrationPaths = {
-      expr = map (network: let
+      expr = map (case: let
         notices = (evaluate {
-          services.bitcoind.network = network;
+          services.bitcoind = case.settings;
           services.electrs.enable = true;
           nix-bitcoin.configVersion = "0.1.1";
           _module.check = false;
         }).nix-bitcoin.versioning.incompatibleChanges;
       in {
         cookie = lib.any (lib.hasInfix
-          "/var/lib/bitcoind/${lib.optionalString (network == "regtest") "regtest/"}.cookie") notices;
+          "/var/lib/bitcoind/${case.cookiePath}") notices;
         index = lib.any (lib.hasInfix
-          "/var/lib/electrs/${if network == "mainnet" then "bitcoin" else "regtest"}") notices;
-      }) [ "mainnet" "regtest" ];
+          "rm -r /var/lib/electrs/${case.indexDir}") notices;
+      }) [
+        { settings = {}; cookiePath = ".cookie"; indexDir = "bitcoin"; }
+        { settings.regtest = false; cookiePath = ".cookie"; indexDir = "bitcoin"; }
+        { settings.regtest = true; cookiePath = "regtest/.cookie"; indexDir = "regtest"; }
+        { settings.network = "mainnet"; cookiePath = ".cookie"; indexDir = "bitcoin"; }
+        { settings.network = "regtest"; cookiePath = "regtest/.cookie"; indexDir = "regtest"; }
+      ];
       expected = [
+        { cookie = true; index = true; }
+        { cookie = true; index = true; }
+        { cookie = true; index = true; }
         { cookie = true; index = true; }
         { cookie = true; index = true; }
       ];
@@ -816,6 +838,28 @@ let
         { version = "0.2.0"; network = "regtest"; enable = true; }
       ];
       expected = [ false true true true ];
+    };
+    testLegacyMempoolNetworkMigration = {
+      expr = map (case: let
+        notices = (evaluate {
+          nix-bitcoin.configVersion = "0.1.6";
+          services.bitcoind.regtest = case.regtest;
+          services.mempool.enable = case.enable;
+          _module.check = false;
+        }).nix-bitcoin.versioning.incompatibleChanges;
+      in {
+        network = lib.any (lib.hasInfix "services.bitcoind.regtest has been replaced") notices;
+        mempool = lib.any (lib.hasInfix "Mempool now uses regtest") notices;
+      }) [
+        { regtest = true; enable = true; }
+        { regtest = false; enable = true; }
+        { regtest = true; enable = false; }
+      ];
+      expected = [
+        { network = true; mempool = true; }
+        { network = true; mempool = false; }
+        { network = true; mempool = false; }
+      ];
     };
     testMempoolDefaultRpcPassword = { expr = failedAssertions mempool; expected = []; };
     testMempoolRejectsRpcPassword = {

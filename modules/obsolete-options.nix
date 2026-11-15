@@ -20,15 +20,14 @@ let
 in {
   imports = [
     (mkRemovedOptionModule [ "services" "bitcoind" "makeNetworkName" ] ''
-      Use `nbLib.networkName { mainnet = "bitcoin"; }` instead
+      Use `config.nix-bitcoin.lib.networkName { mainnet = "bitcoin"; }` instead
       to override mainnet's name while passing other network names through unchanged.
       See docs/upgrading.md, "Upgrading to config version 0.2.0".
     '')
 
-    (mkRemovedOptionModule [ "services" "bitcoind" "regtest" ] ''
-      Use `services.bitcoind.network = "regtest";` instead of `services.bitcoind.regtest = true;`.
-      For false, remove the old option; the network defaults to "mainnet".
-    '')
+    # Preserve the old network while evaluating upgrade notices and paths.
+    (mkChangedOptionModule [ "services" "bitcoind" "regtest" ] [ "services" "bitcoind" "network" ]
+      (config: if config.services.bitcoind.regtest then "regtest" else "mainnet"))
 
     (mkRenamedOptionModule [ "services" "bitcoind" "bind" ] [ "services" "bitcoind" "address" ])
     (mkRenamedOptionModule [ "services" "bitcoind" "rpcallowip" ] [ "services" "bitcoind" "rpc" "allowip" ])

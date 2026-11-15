@@ -35,14 +35,22 @@ If you explicitly set `services.bitcoind.regtest = false;`, remove it or set
 network for the whole deployment; existing network-specific paths and ports
 are unchanged.
 
+The old boolean is forwarded to `network` during migration, so upgrade notices
+still use the network and paths from your existing configuration. It emits a
+deprecation warning if used after updating `configVersion`.
+
 #### Network name overrides
 
 The read-only `services.bitcoind.makeNetworkName` helper has been removed.
 Replace calls such as `config.services.bitcoind.makeNetworkName "bitcoin" "regtest"`
-with the new helper, specifying only names that need overriding:
+with the new helper, specifying only names that need overriding. In a NixOS
+module taking `config` as an argument, define `nbLib` before using the short name:
 
 ```nix
-nbLib.networkName { mainnet = "bitcoin"; }
+let
+  nbLib = config.nix-bitcoin.lib;
+in
+  nbLib.networkName { mainnet = "bitcoin"; }
 ```
 
 This returns `"bitcoin"` on mainnet and `"regtest"` on regtest. Unmapped network
