@@ -130,6 +130,7 @@ let
         # The units that must be restricted, independent of how they're selected
         expected = [ "nb-tor-enforce-custom" ]
           ++ optional cfg.charge-lnd.enable "charge-lnd"
+          ++ optional cfg.unbeholden-wallet.enable "unbeholden-wallet"
           ++ optional (cfg.btcpayserver.enable && cfg.nbxplorer.tor.enforce) "nbxplorer"
           ++ filter (service: cfg.${service}.enable && cfg.${service}.tor.enforce) [
             "bitcoind" "btcpayserver" "clightning" "electrs" "fulcrum" "lnd" "mempool" "rtl"
