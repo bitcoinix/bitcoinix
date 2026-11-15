@@ -113,6 +113,95 @@ the Nix configuration. `RTL-Config.json` is now readable only by RTL's user. To
 turn 2FA off without the authenticator, see
 [Connect to RTL](services.md#connect-to-rtl).
 
+#### Onion address access for the operator and declared users
+
+`services.lnd.lndconnect.onion` and `services.clightning.plugins.clnrest.lnconnect.onion`
+now give the operator user access to the `lnd-rest` and `clnrest` onion addresses only
+when `nix-bitcoin.operator.enable` is set. Before, a missing operator user made the
+`onion-addresses` service fail, and no onion address was published.
+`nix-bitcoin.onionAddresses.access` now accepts only users that are defined and enabled
+in `users.users`. See the upgrade notes on
+[operator access](upgrading.md#operator-access-to-lightning-onion-addresses) and
+[declared users](upgrading.md#onion-address-access-requires-declared-users).
+
+#### Backups fail when a database dump fails
+
+With `services.backups`, a failed PostgreSQL dump now fails the `duplicity` unit. Before,
+the backup succeeded without the database. The other files are still backed up in that
+run. The backup now also includes the BTCPay Server and NBXplorer dumps when
+`services.postgresqlBackup.compression` is `zstd` or `none`. Before, it silently left
+them out with these settings, so take a new backup if you use one of them.
+`systemctl start duplicity` now blocks until the backup finishes.
+
+#### netns-isolation: no masquerading within the bridge, MPTCP setting
+
+With `br_netfilter` loaded, which Docker does, a netns-isolated service without
+`tor.enforce` could reach the listeners of namespaces it isn't connected to. Traffic
+between namespaces is no longer masqueraded, which closes this. The service namespaces
+now also copy the host's `net.mptcp.enabled` when they are created, so the MPTCP setting
+of `presets/hardened-extended.nix` reaches netns-isolated services. Upgrading restarts
+every netns-isolated service once.
+
+#### Root scripts ignore config files in a service user's home
+
+Service scripts that run as root no longer load configuration files from the service
+user's home directory. Before, the lnd user could make root's `curl` and `jq` load
+`~/.curlrc` and `~/.jq` from lnd's data directory.
+
+#### WireGuard preset checks the firewall setup
+
+`presets/wireguard.nix` now fails evaluation for firewall setups in which its rules
+can't run or don't stay loaded: the nftables firewall package without iptables,
+`networking.nftables.flushRuleset`, and an `ip` or `ip6` table named `filter` in
+`networking.nftables.tables`. The messages say what to change.
+
+#### lnd announces its onion address with the port Tor forwards
+
+With a public lnd onion service and a `services.lnd.port` other than 9735, lnd announced
+`<onion>:9735`, and peers couldn't reach the node over Tor. It now announces the port
+that Tor forwards.
+
+#### clnrest regenerates a broken admin rune
+
+A failed `createrune` on clightning's first start could install an empty or `null`
+clnrest admin rune that later starts kept. Such a rune is now replaced on start, and a
+failed `createrune` fails the start. Generate connection URLs from `lnconnect-clnrest`
+again if they were created with a broken rune.
+
+#### btcpayserver with a custom clightning group
+
+With `lightningBackend = "clightning"`, the btcpayserver user now joins
+`services.clightning.group`. Before, it joined a group named after
+`services.clightning.user` and couldn't open the RPC socket when the two differed.
+
+#### nodeinfo shows the bitcoinix revision and service versions
+
+`nodeinfo` now prints the bitcoinix commit in a `bitcoinix` entry and the package version
+of each service. `nodeinfo --version` prints only the revision, and `nodeinfo NAME ...`
+only the given entries. Because the revision is part of the script, every bitcoinix
+update now produces a new system generation. Set `nix-bitcoin.revision = null;` to opt
+out. See [nodeinfo](services.md#nodeinfo).
+
+#### extra-container 1.0.1
+
+The flake's `extra-container` input moves from 0.17 to
+[1.0.1](https://github.com/extra-container/extra-container/releases/tag/v1.0.1). This
+release has a breaking change: containers can no longer reach the host's Nix daemon
+socket by default, so `nix build`, `nix run`, `nix develop` and `nix-shell` fail inside
+a container. This affects containers built with this input, for example with
+`examples/container`. `extra.hostNixDaemon = true;` restores the old behavior. Read the
+security section of the extra-container README first.
+
+#### Package updates
+
+- lnd 0.21.6-beta → 0.21.8-beta
+  ([release notes](https://github.com/lightningnetwork/lnd/blob/master/docs/release-notes/release-notes-0.21.8.md)).
+  A bug-fix release without database migrations. lnd now rejects a new channel that
+  negotiates a CSV delay of zero.
+- RTL 0.15.16 → 0.15.17
+  ([release notes](https://github.com/Ride-The-Lightning/RTL/releases/tag/v0.15.17)).
+  Fixes login problems and accepts 2FA codes when the server clock is slightly off.
+
 See also [Upgrading to config version 0.1.6](upgrading.md#upgrading-to-config-version-016).
 
 ## 0.1.5
