@@ -35,6 +35,8 @@ let
         (mkIfTest "charge-lnd" [ curl xxd ])
         # Compare the certificate in a connection URL with the live TLS certificate
         (mkIfTest "lnconnect-clnrest-cert" [ openssl ])
+        # Creates the cert of a fake RTL backend
+        (mkIfTest "rtl-backend-certs" [ openssl ])
         # Needed to trace the commands run by secret generation
         (mkIfTest "secrets-no-argv" [ strace ])
         # Talks to the Electrum relay
@@ -116,6 +118,7 @@ let
 
       tests.rtl = cfg.rtl.enable;
       tests.rtl-credentials = cfg.rtl.enable;
+      tests.rtl-backend-certs = cfg.rtl.enable;
       tests.rtl-stops-with-backend = cfg.rtl.enable;
       test.data.rtl-credentials = {
         inherit (cfg.rtl) dataDir user group;
