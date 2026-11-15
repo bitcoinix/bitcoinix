@@ -514,7 +514,8 @@ deploying, since the first reload still runs the old deletions.
     services.hardware-wallets.trezor = true;
     ```
     This installs `hwi`, `trezorctl` and `lsusb`, and adds udev rules that give group
-    `hardware-wallets` access to the device. The `operator` user is in that group.
+    `hardware-wallets` access to the device. Only members of that group can use it,
+    unless you run the Trezor Bridge (see below). The `operator` user is in that group.
     Hardware wallets require the bitcoind wallet, so `services.bitcoind.disablewallet`
     must stay unset or `false`.
 
@@ -555,6 +556,11 @@ deploying, since the first reload still runs the old deletions.
     ```
 
 7. Follow HWI's guide on [using Bitcoin Core with hardware wallets](https://hwi.readthedocs.io/en/latest/examples/bitcoin-core-usage.html) to use your Trezor with `bitcoin-cli` on your node.
+
+The Trezor Bridge (`trezord`) doesn't run by default, since HWI and `trezorctl` don't
+need it. To run it for apps that use it, set `services.hardware-wallets.trezorBridge = true;`.
+The bridge serves an HTTP API without authentication on `127.0.0.1:21325`, so every
+local user and service can then use the Trezor through it.
 
 ## LND
 
