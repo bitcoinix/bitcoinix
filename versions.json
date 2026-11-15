@@ -61,7 +61,7 @@
   },
   "lnd": {
     "channel": "unstable",
-    "version": "0.21.6-beta"
+    "version": "0.21.8-beta"
   },
   "lndconnect": {
     "channel": "stable",
@@ -89,7 +89,7 @@
   },
   "rtl": {
     "channel": "unstable",
-    "version": "0.15.16"
+    "version": "0.15.17"
   },
   "trustedcoin": {
     "channel": "unstable",

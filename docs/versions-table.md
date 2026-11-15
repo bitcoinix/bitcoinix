@@ -17,13 +17,13 @@
 | `extra-container` | [0.17](https://github.com/extra-container/extra-container/releases/tag/v0.17) | stable |
 | `fulcrum` | [2.1.4](https://github.com/cculianu/Fulcrum/releases/tag/v2.1.4) | unstable |
 | `hwi` | [3.1.0](https://github.com/bitcoin-core/HWI/releases/tag/3.1.0) | local |
-| `lnd` | [0.21.6-beta](https://github.com/lightningnetwork/lnd/releases/tag/v0.21.6-beta) | unstable |
+| `lnd` | [0.21.8-beta](https://github.com/lightningnetwork/lnd/releases/tag/v0.21.8-beta) | unstable |
 | `lndconnect` | [0.2.1](https://github.com/LN-Zap/lndconnect/releases/tag/v0.2.1) | stable |
 | `lndinit` | [0.1.38-beta](https://github.com/lightninglabs/lndinit/releases/tag/v0.1.38-beta) | unstable |
 | `mempool-backend` | [3.3.2](https://github.com/mempool/mempool/releases/tag/v3.3.2) | local |
 | `mempool-frontend` | [3.3.2](https://github.com/mempool/mempool/releases/tag/v3.3.2) | local |
 | `mempool-rust-gbt` | [3.3.2](https://github.com/mempool/mempool/releases/tag/v3.3.2) | local |
 | `nbxplorer` | [2.6.17](https://github.com/btcpayserver/NBXplorer/releases/tag/v2.6.17) | unstable |
-| `rtl` | [0.15.16](https://github.com/Ride-The-Lightning/RTL/releases/tag/v0.15.16) | unstable |
+| `rtl` | [0.15.17](https://github.com/Ride-The-Lightning/RTL/releases/tag/v0.15.17) | unstable |
 | `trustedcoin` | [0.8.7](https://github.com/nbd-wtf/trustedcoin/releases/tag/v0.8.7) | unstable |
 | `unbeholden-wallet` | [0.4.0](https://github.com/unbeholdendev/unbeholden-wallet/releases/tag/v0.4.0) | local |
