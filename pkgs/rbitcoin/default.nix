@@ -3,24 +3,25 @@
 , fetchFromGitHub
 }:
 
-# Upstream: https://github.com/NixOS/nixpkgs/pull/584673 (rbitcoin: init at 0.9.0).
+# Upstream: https://github.com/NixOS/nixpkgs/pull/584178 (rbitcoin: init).
 # Once it lands in the pinned nixpkgs, drop this file and take rbitcoin from
 # nixpkgs in pkgs/default.nix.
 rustPlatform.buildRustPackage (finalAttrs: {
   pname = "rbitcoin";
-  # 0.9.0 is the first tag with the scripthash reorg fix (rbitcoin#1021).
-  # SCHEMA_VERSION is still 26, so a data directory from the earlier
-  # unstable pin opens unchanged.
-  version = "0.9.0";
+  # 0.9.2 refuses an IBD re-spend connect that earlier versions allowed.
+  # Opening a 0.9.0 data directory rewrites store/meta to schema 27, one way:
+  # 0.9.0 cannot open it afterwards. A store that already connected the bad
+  # re-spend has to re-sync (see the upstream 0.9.2 release notes).
+  version = "0.9.2";
 
   src = fetchFromGitHub {
     owner = "rbitcoin-org";
     repo = "rbitcoin";
     rev = "v${finalAttrs.version}";
-    hash = "sha256-xLvGL1W6DQatGvYOQzHyHLSms1iuNFWiQRRr5byfpUQ=";
+    hash = "sha256-3pYDoPeu/ymprsZ7qm0bPJ3dN4YgmfxMpY77BFNVeRg=";
   };
 
-  cargoHash = "sha256-MCt5EJ1MYOD3JrfMpqXxw60d7Q1Ny2IPX3ZctgEPqPk=";
+  cargoHash = "sha256-0b2CnMuJ2iNgjPBhh3h74X4zn0rn+nWmuCnVpf43710=";
 
   cargoBuildFlags = [ "-p" "rbitcoin-node" "-p" "rbitcoin-cli" ];
 

@@ -1063,6 +1063,11 @@ Things to know before enabling it:
 - **Own data directory.** rbitcoin keeps its own archive format
   (`services.rbitcoin.dataDir`, default `/var/lib/rbitcoin`) and cannot reuse
   bitcoind's blocks. A mainnet sync downloads and stores the whole chain again.
+- **Upgrades can be one-way.** A new rbitcoin version may rewrite the data
+  directory to a newer schema on its first start, and the older version then
+  refuses to open it. Read the upstream release notes before an upgrade.
+  0.9.2 (schema 27) also asks for a re-sync of a store that connected an
+  invalid re-spend during IBD under an earlier version.
 - **Address index.** `services.rbitcoin.electrum.enable` turns on the
   scripthash index. It is built after the node reaches the tip, which takes
   several hours on mainnet, and the Electrum port only opens once it is ready.
