@@ -158,18 +158,25 @@ def test_rpc_whitelist():
 
     machine.wait_until_succeeds("bitcoin-cli getnetworkinfo")
 
-    public_allowed = ["getblockcount"]
-    public_denied = ["scantxoutset", "getblocktemplate", "fundrawtransaction"]
-    (public_allowed if data["clightning-bcli"] else public_denied).append("getblockfrompeer")
-    (public_allowed if data["mempool"] else public_denied).append("gettxoutsetinfo")
-    assert_rpc_access("public", public_allowed, public_denied)
+    # No user may call these in the test scenarios
+    unused = [
+        "scantxoutset", "getblocktemplate", "fundrawtransaction", "setban", "generatetoaddress"
+    ]
+    # Each of these reaches only the user of the service that needs it, never `public`,
+    # which electrs, fulcrum and lnd share
+    granted = ["getblockfrompeer", "gettxoutsetinfo"]
 
+    def assert_grants(user, grants):
+        denied = unused + [method for method in granted if method not in grants]
+        assert_rpc_access(user, ["getblockcount"] + grants, denied)
+
+    assert_grants("public", [])
+    if data["clightning"]:
+        assert_grants("clightning", ["getblockfrompeer"] if data["clightning-bcli"] else [])
+    if data["mempool"]:
+        assert_grants("mempool", ["gettxoutsetinfo"])
     if data["btcpayserver"]:
-        btcpay_allowed = ["getblockcount", "getblockfrompeer"]
-        btcpay_denied = [
-            "scantxoutset", "getblocktemplate", "fundrawtransaction", "setban", "generatetoaddress"
-        ]
-        assert_rpc_access("btcpayserver", btcpay_allowed, btcpay_denied)
+        assert_grants("btcpayserver", ["getblockfrompeer"])
 
 
 @test("lnd-macaroons")

@@ -63,6 +63,16 @@ Charge-LND reads its certificate and macaroon directly, without staging them
 under a synthetic mainnet directory. Users selecting custom credentials with
 `--lnddir` should follow the [0.2.0 upgrade notes](upgrading.md#upgrading-to-config-version-020).
 
+#### Own RPC users for Core Lightning and mempool
+
+Core Lightning and mempool added `getblockfrompeer` and `gettxoutsetinfo` to the
+whitelist of the shared `public` RPC user, so every other service of that user
+could call them too. They now connect to bitcoind as their own users, `clightning`
+and `mempool`, and the `public` user keeps the base whitelist. Setups that supply
+secrets themselves need the secrets of the new users, and setups with bitcoind on
+another node also need the users there, see the
+[upgrade notes](upgrading.md#own-rpc-users-for-core-lightning-and-mempool).
+
 ## 0.1.6
 
 #### Tor enforcement allows only local addresses
