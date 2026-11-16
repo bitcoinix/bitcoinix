@@ -504,10 +504,106 @@ let
       };
     }).systemd.services.bitcoind.preStart.content;
 
+  lnurlConfig = backend: module: evaluate {
+    imports = [ module ];
+    services.unbeholden-lnurl = {
+      enable = true;
+      inherit backend;
+      settings.addresses.test = {
+        description = "Bitcoinix test";
+        min_sendable = 1000;
+        max_sendable = 1000000;
+      };
+    };
+  };
+  lnurlTests = lib.listToAttrs (lib.concatMap (backend: let
+    config = lnurlConfig backend {};
+    unit = config.systemd.services.unbeholden-lnurl;
+  in [
+    (lib.nameValuePair "testLnurl-${backend}-backend" {
+      expr = {
+        lnd = config.services.lnd.enable;
+        cln = config.services.clightning.enable;
+        assertions = failedAssertions config;
+      };
+      expected = { lnd = backend == "lnd"; cln = backend == "cln"; assertions = []; };
+    })
+    (lib.nameValuePair "testLnurl-${backend}-unit" {
+      expr = {
+        user = unit.serviceConfig.User;
+        startsWithBackend = builtins.elem
+          (if backend == "lnd" then "lnd.service" else "clightning.service") unit.after;
+        privateTmp = unit.serviceConfig.PrivateTmp;
+        noNewPrivileges = unit.serviceConfig.NoNewPrivileges;
+      };
+      expected = {
+        user = "unbeholden-lnurl";
+        startsWithBackend = true;
+        privateTmp = true;
+        noNewPrivileges = true;
+      };
+    })
+    (lib.nameValuePair "testLnurl-${backend}-secrets" {
+      expr = map (name: config.nix-bitcoin.secrets.${name}.user)
+        [ "unbeholden-lnurl-verify" "unbeholden-lnurl-withdraw" ];
+      expected = [ "unbeholden-lnurl" "unbeholden-lnurl" ];
+    })
+    (lib.nameValuePair "testLnurl-${backend}-netns" {
+      expr = let
+        isolated = lnurlConfig backend { nix-bitcoin.netns-isolation.enable = true; };
+        ns = isolated.nix-bitcoin.netns-isolation;
+      in {
+        address = isolated.services.unbeholden-lnurl.address;
+        backendConnected = builtins.elem
+          (if backend == "lnd" then "lnd" else "clightning")
+          ns.services.unbeholden-lnurl.connections;
+      };
+      expected = {
+        address = (lnurlConfig backend { nix-bitcoin.netns-isolation.enable = true; })
+          .nix-bitcoin.netns-isolation.netns.unbeholden-lnurl.address;
+        backendConnected = true;
+      };
+    })
+  ]) [ "lnd" "cln" ]) // {
+    testLnurlLndReceivePermissions = {
+      expr = builtins.fromJSON ("["
+        + (lnurlConfig "lnd" {}).services.lnd.macaroons.unbeholden-lnurl.permissions + "]");
+      expected = [
+        { entity = "invoices"; action = "write"; }
+        { entity = "invoices"; action = "read"; }
+      ];
+    };
+    testLnurlTorProxy = {
+      expr = let config = lnurlConfig "cln" {
+        imports = [ ../modules/presets/enable-tor.nix ];
+      }; in {
+        enforce = config.services.unbeholden-lnurl.tor.enforce;
+        proxy = config.services.unbeholden-lnurl.settings.outbound_proxy;
+      };
+      expected = { enforce = true; proxy = "socks5://127.0.0.1:9050"; };
+    };
+    testLnurlRequiresFeature = {
+      expr = builtins.elem "unbeholden-lnurl requires addresses, withdrawals or notifications."
+        (failedAssertions (evaluate { services.unbeholden-lnurl.enable = true; }));
+      expected = true;
+    };
+    testLnurlDisabled = {
+      expr = builtins.hasAttr "unbeholden-lnurl" modulesOnly.systemd.services;
+      expected = false;
+    };
+    testLnurlRejectsNonPositiveAmounts = {
+      expr = (builtins.tryEval (builtins.deepSeq
+        (lnurlConfig "lnd" {
+          services.unbeholden-lnurl.settings.addresses.test.min_sendable = lib.mkForce 0;
+        }).services.unbeholden-lnurl.settings.addresses true)).success;
+      expected = false;
+    };
+  };
+
   tests = lib.mapAttrs' (name: case: lib.nameValuePair "testREST-${name}" {
     expr = restAllowed case.args;
     inherit (case) expected;
-  }) restCases // extraConfigTests // pluginsConfigTests // pluginMigrationTests // {
+  }) restCases // lnurlTests // extraConfigTests // pluginsConfigTests // pluginMigrationTests // {
     testLockedPackagesDefault = {
       expr = bitcoin.nix-bitcoin.useVersionLockedPkgs;
       expected = true;

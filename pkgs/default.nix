@@ -17,6 +17,7 @@ let self = {
     mempool-rust-gbt
     mempool-nginx-conf;
   unbeholden-wallet = pkgs.callPackage ./unbeholden-wallet {};
+  unbeholden-lnurl = pkgs.callPackage ./unbeholden-lnurl { };
 
   inherit (self.pyPkgs.nbPython3PackagesWithUnlockedEcdsa) hwi;
 

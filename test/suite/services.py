@@ -410,3 +410,38 @@ def test_nodeinfo():
 @test("secure-node")
 def test_secure_node():
     assert_running("onion-addresses")
+
+
+@test("unbeholden-lnurl")
+def test_unbeholden_lnurl():
+    data = test_data["unbeholden-lnurl"]
+    assert_running("unbeholden-lnurl")
+    url = f"http://{ip('unbeholden-lnurl')}:{data['port']}"
+    wait_for_open_port(ip("unbeholden-lnurl"), data["port"])
+    assert_full_match(f"curl -fsS {url}/health", "ok")
+    address = f"{url}/.well-known/lnurlp/test"
+    discovery = succeed_json(f"curl -fsS {address}")
+    assert discovery["tag"] == "payRequest", discovery
+    assert discovery["minSendable"] == 1000, discovery
+    assert discovery["maxSendable"] == 1000000, discovery
+    assert urlparse(discovery["callback"]).path == "/.well-known/lnurlp/test/invoice"
+    assert ["text/plain", "Bitcoinix test"] in json.loads(discovery["metadata"])
+    assert_full_match(
+        f"curl -sS -o /dev/null -w '%{{http_code}}' {url}/.well-known/lnurlp/unknown", "404"
+    )
+    invalid = succeed_json(f"curl -fsS '{address}/invoice?amount=999'")
+    assert invalid["status"] == "ERROR", invalid
+    command = f"curl -fsS '{address}/invoice?amount=1000'"
+    machine.wait_until_succeeds(command + " | jq -e '.pr | startswith(\"lnbcrt\")'")
+    invoice = succeed_json(command)
+    assert invoice["pr"].startswith("lnbcrt"), invoice
+    assert invoice["routes"] == [], invoice
+    verify_path = urlparse(invoice["verify"]).path
+    verified = succeed_json(f"curl -fsS {url}{shlex.quote(verify_path)}")
+    assert verified == {
+        "status": "OK", "settled": False, "preimage": None, "pr": invoice["pr"]
+    }, verified
+    succeed("systemctl restart unbeholden-lnurl")
+    machine.wait_for_unit("unbeholden-lnurl")
+    machine.wait_until_succeeds(f"curl -fsS {url}/health")
+    assert succeed_json(f"curl -fsS {url}{shlex.quote(verify_path)}") == verified

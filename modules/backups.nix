@@ -65,6 +65,7 @@ let
     ${config.services.bitcoind.dataDir}
     ${config.services.clightning.dataDir}
     ${config.services.lnd.dataDir}
+    ${optionalString config.services.unbeholden-lnurl.enable config.services.unbeholden-lnurl.dataDir}
     ${optionalString cfg.with-bulk-data "${config.services.electrs.dataDir}"}
     ${config.services.nbxplorer.dataDir}
     ${config.services.btcpayserver.dataDir}

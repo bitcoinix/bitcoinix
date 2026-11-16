@@ -65,6 +65,13 @@ under a synthetic mainnet directory. Users selecting custom credentials with
 
 ## 0.1.6
 
+#### Unbeholden LNURL service
+
+[Unbeholden LNURL](services.md#receive-payments-with-unbeholden-lnurl) v0.3.0 now has
+a native package and service for LND and Core Lightning. It supports Lightning
+Addresses, withdrawal vouchers, ntfy notifications and Nostr zaps, with restricted
+node credentials and persistent keys.
+
 #### Tor enforcement allows only local addresses
 
 Services with `tor.enforce` and charge-lnd could reach every link-local address

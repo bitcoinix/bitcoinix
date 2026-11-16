@@ -140,7 +140,7 @@ let
           ++ optional cfg.unbeholden-wallet.enable "unbeholden-wallet"
           ++ optional (cfg.btcpayserver.enable && cfg.nbxplorer.tor.enforce) "nbxplorer"
           ++ filter (service: cfg.${service}.enable && cfg.${service}.tor.enforce) [
-            "bitcoind" "btcpayserver" "clightning" "electrs" "fulcrum" "lnd" "mempool" "rtl"
+            "bitcoind" "btcpayserver" "clightning" "electrs" "fulcrum" "lnd" "mempool" "rtl" "unbeholden-lnurl"
           ];
         # The complete allow list of each restricted unit
         allow = [ "127.0.0.1/32" "::1/128" ]
@@ -185,6 +185,11 @@ let
       services.mempool = {
         electrumServer = "fulcrum";
         settings.MEMPOOL.POOLS_JSON_URL = mkIf config.test.noConnections "disable-pool-fetching";
+      };
+
+      tests.unbeholden-lnurl = cfg.unbeholden-lnurl.enable;
+      test.data.unbeholden-lnurl = {
+        inherit (cfg.unbeholden-lnurl) port backend;
       };
 
       tests.unbeholden-wallet = cfg.unbeholden-wallet.enable;
@@ -586,6 +591,42 @@ let
         clightning = true;
         lnconnect-onion-clnrest = true;
       };
+    };
+
+    unbeholden-lnurl-lnd = {
+      imports = [ scenarios.regtestBase ];
+      services.unbeholden-lnurl = {
+        enable = true;
+        backend = "lnd";
+        settings.addresses.test = {
+          description = "Bitcoinix test";
+          min_sendable = 1000;
+          max_sendable = 1000000;
+        };
+      };
+    };
+
+    unbeholden-lnurl-cln = {
+      imports = [ scenarios.unbeholden-lnurl-lnd ];
+      services.unbeholden-lnurl.backend = lib.mkForce "cln";
+    };
+
+    unbeholden-lnurl-lnd-netns = {
+      imports = with scenarios; [ unbeholden-lnurl-lnd netnsBase ];
+    };
+
+    unbeholden-lnurl-cln-netns = {
+      imports = with scenarios; [ unbeholden-lnurl-cln netnsBase ];
+    };
+
+    unbeholden-lnurl-lnd-tor = {
+      imports = [ scenarios.unbeholden-lnurl-lnd ../modules/presets/enable-tor.nix ];
+      nix-bitcoin.onionServices.unbeholden-lnurl.enable = true;
+    };
+
+    unbeholden-lnurl-cln-tor = {
+      imports = [ scenarios.unbeholden-lnurl-cln ../modules/presets/enable-tor.nix ];
+      nix-bitcoin.onionServices.unbeholden-lnurl.enable = true;
     };
 
     unbeholden-wallet-electrs = {

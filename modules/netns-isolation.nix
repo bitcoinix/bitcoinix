@@ -312,11 +312,17 @@ in {
           (if (config.services.mempool.electrumServer == "electrs") then "electrs" else "fulcrum")
         ];
       };
+      unbeholden-lnurl = {
+        id = 34;
+        connections = [ (if config.services.unbeholden-lnurl.backend == "lnd" then "lnd" else "clightning") "nginx" ];
+      };
       unbeholden-wallet = {
         id = 33;
         connections = [ config.services.unbeholden-wallet.electrumServer "nginx" ];
       };
     };
+
+    services.unbeholden-lnurl.address = netns.unbeholden-lnurl.address;
 
     services.bitcoind = let
       allowip = [

@@ -219,6 +219,47 @@ lose the authenticator, delete `RTL-Config.json` in RTL's data dir
 (`/var/lib/rtl` by default) and restart RTL. bitcoinix then writes a new one
 without the 2FA secret.
 
+### Receive payments with Unbeholden LNURL
+
+[Unbeholden LNURL](https://github.com/unbeholdendev/unbeholden-lnurl) serves Lightning
+Addresses through your local LND or Core Lightning node.
+
+```nix
+services.unbeholden-lnurl = {
+  enable = true;
+  backend = "lnd";
+  settings.addresses.satoshi = {
+    description = "Lightning payments";
+    min_sendable = 1000;
+    max_sendable = 1000000000;
+  };
+};
+```
+
+Use `backend = "cln";` for Core Lightning. The module enables the selected node and
+creates credentials limited to the RPCs needed by the configured features.
+
+The HTTP listener defaults to `127.0.0.1:8081`. Put an HTTPS reverse proxy in front
+for a public Lightning Address. Set `settings.trusted_proxies` to the proxy's IP
+addresses or CIDRs if it forwards `X-Forwarded-Host` or `X-Forwarded-For`.
+With namespace isolation, use the service's namespace address as the proxy target.
+Onion domains can use HTTP through `nix-bitcoin.onionServices.unbeholden-lnurl.enable`.
+
+`settings.withdraw` defines vouchers, `settings.notifications.ntfy` enables payment
+notifications, and `settings.nostr = {};` enables zap receipts. Amounts are in
+millisatoshis. Store an ntfy token in a runtime file and set
+`settings.notifications.ntfy.token_file` to its path. The module generates persistent
+verification, voucher and Nostr keys through Bitcoinix secrets. Keep secrets out of
+Nix expressions and the Nix store.
+
+Keep `/var/lib/unbeholden-lnurl` and the generated secrets across upgrades. This
+preserves voucher claims, settlement cursors and zap receipts. Changing a voucher
+secret changes its URLs; changing the verification key invalidates old verify URLs.
+Treat voucher URLs as bearer secrets.
+
+Set `services.unbeholden-lnurl.tor.proxy = true;` to send notifications and Nostr
+publishing through Tor. The local node connection stays direct.
+
 ### Connect to Unbeholden Wallet
 [Unbeholden Wallet](https://github.com/unbeholdendev/unbeholden-wallet) is a watch-only
 wallet that runs in the browser and hands transactions to an air-gapped signer over QR

@@ -15,6 +15,7 @@
     ./clightning-replication.nix
     ./lnd.nix
     ./lnd-macaroons.nix
+    ./unbeholden-lnurl.nix
     ./charge-lnd.nix
     ./lndconnect.nix # Requires onion-addresses.nix
     ./rtl.nix
