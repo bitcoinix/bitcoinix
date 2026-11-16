@@ -2,16 +2,24 @@
 
 Some releases contain changes that need manual action, such as a removed service, a
 changed default or a required reindex. bitcoinix reports them when it evaluates your
-configuration: if a change is newer than `nix-bitcoin.configVersion` and affects your
-configuration, evaluation fails with a short description of the change. Options of
-removed services fail evaluation regardless of the config version.
+configuration: if a released change is newer than `nix-bitcoin.configVersion` and
+affects your configuration, evaluation fails with a short description of the change.
+Options of removed services and other service assertions can fail evaluation
+regardless of the config version.
 
-Keep `nix-bitcoin.configVersion` set in your configuration. If it is unset, these
-changes are not reported.
+Keep `nix-bitcoin.configVersion` set to the released version whose migrations you
+have completed. If it is unset, migration errors and warnings are disabled.
+Keep this value explicit: importing the project's `version.nix` would automatically
+acknowledge migrations on each release.
 
 When evaluation fails after an update, follow the sections below for each version
 newer than your config version, starting with the oldest. Then set
 `nix-bitcoin.configVersion` to the version named in the error message.
+
+On `master`, review unreleased migration warnings before deploying and keep
+`configVersion` at the latest release. These warnings remain visible even after
+an early version bump. Once the release is finalized, its notices become errors
+until you acknowledge them by updating `configVersion` after migrating.
 
 ## Updating bitcoinix
 Review the [release notes](./release-notes.md) for changes to packages and flake attributes.
@@ -26,6 +34,11 @@ It refuses to switch to a release older than the one currently pinned. To downgr
 run `fetch-release.sh` with `releaseVersion=<version>` and write its output to `nix-bitcoin-release.nix`.
 
 ## Upgrading to config version 0.2.0
+
+#### Migration warnings on master
+
+Unreleased migrations now warn instead of blocking evaluation. Warnings can repeat
+after a migration until the release is finalized and acknowledged.
 
 #### Unstable NixOS base
 
@@ -177,7 +190,9 @@ both paths, and default configurations, need no changes.
 The old `/var/lib/charge-lnd/lnddir-proxy` tree is left behind on existing hosts.
 It is no longer used and can be removed after upgrading.
 
-After migrating your configuration, set `nix-bitcoin.configVersion = "0.2.0";`.
+While 0.2.0 is still in development, keep `nix-bitcoin.configVersion = "0.1.6";`.
+Once the release is finalized, review all of its migrations, then set
+`nix-bitcoin.configVersion = "0.2.0";`.
 
 ## Upgrading to config version 0.1.6
 

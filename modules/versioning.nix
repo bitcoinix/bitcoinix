@@ -7,8 +7,9 @@
 #    lib and returning { condition = ...; message = ...; }. The directory sets the version.
 #    The collector appends a reference to the version's section in docs/upgrading.md
 #    for versions 0.1.0 and newer.
-# 2. Set `nix-bitcoin.configVersion = V` in ../examples/configuration.nix,
-#    unless it already is.
+# 2. Keep ../version.nix and the example configVersion at the last release during
+#    development. Advance both only in the release-preparation commit before
+#    tagging (see ../dev/README.md).
 
 with lib;
 let
@@ -18,14 +19,15 @@ let
       default = null;
       example = "0.0.92";
       description = ''
-        The nix-bitcoin release version that your config is compatible with.
+        The released nix-bitcoin version whose configuration migrations you have completed.
 
         When upgrading to a backwards-incompatible release, nix-bitcoin will throw an
         error during evaluation and provide instructions for migrating your config to
         the new release.
 
-        Once set, you only need to update this option when explicitly told to in an
-        error message during evaluation.
+        On master, unreleased migrations warn even after an early version bump.
+        Review them before deploying and keep this option at the latest released
+        version until release finalization. If unset, migration notices are disabled.
       '';
     };
     # Lets tests check each notice
@@ -35,7 +37,7 @@ let
       type = with types; listOf str;
       default = map (change: change.message) incompatibleChanges;
       defaultText = "(See source)";
-      description = "Messages of the changes that apply to this config.";
+      description = "Applicable migration messages, including unreleased warnings.";
     };
   };
 
@@ -60,9 +62,16 @@ let
 
   version = config.nix-bitcoin.configVersion;
 
-  incompatibleChanges = optionals
-    (version != null && versionOlder lastChange)
-    (builtins.filter (change: versionOlder change && (change.condition or true)) changes);
+  releasedVersion = import ../version.nix;
+  releasedChanges = optionals (version != null) (builtins.filter
+    (change: versionAtLeast releasedVersion change.version
+      && versionOlder version change.version
+      && (change.condition or true)) changes);
+  # An early version bump must not hide later notices for an unfinished release.
+  unreleasedChanges = optionals (version != null) (builtins.filter
+    (change: versionOlder releasedVersion change.version
+      && (change.condition or true)) changes);
+  incompatibleChanges = releasedChanges ++ unreleasedChanges;
 
   errorMsg = ''
 
@@ -71,13 +80,20 @@ let
 
     ${concatMapStringsSep "\n" (change: ''
       - ${change.message}(This change was introduced in version ${change.version})
-    '') incompatibleChanges}
-    After addressing the above changes, set nix-bitcoin.configVersion = "${lastChange.version}";
+    '') releasedChanges}
+    After addressing the above changes, set nix-bitcoin.configVersion = "${releasedVersion}";
     in your nix-bitcoin configuration.
   '';
 
-  versionOlder = change: (builtins.compareVersions change.version version) > 0;
-  lastChange = builtins.elemAt changes (builtins.length changes - 1);
+  warningMsg = ''
+    This checkout contains unreleased configuration changes:
+
+    ${concatMapStringsSep "\n" (change: ''
+      - ${change.message}(Planned for version ${change.version})
+    '') unreleasedChanges}
+    Review these changes before deploying. Keep nix-bitcoin.configVersion at
+    ${releasedVersion} until the release is finalized.
+  '';
 in
 {
   imports = [
@@ -89,8 +105,9 @@ in
   config = {
     # Use the normal NixOS assertion path. A conditional definition of `system`
     # recurses when a migration checks users whose defaults depend on system.tools.
+    warnings = optional (unreleasedChanges != []) warningMsg;
     assertions = [{
-      assertion = incompatibleChanges == [];
+      assertion = releasedChanges == [];
       message = errorMsg;
     }];
   };

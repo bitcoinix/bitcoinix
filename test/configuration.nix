@@ -11,6 +11,10 @@ let
   evaluate = module: (base.extendModules { modules = [ module ]; }).config;
   failedAssertions = config:
     map (a: a.message) (builtins.filter (a: !a.assertion) config.assertions);
+  migrationErrors = config: builtins.filter
+    (lib.hasInfix "This version of nix-bitcoin contains") (failedAssertions config);
+  releasedVersion = import ../version.nix;
+  changes020Released = lib.versionAtLeast releasedVersion "0.2.0";
 
   # These fixtures are independent of VM scenarios and their overrides.
   restAllowed = {
@@ -342,10 +346,10 @@ let
   };
   operatorAccountExplicitAccess = evaluate operatorAccountGrant;
   # Whether a config written for the last release passes the versioning check
-  passesVersionCheckAt = version: module: (evaluate {
+  passesVersionCheckAt = version: module: migrationErrors (evaluate {
     imports = [ module ];
     nix-bitcoin.configVersion = version;
-  }).nix-bitcoin.versioning.incompatibleChanges == [];
+  }) == [];
   hasNoticeAt = version: phrase: module: lib.any (lib.hasInfix phrase) (evaluate {
     imports = [ module ];
     nix-bitcoin.configVersion = version;
@@ -477,8 +481,7 @@ let
         { version = "0.2.0"; enable = true; }
         { version = null; enable = true; }
       ];
-      # The unstable-only migration also affects configurations without plugins.
-      expected = [ false false false false true true ];
+      expected = [ false (!changes020Released) (!changes020Released) (!changes020Released) true true ];
     }) [ "currencyrate" "rebalance" ]);
   # Secret generation with the replication SSH key, run by the check below
   replicationGenerator = (evaluate {
@@ -508,11 +511,35 @@ let
       expected = true;
     };
     testConfigVersionAssertion = {
-      expr = map (version: lib.any
-        (lib.hasInfix "This version of nix-bitcoin contains")
-        (failedAssertions (evaluate { nix-bitcoin.configVersion = version; })))
+      expr = map (version: !(passesVersionCheckAt version {}))
         [ "0.1.6" "0.2.0" null ];
-      expected = [ true false false ];
+      expected = [ changes020Released false false ];
+    };
+    testUnreleasedMigrationWarnings = {
+      # Both 0.2.0 notices must remain visible after an early version bump (#282).
+      expr = map (version: let
+        warnings = (evaluate { nix-bitcoin.configVersion = version; }).warnings;
+      in lib.all (phrase: lib.any (lib.hasInfix phrase) warnings) [
+        "bitcoinix now uses only unstable nixpkgs"
+        "checkReversePath from true"
+      ]) [ "0.1.6" "0.2.0" null ];
+      expected = [ (!changes020Released) (!changes020Released) false ];
+    };
+    testReleasedMigrationError = {
+      expr = let
+        messages = migrationErrors (evaluate {
+          nix-bitcoin = {
+            configVersion = "0.1.5";
+            setupSecrets = true;
+            secretsSetupMethod = lib.mkForce "setup-secrets";
+          };
+        });
+      in {
+        released = lib.any (lib.hasInfix "setup-secrets now fails") messages;
+        upcoming = lib.any (lib.hasInfix "bitcoinix now uses only unstable nixpkgs") messages;
+        target = lib.any (lib.hasInfix ''set nix-bitcoin.configVersion = "${releasedVersion}";'') messages;
+      };
+      expected = { released = true; upcoming = changes020Released; target = true; };
     };
     testUnstableDefaultNotices = {
       expr = {
@@ -876,7 +903,7 @@ let
         { version = "0.1.6"; enable = true; flags = [ "--lnddir=/custom/lnd" "--tlscert" "/custom/cert" "--macaroon=/custom/macaroon" ]; }
         { version = "0.2.0"; enable = true; flags = [ "--lnddir=/custom/lnd" ]; }
       ];
-      expected = [ false false true true true false false true true true true ];
+      expected = [ false false true true true false false true true true changes020Released ];
     };
     testMempoolNetworks = {
       expr = map (network: let
@@ -926,7 +953,7 @@ let
         { version = "0.1.6"; network = "regtest"; enable = false; }
         { version = "0.2.0"; network = "regtest"; enable = true; }
       ];
-      expected = [ false true true true ];
+      expected = [ false true true changes020Released ];
     };
     testLegacyMempoolNetworkMigration = {
       expr = map (case: let
@@ -968,7 +995,7 @@ let
         { version = "0.2.0"; settings = password; }
         { version = null; settings = password; }
       ];
-      expected = [ false false false false true true ];
+      expected = [ false (!changes020Released) (!changes020Released) (!changes020Released) true true ];
     };
     testEmptySecretsMigration = {
       expr = map (case: !(hasNoticeAt case.version "setup-secrets now fails" {

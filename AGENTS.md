@@ -121,10 +121,12 @@ builds each of them with its own tool against the checkout on PRs with code chan
 `test/ci/deployment-examples.sh` (locally: `./test/run-tests.sh deploymentExamples`).
 The other examples (`examples/deploy-*.sh`, `examples/container`) run only with
 `./test/run-tests.sh examples`, not in CI.
-A new deployment example must be added to that script and get its own step in the
-`deployment_examples` job, so that CI tests it from the start. Example flakes name the
-main input `bitcoinix`, pin a release tag, set that release's `configVersion` and
-commit no `flake.lock`; the script overrides the `bitcoinix` input and `configVersion`.
+A new deployment example must be added to that script, the version checks in
+`helper/make-release.sh`, and the `deployment_examples` job, so CI tests it from the start.
+The supported deployment flakes name the main input `bitcoinix`, pin a release tag,
+set that release's `configVersion` and commit no `flake.lock`; the script overrides
+the `bitcoinix` input and uses the
+checkout's root `version.nix` for `configVersion`.
 
 ## Adding a service module
 
@@ -167,6 +169,12 @@ The exception is changes confined to package or flake attributes, with no change
 module configuration or service behavior: document these in `docs/release-notes.md`.
 Do not add a config-version notice or bump solely for these changes.
 
+Root `version.nix` records the latest finalized release. **Change it only when
+preparing a release immediately before tagging, never during development.**
+Unreleased notices always warn; released notices block until acknowledged with the user's `configVersion`.
+An unset `configVersion` disables migration notices. Removed-option errors and other
+service assertions are independent of this policy.
+
 For each entry:
 
 - `<version>` is the next release: the lowest open
@@ -186,11 +194,17 @@ For each entry:
 - The `message` says what changed and what to do. Put longer migration steps in
   `docs/upgrading.md` under "Upgrading to config version <version>"; the message
   does not need to repeat the reference to that section.
-- Set `nix-bitcoin.configVersion` in `examples/configuration.nix` to that version
-  unless it already is. Leave the deployment examples alone: each one sets the
-  `configVersion` of the release it pins, CI builds them with the latest one, and a
-  release bumps their pin and `configVersion` together (see "Cutting a release" in
-  `dev/README.md`).
+- Keep `version.nix` and all examples' `nix-bitcoin.configVersion` at the latest
+  released version while adding changes or migration notices. Advance both only
+  when finalizing the migration list immediately before tagging
+  (see "Cutting a release" in `dev/README.md`). Later notices go in the next release.
+  Keep each example's version as an explicit one-line assignment for the release
+  helper to check; never import `version.nix` into user `configVersion` settings,
+  which would acknowledge migrations automatically.
+  In that same preparation commit, update the bitcoinix release pins in
+  `examples/{flakes,colmena,container}/flake.nix` together with their `configVersion`.
+  The release helper checks all four versioned examples before tagging. CI uses
+  the checkout and `version.nix`, so the new tag need not exist yet.
 
 ## Documentation
 
@@ -207,6 +221,8 @@ Pages under `docs/` must be listed in `docs/SUMMARY.md` to appear in the mdBook 
 - Upgrade notes: every entry under `modules/versioning/` with a non-trivial migration
   gets text in `docs/upgrading.md`. Each version has one `## Upgrading to config version <version>`
   section, newest version first, ending with the line that sets `configVersion`.
+  For an unreleased version, explicitly defer that assignment until the release
+  is finalized; users following master must keep the latest released version.
   Start each change entry with a descriptive fourth-level heading (`#### <title>`),
   keeping its explanation and migration steps together under that heading.
   Add to the section of the upcoming release; never edit sections of released versions

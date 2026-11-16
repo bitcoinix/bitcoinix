@@ -5,6 +5,13 @@ For configuration migrations reported during evaluation, follow the
 
 ## 0.2.0
 
+#### Migration warnings on master
+
+Unreleased configuration migrations now warn on each evaluation, even if
+`configVersion` was advanced early. Finalizing the release makes its notices
+blocking errors until acknowledged. See the
+[upgrade notes](upgrading.md#migration-warnings-on-master) for users following master.
+
 #### Unstable NixOS base
 
 bitcoinix now uses a single `nixpkgs` input tracking `nixos-unstable` for its system
