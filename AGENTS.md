@@ -171,7 +171,11 @@ Do not add a config-version notice or bump solely for these changes.
 
 For each entry:
 
-- `<version>` is the next release (bump only the last component). Choose a short,
+- `<version>` is the next release: the lowest open
+  [GitHub milestone](https://github.com/bitcoinix/bitcoinix/milestones). Most releases
+  bump only the last component; a release with bigger changes bumps the second one
+  (0.1.6 → 0.2.0). The maintainers decide this by creating the milestone, so don't
+  derive the version from the latest tag alone. Choose a short,
   descriptive `<identifier>` for each change; several files per version are fine.
   Each file is a function taking `{ config, options, lib, ... }` (only declare the
   arguments it uses) and returning `{ condition = ...; message = ...; }`.
