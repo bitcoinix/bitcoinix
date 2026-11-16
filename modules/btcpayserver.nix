@@ -37,6 +37,9 @@ let
           method, like `pay`, `withdraw` and `fundchannel`.
           With `lnd`, BTCPay Server gets its own macaroon, which can't send funds
           or open or close channels. Use `lnd` when you want BTCPay Server limited.
+          Neither backend limits a hot wallet in BTCPay Server. Switching away from
+          `clightning` stops Core Lightning unless `services.clightning.enable` is set,
+          and then lnd needs another port than Core Lightning.
           See docs/services.md.
         '';
       };
