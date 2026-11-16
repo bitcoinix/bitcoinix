@@ -34,6 +34,7 @@ in {
     fulcrum = defaultEnforceTor;
     nbxplorer = defaultEnforceTor;
     rtl = defaultEnforceTor;
+    rbitcoin-space = defaultEnforceTor;
   };
 
   # Add onion services for incoming connections

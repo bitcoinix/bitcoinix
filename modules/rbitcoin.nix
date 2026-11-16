@@ -146,6 +146,28 @@ let
         description = "Port to listen for Electrum connections.";
       };
     };
+    esplora = {
+      enable = mkOption {
+        type = types.bool;
+        default = false;
+        description = ''
+          Whether to serve the Esplora REST API over TCP (unauthenticated, like
+          Electrum). Address and scripthash routes need
+          {option}`services.rbitcoin.shIndex`.
+        '';
+      };
+      address = mkOption {
+        type = types.str;
+        default = "127.0.0.1";
+        description = "Address to listen for Esplora connections.";
+      };
+      port = mkOption {
+        type = types.port;
+        # rbitcoin's default, 3000, is RTL's default port
+        default = 3002;
+        description = "Port to listen for Esplora connections.";
+      };
+    };
     logLevel = mkOption {
       type = types.enum [ "trace" "debug" "info" "warn" "error" ];
       default = "info";
@@ -209,7 +231,7 @@ let
       with ${otherName} (${listenAddress other.address other.port}). Set a different port.
     '';
   };
-  inherit (config.services) bitcoind electrs fulcrum;
+  inherit (config.services) bitcoind electrs fulcrum rtl;
   isUnder = dir: path: path == dir || hasPrefix "${dir}/" path;
 
   args = [
@@ -236,6 +258,7 @@ let
     "--rpc-cookie-perms" "group"
   ]
   ++ optional cfg.electrum.enable "--electrum-listen=${listenAddress cfg.electrum.address cfg.electrum.port}"
+  ++ optional cfg.esplora.enable "--esplora-listen=${listenAddress cfg.esplora.address cfg.esplora.port}"
   # Seed hostnames go to the proxy too; rbitcoin never resolves them locally
   # while a proxy is set.
   ++ optionals cfg.tor.proxy [
@@ -267,7 +290,13 @@ in {
     ++ optional (cfg.electrum.enable && electrs.enable)
       (collision "electrum.port" cfg.electrum electrs "services.electrs.port")
     ++ optional (cfg.electrum.enable && fulcrum.enable)
-      (collision "electrum.port" cfg.electrum fulcrum "services.fulcrum.port");
+      (collision "electrum.port" cfg.electrum fulcrum "services.fulcrum.port")
+    ++ optional (cfg.esplora.enable && rtl.enable)
+      (collision "esplora.port" cfg.esplora rtl "services.rtl.port")
+    ++ optional (cfg.esplora.enable && cfg.electrum.enable)
+      (collision "esplora.port" cfg.esplora cfg.electrum "services.rbitcoin.electrum.port")
+    ++ optional (cfg.esplora.enable && cfg.rpc.enable)
+      (collision "esplora.port" cfg.esplora cfg.rpc "services.rbitcoin.rpc.port");
 
     environment.systemPackages = [ cfg.package (hiPrio cfg.cli) ];
 

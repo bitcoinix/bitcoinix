@@ -174,6 +174,14 @@
   #
   # services.rbitcoin.enable = true;
   # services.rbitcoin.electrum.enable = true;
+  #
+  # Set this to enable rbitcoin.space, a block explorer for rbitcoin. It enables
+  # rbitcoin with its RPC, Electrum and Esplora servers.
+  # See docs/services.md#rbitcoinspace.
+  # services.rbitcoin-space.enable = true;
+  #
+  # Set this to create an onion service for the explorer:
+  # nix-bitcoin.onionServices.rbitcoin-space.enable = true;
 
   ### BTCPay Server
   # Set this to enable BTCPay Server, a self-hosted, open-source

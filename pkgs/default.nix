@@ -17,6 +17,7 @@ let self = {
     mempool-rust-gbt
     mempool-nginx-conf;
   rbitcoin = pkgs.callPackage ./rbitcoin { };
+  rbitcoin-space = pkgs.callPackage ./rbitcoin-space { };
   unbeholden-wallet = pkgs.callPackage ./unbeholden-wallet {};
 
   inherit (self.pyPkgs.nbPython3PackagesWithUnlockedEcdsa) hwi;

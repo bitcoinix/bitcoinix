@@ -115,6 +115,47 @@ def test_rbitcoin_mempool():
     )
 
 
+# Impure: restarts and kills rbitcoin. Runs after `regtest` and
+# `rbitcoin-mempool`, which mine the blocks checked here.
+@test("rbitcoin-space-follows-node")
+def test_rbitcoin_space_follows_node():
+    base = f"http://{ip('rbitcoin-space')}:60847"
+    height = succeed("bitcoin-cli getblockcount").strip()
+    machine.wait_until_succeeds(f"[[ $(curl -fsS {base}/regtest/api/blocks/tip/height) == {height} ]]")
+
+    def main_pid():
+        return succeed("systemctl show -p MainPID --value rbitcoin-space").strip()
+
+    def expect_new_cookie_accepted(old_pid):
+        # rbitcoin wrote a new cookie on start. The explorer reads it only at its
+        # own start, so it must have been restarted with rbitcoin.
+        machine.wait_until_succeeds(
+            f"[[ $(systemctl show -p MainPID --value rbitcoin-space) != {old_pid} ]]"
+            " && systemctl is-active rbitcoin-space"
+        )
+        rbitcoin_space_wait_ready()
+
+    # An explicit restart is repeated to the explorer (PartOf)
+    pid = main_pid()
+    succeed("systemctl restart rbitcoin")
+    expect_new_cookie_accepted(pid)
+
+    # A crash stops the explorer (BindsTo). rbitcoin's automatic restart
+    # starts it again (Upholds).
+    pid = main_pid()
+    succeed("systemctl kill -s KILL rbitcoin")
+    expect_new_cookie_accepted(pid)
+    # Not `assert_running`: the kill above logged "Failed with result 'signal'"
+    machine.wait_for_unit("rbitcoin")
+
+    # A manual stop sticks while rbitcoin keeps running
+    succeed("systemctl stop rbitcoin-space")
+    machine.sleep(15)
+    machine.fail("systemctl is-active rbitcoin-space")
+    succeed("systemctl start rbitcoin-space")
+    rbitcoin_space_wait_ready()
+
+
 @test("trustedcoin")
 def test_trustedcoin():
     def expect_clightning_log(str):

@@ -22,6 +22,7 @@
     ./mempool.nix
     ./electrs.nix
     ./fulcrum.nix
+    ./rbitcoin-space.nix
     ./unbeholden-wallet.nix
     ./btcpayserver.nix
     ./hardware-wallets.nix

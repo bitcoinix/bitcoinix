@@ -315,6 +315,10 @@ in {
           else [ "bitcoind" config.services.mempool.electrumServer ]
         );
       };
+      rbitcoin-space = {
+        id = 35;
+        connections = [ "rbitcoin" ];
+      };
       unbeholden-wallet = {
         id = 33;
         connections = [ config.services.unbeholden-wallet.electrumServer "nginx" ];
@@ -355,7 +359,10 @@ in {
       address = netns.rbitcoin.address;
       rpc.address = netns.rbitcoin.address;
       electrum.address = netns.rbitcoin.address;
+      esplora.address = netns.rbitcoin.address;
     };
+
+    services.rbitcoin-space.address = netns.rbitcoin-space.address;
 
     services.mempool.address = netns.mempool.address;
     services.mempool.frontend.address = netns.nginx.address;

@@ -321,6 +321,7 @@ let
         port = 18454;
         rpc.port = 18453;
         electrum.port = 50003;
+        esplora.port = 3003;
         # Sync from bitcoind only, so the test needs no internet access
         connect = [
           (config.nix-bitcoin.lib.addressWithPort cfg.bitcoind.address cfg.bitcoind.port)
@@ -331,6 +332,8 @@ let
         rpc = cfg.rbitcoin.rpc.enable;
         electrum = cfg.rbitcoin.electrum.enable;
       };
+      tests.rbitcoin-space = cfg.rbitcoin-space.enable;
+      tests.rbitcoin-space-follows-node = cfg.rbitcoin-space.enable;
       tests.rbitcoin-mempool = cfg.mempool.enable && cfg.mempool.electrumServer == "rbitcoin";
       nix-bitcoin.netns-isolation.services.rbitcoin.connections =
         mkIf cfg.rbitcoin.enable [ "bitcoind" ];
@@ -519,6 +522,15 @@ let
       imports = [ scenarios.regtestBase ];
       services.mempool.enable = true;
       services.mempool.electrumServer = "rbitcoin";
+    };
+
+    # rbitcoin.space, the block explorer, on rbitcoin
+    rbitcoinSpace = {
+      imports = [ scenarios.regtestBase ];
+      services.rbitcoin-space.enable = true;
+    };
+    rbitcoinSpaceNetns = {
+      imports = with scenarios; [ rbitcoinSpace netnsBase ];
     };
 
     # netns and regtest, without secure-node.nix
