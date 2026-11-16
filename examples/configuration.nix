@@ -167,6 +167,8 @@
   # your BTCPay Server usage, like invoice creation times, with your IP address.
   #
   # Enable this option to connect BTCPay Server to Core Lightning.
+  # BTCPay Server then has full control of the node, including its funds.
+  # See "BTCPay Server" in ../docs/services.md.
   # services.btcpayserver.lightningBackend = "clightning";
   #
   # Enable this option to connect BTCPay Server to LND.

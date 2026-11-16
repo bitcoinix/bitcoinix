@@ -29,7 +29,16 @@ let
       lightningBackend = mkOption {
         type = types.nullOr (types.enum [ "clightning" "lnd" ]);
         default = null;
-        description = "The lightning node implementation to use.";
+        description = ''
+          The lightning node implementation to use.
+
+          With `clightning`, BTCPay Server has full control of the Lightning node,
+          including its funds. It uses lightningd's RPC socket, which allows every
+          method, like `pay`, `withdraw` and `fundchannel`.
+          With `lnd`, BTCPay Server gets its own macaroon, which can't send funds
+          or open or close channels. Use `lnd` when you want BTCPay Server limited.
+          See docs/services.md.
+        '';
       };
       rootpath = mkOption {
         type = types.nullOr types.str;
