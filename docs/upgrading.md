@@ -189,6 +189,27 @@ both paths, and default configurations, need no changes.
 The old `/var/lib/charge-lnd/lnddir-proxy` tree is left behind on existing hosts.
 It is no longer used and can be removed after upgrading.
 
+#### Backups leave out the Lightning channel databases
+
+The backups service no longer includes lnd's `graph` directory, which holds
+`channel.db`, or Core Lightning's `lightningd.sqlite3`. It copied these files while
+the daemons wrote them. A node that runs from an outdated copy can broadcast a
+revoked channel state, and the peer can then take all funds in that channel.
+
+Backups made before this change still contain these files. Never restore them.
+To recover Lightning funds, use the files that
+[Lightning channel databases](services.md#lightning-channel-databases) lists.
+For a copy of the Core Lightning database that's always current, use
+[database replication](services.md#core-lightning-database-replication).
+
+#### Backups include copies of bitcoind wallets
+
+Before each backup, the new `bitcoind-wallet-backup` unit asks a local bitcoind for a
+consistent copy of each loaded wallet. The `duplicity` unit now also fails when a
+copy fails, or when bitcoind is starting or stopping. It still backs up all other
+files first. If a backup fails, check `journalctl -u bitcoind-wallet-backup`. See
+[bitcoind wallets](services.md#bitcoind-wallets).
+
 While 0.2.0 is still in development, keep `nix-bitcoin.configVersion = "0.1.6";`.
 Once the release is finalized, review all of its migrations, then set
 `nix-bitcoin.configVersion = "0.2.0";`.

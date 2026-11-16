@@ -63,6 +63,25 @@ Charge-LND reads its certificate and macaroon directly, without staging them
 under a synthetic mainnet directory. Users selecting custom credentials with
 `--lnddir` should follow the [0.2.0 upgrade notes](upgrading.md#upgrading-to-config-version-020).
 
+#### Backups leave out the Lightning channel databases
+
+The backups service copied the channel databases of lnd and Core Lightning while the
+daemons wrote them. Such a copy can be torn, and a node that runs from an outdated
+copy can lose all funds in its channels. The backup now leaves these databases out.
+It still has the files that recovery needs: the lnd seed and `channel.backup`, and
+Core Lightning's `hsm_secret` and `emergency.recover`. See
+[Backups](services.md#backups) and the
+[upgrade notes](upgrading.md#backups-leave-out-the-lightning-channel-databases).
+
+#### Backups include consistent copies of bitcoind wallets
+
+Before each backup, the new `bitcoind-wallet-backup` unit asks bitcoind for a copy
+of each loaded wallet in `/var/lib/bitcoind/wallet-backups`. A copy of the wallet
+file itself can be torn, because bitcoind writes it while the backup runs. If a copy
+fails, or bitcoind is starting or stopping, the `duplicity` unit fails after the
+backup. See [bitcoind wallets](services.md#bitcoind-wallets) and the
+[upgrade notes](upgrading.md#backups-include-copies-of-bitcoind-wallets).
+
 ## 0.1.6
 
 #### Tor enforcement allows only local addresses
