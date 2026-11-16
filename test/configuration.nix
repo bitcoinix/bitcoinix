@@ -346,11 +346,12 @@ let
     imports = [ module ];
     nix-bitcoin.configVersion = version;
   }).nix-bitcoin.versioning.incompatibleChanges == [];
-  # Whether a 0.1.5 config gets the notice whose message contains `phrase`.
-  hasNotice = phrase: module: lib.any (lib.hasInfix phrase) (evaluate {
+  hasNoticeAt = version: phrase: module: lib.any (lib.hasInfix phrase) (evaluate {
     imports = [ module ];
-    nix-bitcoin.configVersion = "0.1.5";
+    nix-bitcoin.configVersion = version;
   }).nix-bitcoin.versioning.incompatibleChanges;
+  # Check individual notices even when the unstable migration also applies.
+  hasNotice = hasNoticeAt "0.1.5";
   hasOperatorAccessNotice = hasNotice "lnconnect-clnrest now gives the operator user";
   hasAccessUsersNotice = hasNotice "now accepts only users that are defined";
   # A user that exists only outside `users.users`, for example via useradd or LDAP
@@ -506,6 +507,13 @@ let
       expr = bitcoin.nix-bitcoin.useVersionLockedPkgs;
       expected = true;
     };
+    testConfigVersionAssertion = {
+      expr = map (version: lib.any
+        (lib.hasInfix "This version of nix-bitcoin contains")
+        (failedAssertions (evaluate { nix-bitcoin.configVersion = version; })))
+        [ "0.1.6" "0.2.0" null ];
+      expected = [ true false false ];
+    };
     testUnstableDefaultNotices = {
       expr = {
         reversePath = hasNotice "checkReversePath from true" {};
@@ -632,10 +640,8 @@ let
       expected = false;
     };
     testNetworkMigration = {
-      expr = map (module: (builtins.tryEval (evaluate {
-        imports = [ module ];
-        nix-bitcoin.configVersion = "0.1.5";
-      }).system.stateVersion).success) [
+      expr = map (module: !(hasNotice
+        "services.bitcoind.regtest has been replaced" module)) [
         { services.bitcoind.regtest = true; }
         { services.bitcoind.regtest = false; }
         { services.bitcoind.network = "regtest"; }
@@ -649,7 +655,6 @@ let
           services.bitcoind = case.settings;
           services.electrs.enable = true;
           nix-bitcoin.configVersion = "0.1.1";
-          _module.check = false;
         }).nix-bitcoin.versioning.incompatibleChanges;
       in {
         cookie = lib.any (lib.hasInfix
@@ -856,10 +861,9 @@ let
       expected = [ true true ];
     };
     testChargeLndCredentialMigration = {
-      expr = map (case: (builtins.tryEval (evaluate {
-        nix-bitcoin.configVersion = case.version;
+      expr = map (case: !(hasNoticeAt case.version "charge-lnd now receives explicit" {
         services.charge-lnd = { enable = case.enable; extraFlags = case.flags; };
-      }).system.stateVersion).success) [
+      })) [
         { version = "0.1.6"; enable = true; flags = [ "--lnddir" "/custom/lnd" ]; }
         { version = "0.1.6"; enable = true; flags = [ "--lnddir=/custom/lnd" ]; }
         { version = "0.1.6"; enable = false; flags = [ "--lnddir=/custom/lnd" ]; }
@@ -913,11 +917,10 @@ let
       expected = { MAINNET_ENABLED = true; REGTEST_ENABLED = true; ROOT_NETWORK = ""; };
     };
     testMempoolNetworkMigration = {
-      expr = map (case: (builtins.tryEval (evaluate {
-        nix-bitcoin.configVersion = case.version;
+      expr = map (case: !(hasNoticeAt case.version "Mempool now uses regtest" {
         services.bitcoind.network = case.network;
         services.mempool.enable = case.enable;
-      }).system.stateVersion).success) [
+      })) [
         { version = "0.1.6"; network = "regtest"; enable = true; }
         { version = "0.1.6"; network = "mainnet"; enable = true; }
         { version = "0.1.6"; network = "regtest"; enable = false; }
@@ -931,7 +934,6 @@ let
           nix-bitcoin.configVersion = "0.1.6";
           services.bitcoind.regtest = case.regtest;
           services.mempool.enable = case.enable;
-          _module.check = false;
         }).nix-bitcoin.versioning.incompatibleChanges;
       in {
         network = lib.any (lib.hasInfix "services.bitcoind.regtest has been replaced") notices;
@@ -969,11 +971,10 @@ let
       expected = [ false false false false true true ];
     };
     testEmptySecretsMigration = {
-      expr = map (case: (builtins.tryEval (evaluate {
-        nix-bitcoin.configVersion = case.version;
+      expr = map (case: !(hasNoticeAt case.version "setup-secrets now fails" {
         nix-bitcoin.setupSecrets = case.setupSecrets;
         services.lnd.enable = case.lnd;
-      }).system.stateVersion).success) [
+      })) [
         { version = "0.1.5"; setupSecrets = true; lnd = false; }
         { version = "0.1.5"; setupSecrets = false; lnd = true; }
         { version = "0.1.5"; setupSecrets = false; lnd = false; }
@@ -1204,10 +1205,7 @@ let
       expected = [ false true true ];
     };
     testTorEnforceMigration = {
-      expr = map (module: (builtins.tryEval (evaluate {
-        imports = [ module ];
-        nix-bitcoin.configVersion = "0.1.5";
-      }).system.stateVersion).success) [
+      expr = map (module: !(hasNotice "Services with `tor.enforce`" module)) [
         { services.bitcoind.enable = true; }
         { services.charge-lnd.enable = true; }
         { imports = [ ../modules/presets/enable-tor.nix ]; services.bitcoind.enable = true; }

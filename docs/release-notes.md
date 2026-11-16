@@ -17,9 +17,14 @@ separately pinned unstable service packages with the caller's nixpkgs.
 
 #### TrustedCoin initialization
 
-The pinned TrustedCoin package carries a local initialization patch until a release
-includes the [upstream startup fix](https://github.com/nbd-wtf/trustedcoin/pull/44).
-The pinned electrs package supplies the missing pkg-config and zstd build inputs.
+The pinned TrustedCoin package applies two patches from the
+[upstream startup fix](https://github.com/nbd-wtf/trustedcoin/pull/44) to prevent
+initialization races and reporting height zero without a block source.
+
+#### Electrs uses the unmodified nixpkgs package
+
+Nixpkgs now supplies electrs' pkg-config and zstd build inputs, so the local
+override is no longer needed.
 
 #### Package selection cleanup
 

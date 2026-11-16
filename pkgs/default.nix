@@ -16,8 +16,7 @@ let self = {
     mempool-frontend
     mempool-rust-gbt
     mempool-nginx-conf;
-  # nixpkgs 26.05 has bun 1.3, which rejects the wallet's bun 1.4 lockfile
-  unbeholden-wallet = pkgs.callPackage ./unbeholden-wallet { inherit (pkgsUnstable) bun; };
+  unbeholden-wallet = pkgs.callPackage ./unbeholden-wallet {};
 
   inherit (self.pyPkgs.nbPython3PackagesWithUnlockedEcdsa) hwi;
 
@@ -37,6 +36,7 @@ let self = {
       charge-lnd
       clboss
       clightning
+      electrs
       extra-container
       fulcrum
       lnd
@@ -48,13 +48,18 @@ let self = {
     inherit pkgs;
 
     trustedcoin = pkgs.trustedcoin.overrideAttrs (old: {
-      patches = (old.patches or []) ++ [ ./trustedcoin/wait-for-initialization.patch ];
-    });
-    # TODO-EXTERNAL: Remove when nixpkgs electrs declares its zstd build inputs.
-    # zstd-sys uses pkg-config to find the system library.
-    electrs = pkgs.electrs.overrideAttrs (old: {
-      nativeBuildInputs = (old.nativeBuildInputs or []) ++ [ pkgs.pkg-config ];
-      buildInputs = (old.buildInputs or []) ++ [ pkgs.zstd ];
+      patches = (old.patches or []) ++ [
+        # Fix getchaininfo initialization races and reporting height 0 without a source.
+        # https://github.com/nbd-wtf/trustedcoin/pull/44
+        (pkgs.fetchpatch {
+          url = "https://github.com/nbd-wtf/trustedcoin/commit/3210fc9a5893cde597905dd3e6577d9791ae690d.patch";
+          hash = "sha256-OPkZOf3t13Ti//WWfHII+KXSreXYYj2ogmRL0KZ5nvY=";
+        })
+        (pkgs.fetchpatch {
+          url = "https://github.com/nbd-wtf/trustedcoin/commit/21a1f43ffd558f79e145ae70f26f682eef19c1fe.patch";
+          hash = "sha256-1Sr1WQYmCEmJpTq/YMxWx3EtE8xP+4fZKwgQUksc6CU=";
+        })
+      ];
     });
   };
 
