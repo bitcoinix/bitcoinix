@@ -412,6 +412,46 @@ def test_rbitcoin():
     succeed(f"cmp /run/rbitcoin-rpc.pending {cookie}")
     assert_full_match(f"{rpc} --user \"$(cat {cookie})\"", "200")
 
+def rbitcoin_space_wait_ready():
+    # `ready` needs an accepted RPC call and a connected Electrum client.
+    # The RPC check repeats every 30 s, so a refused cookie shows within that time.
+    machine.wait_until_succeeds(
+        f"[[ $(curl -sS http://{ip('rbitcoin-space')}:60847/readyz | jq -r .networks.regtest.rpc) == ok ]]"
+    )
+    machine.wait_until_succeeds(
+        f"curl -fsS -o /dev/null http://{ip('rbitcoin-space')}:60847/readyz"
+    )
+
+
+@test("rbitcoin-space")
+def test_rbitcoin_space():
+    assert_running("rbitcoin-space")
+    rbitcoin_space_wait_ready()
+    # Both are probed after Electrum connects, so they can trail `ready`
+    readyz = f"curl -sS http://{ip('rbitcoin-space')}:60847/readyz | jq -r .networks.regtest"
+    machine.wait_until_succeeds(f"[[ $({readyz}.address_index) == on ]]")
+    machine.wait_until_succeeds(f"[[ $({readyz}.store) == ok ]]")
+
+    base = f"http://{ip('rbitcoin-space')}:60847"
+    # The frontend, from the package's web directory
+    succeed(f"curl -fsS {base}/ | grep -qi '<!doctype html>'")
+    # The Esplora-compatible API, answered through rbitcoin's Esplora server
+    node_height = succeed("runuser -u operator -- rbitcoin-cli getblockcount").strip()
+    machine.wait_until_succeeds(
+        f"[[ $(curl -fsS {base}/regtest/api/blocks/tip/height) == {node_height} ]]"
+    )
+
+    # The RPC password comes from rbitcoin's cookie at runtime: it is in the
+    # environment, but neither on the command line nor in the unit
+    pid = succeed("systemctl show -p MainPID --value rbitcoin-space").strip()
+    password = succeed("cut -d: -f2 /run/rbitcoin/rpc.cookie").strip()
+    machine.fail(f"grep -qF {password} /proc/{pid}/cmdline")
+    machine.fail(f"systemctl cat rbitcoin-space | grep -qF {password}")
+    succeed(f"tr '\\0' '\\n' < /proc/{pid}/environ | grep -qxF REGTEST_RPC_PASSWORD={password}")
+    # Owner-only, like every process's environment
+    machine.fail(f"runuser -u operator -- cat /proc/{pid}/environ")
+
+
 @test("clightning")
 def test_clightning():
     assert_running("clightning")

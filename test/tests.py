@@ -13,6 +13,7 @@ TEST_PHASES = (
         "electrs",
         "fulcrum",
         "rbitcoin",
+        "rbitcoin-space",
         "stop-electrs",
         "clightning",
         "lnd",
@@ -55,6 +56,7 @@ TEST_PHASES = (
         "lnd-restart-on-clean-exit",
         "lnd-macaroon-revocation",
         "rbitcoin-mempool",
+        "rbitcoin-space-follows-node",
         "trustedcoin",
     )),
     ("secrets", (

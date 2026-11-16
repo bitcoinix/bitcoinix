@@ -96,6 +96,7 @@ jobs:
           - btcpayserverClightning
           - bitcoindGroupRead
           - rbitcoinMempool
+          - rbitcoinSpaceNetns
     needs: build_test_drivers
     if: needs.build_test_drivers.outputs.run_scenario_tests == 'true'
     steps:

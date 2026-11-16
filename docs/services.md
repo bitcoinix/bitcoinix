@@ -1221,6 +1221,9 @@ Things to know before enabling it:
 - **Address index.** `services.rbitcoin.electrum.enable` turns on the
   scripthash index. It is built after the node reaches the tip, which takes
   several hours on mainnet, and the Electrum port only opens once it is ready.
+- **Esplora.** `services.rbitcoin.esplora.enable` serves the Esplora REST API
+  on port 3002 (rbitcoin's own default, 3000, is RTL's). Like Electrum, it has
+  no authentication.
 - **RPC.** With `services.rbitcoin.rpc.enable`, rbitcoin serves a Bitcoin Core
   compatible JSON-RPC subset over TCP. rbitcoin opens the RPC port only once
   it has caught up with the chain, which takes hours or days on a fresh
@@ -1246,3 +1249,60 @@ Things to know before enabling it:
   `rbitcoin` in their `connections` (mempool does this automatically). If
   `services.rbitcoin.connect` points at a local bitcoind, also set
   `nix-bitcoin.netns-isolation.services.rbitcoin.connections = [ "bitcoind" ];`.
+
+## rbitcoin.space
+
+[rbitcoin.space](https://github.com/smolcars/rbitcoin-space) is a block explorer for
+[rbitcoin](#rbitcoin): blocks, transactions, addresses, the live mempool with projected
+blocks and fee recommendations, mining pools and block audits, and an Esplora-compatible
+API. It is **experimental**, like rbitcoin.
+
+```nix
+services.rbitcoin-space.enable = true;
+```
+
+This enables rbitcoin with its JSON-RPC, Electrum and Esplora servers and its address
+index, on the network set by `services.rbitcoin.network` (mainnet, signet or regtest).
+The explorer listens on localhost. Connect through an SSH tunnel, then open
+`http://localhost:60847`:
+
+```
+ssh -L 60847:127.0.0.1:60847 operator@bitcoin-node
+```
+
+With `netns-isolation`, use the address from
+`nodeinfo | jq -r '.["rbitcoin-space"].local_address'` instead. To reach it through Tor,
+set `nix-bitcoin.onionServices.rbitcoin-space.enable = true;` and find the address with
+`nodeinfo`.
+
+Things to know:
+
+- **First sync.** The explorer serves what the node has while it syncs. Address pages work
+  once rbitcoin's address index has caught up, and the explorer reports ready
+  (`curl http://localhost:60847/readyz`) only once rbitcoin's Electrum server is up, which
+  waits for that index (with `netns-isolation`, use the `local_address` from `nodeinfo`).
+  On mainnet both take as long as rbitcoin's sync.
+- **The RPC cookie.** The explorer reads rbitcoin's RPC cookie at every start, so it joins
+  group `rbitcoinrpc`, and the cookie is an admin credential (see [rbitcoin](#rbitcoin)).
+  rbitcoin writes a new cookie on every start, so the explorer stops and starts with it:
+  `systemctl restart rbitcoin` also restarts `rbitcoin-space`, stopping rbitcoin stops it,
+  and after a crash it comes back once rbitcoin does.
+- **No authentication.** The explorer is a public website. It rate-limits each client, and
+  `POST /api/tx` relays transactions to the node (turn it off with
+  `services.rbitcoin-space.broadcast = false`). Behind a reverse proxy, set
+  `TRUSTED_PROXY_HEADER` and `TRUSTED_PROXIES` in `services.rbitcoin-space.settings`, or
+  every visitor shares the proxy's limit. Through the onion service, all visitors arrive
+  from Tor's address and Tor sends no such header, so they share one limit.
+- **Data.** `services.rbitcoin-space.dataDir` (default `/var/lib/rbitcoin-space`) holds a
+  SQLite store of data derived from the node. A backfill fills its block table and keeps
+  the node about half busy while it runs (`BACKFILL_BUSY_PERCENT`, default 50). The store
+  is rebuilt if lost, so it needs no backup.
+- **Load on the node.** The live mempool polls the node about once a second, about 150 MB
+  a minute of RPC traffic on mainnet. `services.rbitcoin-space.mempool = false` turns it
+  off, along with the projected blocks and fee recommendations.
+- **Other settings.** `services.rbitcoin-space.settings` takes the explorer's environment
+  variables, documented in
+  [CONFIG.md](https://github.com/smolcars/rbitcoin-space/blob/v0.2.0/docs/CONFIG.md). They
+  are copied to the world-readable Nix store. Lightning gossip and the Ark pages connect to
+  the internet, so they fail with `services.rbitcoin-space.tor.enforce`, which
+  `secure-node.nix` sets.
