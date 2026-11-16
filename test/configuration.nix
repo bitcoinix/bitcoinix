@@ -294,6 +294,16 @@ let
     services.btcpayserver = { enable = true; lightningBackend = "clightning"; };
     services.clightning = { user = "cln-custom"; group = "cln-rpc"; };
   };
+  btcpayserverCustomUser = evaluate {
+    services.btcpayserver = { enable = true; user = "btcpay-custom"; group = "payments"; };
+  };
+  # The URL of the health check in the script of btcpayserver-admin
+  btcpayserverAdminHealthUrl = rootpath: let
+    script = (evaluate {
+      services.btcpayserver = { enable = true; inherit rootpath; };
+    }).systemd.services.btcpayserver-admin.script;
+    line = lib.findFirst (lib.hasInfix "curl -fs -o /dev/null") "" (lib.splitString "\n" script);
+  in lib.head (builtins.match ".*(http://[^' ;]*).*" line);
   lndMacaroon = name: macaroon: evaluate {
     services.lnd = { enable = true; macaroons.${name} = macaroon; };
   };
@@ -1295,6 +1305,25 @@ let
     testBtcpayserverJoinsClightningGroup = {
       expr = lib.elem "cln-rpc" btcpayserverCustomClightningGroup.users.users.btcpayserver.extraGroups;
       expected = true;
+    };
+    # setup-secrets fails for every secret when an owner doesn't exist
+    testBtcpayserverAdminPasswordOwner = {
+      expr = with btcpayserverCustomUser; {
+        inherit (nix-bitcoin.secrets.btcpayserver-admin-password) user group;
+        userExists = users.users ? btcpay-custom;
+        groupExists = users.groups ? payments;
+      };
+      expected = { user = "btcpay-custom"; group = "payments"; userExists = true; groupExists = true; };
+    };
+    testBtcpayserverAdminRootpath = {
+      expr = map btcpayserverAdminHealthUrl [ null "/" "btcpay" "/btcpay" "btcpay/" ];
+      expected = [
+        "http://127.0.0.1:23000/api/v1/health"
+        "http://127.0.0.1:23000/api/v1/health"
+        "http://127.0.0.1:23000/btcpay/api/v1/health"
+        "http://127.0.0.1:23000/btcpay/api/v1/health"
+        "http://127.0.0.1:23000/btcpay/api/v1/health"
+      ];
     };
     testLndMacaroonRootKeyIds = let
       info = ''{"entity":"info","action":"read"}'';

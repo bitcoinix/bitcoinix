@@ -219,6 +219,45 @@ lose the authenticator, delete `RTL-Config.json` in RTL's data dir
 (`/var/lib/rtl` by default) and restart RTL. bitcoinix then writes a new one
 without the 2FA secret.
 
+### Connect to BTCPay Server
+BTCPay Server listens on localhost by default. Connect to it through an SSH tunnel, then
+open `http://localhost:23000` in your browser:
+
+```
+ssh -L 23000:127.0.0.1:23000 operator@bitcoin-node
+```
+
+With `netns-isolation`, BTCPay Server listens in its own network namespace. Use the address
+from `nodeinfo | jq -r .btcpayserver.local_address` instead, e.g. `169.254.1.24:23000`.
+
+BTCPay Server makes the first account that registers the server admin, which can use the
+internal Lightning node. So when BTCPay Server has no admin, the unit `btcpayserver-admin`
+creates the admin account `admin@localhost` before BTCPay Server opens its port. BTCPay
+Server then closes registration. Sign in with this account. The password is in
+`$secretsDir/btcpayserver-admin-password`.
+See: [Secrets dir](./configuration.md#secrets-dir)
+
+An installation that already had an admin before bitcoinix 0.2.0 keeps it and gets no
+`admin@localhost`. Sign in with your own account there.
+
+You can change the account's email address and password in BTCPay Server. The secret file
+keeps the first password.
+
+#### Check the admin accounts
+
+Before bitcoinix 0.2.0, any local user could register first and become the admin until
+you registered yours. So on an installation from before 0.2.0, check that each admin is
+yours. Sign in, open Server Settings > Users and look at the users with the admin role.
+
+If one isn't yours, or if you found registration closed before you registered, someone
+else had admin access. An admin can install plugins that run as the `btcpayserver` user
+and can use your Lightning node. So treat the node as compromised:
+
+1. Stop BTCPay Server with `systemctl stop btcpayserver`.
+2. Move the funds of the Lightning node and of the wallets on this node to a new wallet
+   that this node doesn't control.
+3. Set up the node again.
+
 ### Connect to Unbeholden Wallet
 [Unbeholden Wallet](https://github.com/unbeholdendev/unbeholden-wallet) is a watch-only
 wallet that runs in the browser and hands transactions to an air-gapped signer over QR
