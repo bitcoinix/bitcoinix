@@ -11,6 +11,18 @@
 With a flake-based deployment, you deploy with `nixos-rebuild` or `colmena` as described in the
 [installation guide](./install.md#4-deploy-with-a-flake).
 
+## Bitcoin network
+
+The deployment defaults to mainnet. To use a local regression testing network, set:
+
+```nix
+services.bitcoind.network = "regtest";
+```
+
+The supported values are `"mainnet"` and `"regtest"`. Bitcoin and the services
+connected to it derive their network settings from this option. Mempool
+automatically configures its backend and frontend for the selected network.
+
 ## Deployment shell
 This section applies to the legacy [krops deployment](./install.md#5-alternative-deploy-with-krops-legacy).
 Run command `nix-shell` in your deployment directory.\

@@ -73,7 +73,6 @@ let
 
   user = "charge-lnd";
   group = user;
-  dataDir = "/var/lib/charge-lnd";
   configFile = builtins.toFile "charge-lnd.config" cfg.policies;
   checkedConfig = pkgs.runCommand "charge-lnd-checked.config" { } ''
     ${config.nix-bitcoin.pkgs.charge-lnd}/bin/charge-lnd --check --config ${configFile}
@@ -104,18 +103,11 @@ in
       documentation = [ "https://github.com/accumulator/charge-lnd/blob/master/README.md" ];
       after = [ "lnd.service" ];
       requires = [ "lnd.service" ];
-      # lnd's data directory (--lnddir) is not accessible to charge-lnd.
-      # Instead use directory "lnddir-proxy" as lnddir and link relevant files to it.
-      preStart = ''
-        macaroonDir=${dataDir}/lnddir-proxy/data/chain/bitcoin/mainnet
-        mkdir -p $macaroonDir
-        ln -sf /run/lnd/charge-lnd.macaroon $macaroonDir
-        ln -sf ${lnd.certPath} ${dataDir}/lnddir-proxy/tls.cert
-      '';
       serviceConfig = nbLib.defaultHardening // {
         ExecStart = ''
           ${config.nix-bitcoin.pkgs.charge-lnd}/bin/charge-lnd \
-            --lnddir ${dataDir}/lnddir-proxy \
+            --tlscert ${escapeShellArg lnd.certPath} \
+            --macaroon /run/lnd/charge-lnd.macaroon \
             --grpc ${nbLib.addressWithPort lnd.rpcAddress lnd.rpcPort} \
             --config ${checkedConfig} \
             ${escapeShellArgs cfg.extraFlags}
@@ -123,7 +115,6 @@ in
         Type = "oneshot";
         User = user;
         Group = group;
-        StateDirectory = "charge-lnd";
       } // nbLib.allowLocalIPAddresses;
     };
 

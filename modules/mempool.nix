@@ -278,12 +278,20 @@ in {
       ];
     };
 
+    # Use the packaged frontend on mainnet, whose defaults already match.
+    services.mempool.frontend.settings = mkIf (bitcoind.network != "mainnet") {
+      MAINNET_ENABLED = mkDefault (bitcoind.network == "mainnet");
+      REGTEST_ENABLED = mkDefault (bitcoind.network == "regtest");
+      # Upstream represents mainnet by the empty string. Keep the selected
+      # network at / so the frontend uses the local /api and websocket routes.
+      ROOT_NETWORK = mkDefault (nbLib.networkName { mainnet = ""; });
+    };
+
     # Available options:
     # https://github.com/mempool/mempool/blob/master/backend/src/config.ts
     services.mempool.settings = {
       MEMPOOL = {
-        # mempool doesn't support regtest
-        NETWORK = "mainnet";
+        NETWORK = bitcoind.network;
         BACKEND = "electrum";
         HTTP_HOST = cfg.address;
         HTTP_PORT = cfg.port;

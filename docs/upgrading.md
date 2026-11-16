@@ -25,6 +25,64 @@ This fetches the latest release, verifies the signature on its release tag and u
 It refuses to switch to a release older than the one currently pinned. To downgrade on purpose,
 run `fetch-release.sh` with `releaseVersion=<version>` and write its output to `nix-bitcoin-release.nix`.
 
+## Upgrading to config version 0.2.0
+
+#### Bitcoin network selection
+
+Replace `services.bitcoind.regtest = true;` with `services.bitcoind.network = "regtest";`.
+If you explicitly set `services.bitcoind.regtest = false;`, remove it or set
+`services.bitcoind.network = "mainnet";` (the default). The new option selects the
+network for the whole deployment; existing network-specific paths and ports
+are unchanged.
+
+The old boolean is forwarded to `network` during migration, so upgrade notices
+still use the network and paths from your existing configuration. It emits a
+deprecation warning if used after updating `configVersion`.
+
+#### Network name overrides
+
+The read-only `services.bitcoind.makeNetworkName` helper has been removed.
+Replace calls such as `config.services.bitcoind.makeNetworkName "bitcoin" "regtest"`
+with the new helper, specifying only names that need overriding. In a NixOS
+module taking `config` as an argument, define `nbLib` before using the short name:
+
+```nix
+let
+  nbLib = config.nix-bitcoin.lib;
+in
+  nbLib.networkName { mainnet = "bitcoin"; }
+```
+
+This returns `"bitcoin"` on mainnet and `"regtest"` on regtest. Unmapped network
+names pass through unchanged.
+
+#### Mempool follows the selected network
+
+Mempool now identifies as regtest in both its backend and frontend when
+`services.bitcoind.network = "regtest";`. Previously it identified as mainnet
+while connecting to the regtest node. It automatically clears disk caches
+labelled mainnet and reloads data from its backend after restart.
+
+Review overrides in `services.mempool.frontend.settings`: regtest defaults to
+`MAINNET_ENABLED = false`, `REGTEST_ENABLED = true` and `ROOT_NETWORK = "regtest"`.
+Remove conflicting overrides unless needed for a custom deployment. If you set
+`services.mempool.frontend.staticContentRoot`, update that custom frontend too.
+The web interface stays at the same URL; reload it after deploying.
+
+#### Charge-LND credential paths
+
+Charge-LND now reads the configured LND certificate and
+`/run/lnd/charge-lnd.macaroon` directly, without a proxy data directory.
+If you selected custom credentials with `--lnddir` in
+`services.charge-lnd.extraFlags` and omitted either `--tlscert` or `--macaroon`,
+add the missing credential path explicitly. Configurations already specifying
+both paths, and default configurations, need no changes.
+
+The old `/var/lib/charge-lnd/lnddir-proxy` tree is left behind on existing hosts.
+It is no longer used and can be removed after upgrading.
+
+After migrating your configuration, set `nix-bitcoin.configVersion = "0.2.0";`.
+
 ## Upgrading to config version 0.1.6
 
 #### Operator access to Lightning onion addresses
