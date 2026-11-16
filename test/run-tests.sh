@@ -286,7 +286,8 @@ persistentContainerExample() {
     makeTmpDir
     local example="$tmpDir/container-example"
     local configVersion
-    configVersion=$(sed -n 's/^ *version = "\([0-9.]*\)";$/\1/p' "$scriptDir/../modules/versioning.nix" | sort -V | tail -1)
+    configVersion=$(find "$scriptDir/../modules/versioning" -mindepth 1 -maxdepth 1 -type d -printf '%f\n' | sort -V | tail -1)
+    [[ -n $configVersion ]]
     # The example pins a released configVersion. Test the checkout's version
     # along with its source, without modifying the user's example or lock file.
     cp -r "$scriptDir/../examples/container" "$example"
