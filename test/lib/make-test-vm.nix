@@ -20,7 +20,7 @@ let
     #    being garbage-collected
     buildCommand = ''
       mkdir "$out"
-      LOGFILE=$out/output.xml tests='exec(os.environ["testScript"])' ${test.driver}/bin/nixos-test-driver
+      LOGFILE=$out/output.xml ${test.driver}/bin/nixos-test-driver
       ln -s ${test.driver} "$out/driver"
     '';
 

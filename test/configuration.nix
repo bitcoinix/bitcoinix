@@ -342,18 +342,16 @@ let
   };
   operatorAccountExplicitAccess = evaluate operatorAccountGrant;
   # Whether a config written for the last release passes the versioning check
-  passesVersionCheckAt = version: module: (builtins.tryEval (evaluate {
+  passesVersionCheckAt = version: module: (evaluate {
     imports = [ module ];
     nix-bitcoin.configVersion = version;
-  }).system.stateVersion).success;
-  # Whether a 0.1.5 config gets the notice whose message contains `phrase`.
-  # The versioning throw is a definition of `system`, which the module check
-  # forces on any config access, so skip the check here.
-  hasNotice = phrase: module: lib.any (lib.hasInfix phrase) (evaluate {
+  }).nix-bitcoin.versioning.incompatibleChanges == [];
+  hasNoticeAt = version: phrase: module: lib.any (lib.hasInfix phrase) (evaluate {
     imports = [ module ];
-    nix-bitcoin.configVersion = "0.1.5";
-    _module.check = false;
+    nix-bitcoin.configVersion = version;
   }).nix-bitcoin.versioning.incompatibleChanges;
+  # Check individual notices even when the unstable migration also applies.
+  hasNotice = hasNoticeAt "0.1.5";
   hasOperatorAccessNotice = hasNotice "lnconnect-clnrest now gives the operator user";
   hasAccessUsersNotice = hasNotice "now accepts only users that are defined";
   # A user that exists only outside `users.users`, for example via useradd or LDAP
@@ -466,19 +464,21 @@ let
   };
   pluginMigrationTests = lib.listToAttrs (map (plugin:
     lib.nameValuePair "testClightningPluginMigration-${plugin}" {
-      expr = map (case: (builtins.tryEval (evaluate {
-        nix-bitcoin.configVersion = case.version;
+      expr = map (case: passesVersionCheckAt case.version {
         services.clightning = {
           enable = true;
           plugins.${plugin}.enable = case.enable;
         };
-      }).system.stateVersion).success) [
+      }) [
         { version = "0.1.4"; enable = true; }
         { version = "0.1.4"; enable = false; }
         { version = "0.1.5"; enable = true; }
+        { version = "0.1.6"; enable = true; }
+        { version = "0.2.0"; enable = true; }
         { version = null; enable = true; }
       ];
-      expected = [ false true true true ];
+      # The unstable-only migration also affects configurations without plugins.
+      expected = [ false false false false true true ];
     }) [ "currencyrate" "rebalance" ]);
   # Secret generation with the replication SSH key, run by the check below
   replicationGenerator = (evaluate {
@@ -503,6 +503,91 @@ let
     expr = restAllowed case.args;
     inherit (case) expected;
   }) restCases // extraConfigTests // pluginsConfigTests // pluginMigrationTests // {
+    testLockedPackagesDefault = {
+      expr = bitcoin.nix-bitcoin.useVersionLockedPkgs;
+      expected = true;
+    };
+    testConfigVersionAssertion = {
+      expr = map (version: lib.any
+        (lib.hasInfix "This version of nix-bitcoin contains")
+        (failedAssertions (evaluate { nix-bitcoin.configVersion = version; })))
+        [ "0.1.6" "0.2.0" null ];
+      expected = [ true false false ];
+    };
+    testUnstableDefaultNotices = {
+      expr = {
+        reversePath = hasNotice "checkReversePath from true" {};
+        strict = hasNotice "checkReversePath from true" {
+          networking.firewall.checkReversePath = true;
+        };
+        noFirewall = hasNotice "checkReversePath from true" {
+          networking.firewall.enable = false;
+        };
+        fuse = hasNotice "disables programs.fuse.enable" {};
+        explicitFuse = hasNotice "disables programs.fuse.enable" {
+          programs.fuse.enable = true;
+        };
+        replication = hasNotice "disables programs.fuse.enable" {
+          services.clightning = {
+            enable = true;
+            replication = {
+              enable = true;
+              encrypt = true;
+              local.directory = "/var/backup/clightning";
+            };
+          };
+        };
+      };
+      expected = {
+        reversePath = true; strict = false; noFirewall = false;
+        fuse = true; explicitFuse = false; replication = false;
+      };
+    };
+    testI2pSAM = {
+      expr = let
+        cfg = evaluate { services.bitcoind = { enable = true; i2p = true; }; };
+      in cfg.services.i2pd.settings.sam;
+      expected = { enabled = true; address = "127.0.0.1"; port = 7656; };
+    };
+    testI2pExposureDefaults = {
+      expr = let
+        cfg = evaluate { services.bitcoind = { enable = true; i2p = true; }; };
+      in with cfg.services.i2pd.settings; [
+        http.enabled httpproxy.enabled socksproxy.enabled ntcp2.published ssu2.published
+      ];
+      expected = [ false false false false false ];
+    };
+    testI2pExposureOverrides = {
+      expr = let
+        cfg = evaluate {
+          services.bitcoind = { enable = true; i2p = true; };
+          services.i2pd.settings = {
+            http.enabled = true;
+            httpproxy.enabled = true;
+            socksproxy.enabled = true;
+            ntcp2.published = true;
+            ssu2.published = true;
+          };
+        };
+      in with cfg.services.i2pd.settings; [
+        http.enabled httpproxy.enabled socksproxy.enabled ntcp2.published ssu2.published
+      ];
+      expected = [ true true true true true ];
+    };
+    testI2pSAMNetns = {
+      expr = let
+        cfg = evaluate {
+          services.bitcoind = { enable = true; i2p = true; };
+          nix-bitcoin.netns-isolation.enable = true;
+        };
+      in {
+        inherit (cfg.services.i2pd.settings.sam) enabled address port;
+        inherit (cfg.services.i2pd) checkConfig;
+        firewall = builtins.elem cfg.services.i2pd.settings.sam.port
+          cfg.networking.firewall.interfaces.nb-br.allowedTCPPorts;
+      };
+      expected = { enabled = true; address = "169.254.1.10"; port = 7656; firewall = true; checkConfig = false; };
+    };
     testBitcoinDefaults = {
       expr = getBitcoinDefaults bitcoin;
       expected = {
@@ -555,10 +640,8 @@ let
       expected = false;
     };
     testNetworkMigration = {
-      expr = map (module: (builtins.tryEval (evaluate {
-        imports = [ module ];
-        nix-bitcoin.configVersion = "0.1.5";
-      }).system.stateVersion).success) [
+      expr = map (module: !(hasNotice
+        "services.bitcoind.regtest has been replaced" module)) [
         { services.bitcoind.regtest = true; }
         { services.bitcoind.regtest = false; }
         { services.bitcoind.network = "regtest"; }
@@ -572,7 +655,6 @@ let
           services.bitcoind = case.settings;
           services.electrs.enable = true;
           nix-bitcoin.configVersion = "0.1.1";
-          _module.check = false;
         }).nix-bitcoin.versioning.incompatibleChanges;
       in {
         cookie = lib.any (lib.hasInfix
@@ -779,10 +861,9 @@ let
       expected = [ true true ];
     };
     testChargeLndCredentialMigration = {
-      expr = map (case: (builtins.tryEval (evaluate {
-        nix-bitcoin.configVersion = case.version;
+      expr = map (case: !(hasNoticeAt case.version "charge-lnd now receives explicit" {
         services.charge-lnd = { enable = case.enable; extraFlags = case.flags; };
-      }).system.stateVersion).success) [
+      })) [
         { version = "0.1.6"; enable = true; flags = [ "--lnddir" "/custom/lnd" ]; }
         { version = "0.1.6"; enable = true; flags = [ "--lnddir=/custom/lnd" ]; }
         { version = "0.1.6"; enable = false; flags = [ "--lnddir=/custom/lnd" ]; }
@@ -836,11 +917,10 @@ let
       expected = { MAINNET_ENABLED = true; REGTEST_ENABLED = true; ROOT_NETWORK = ""; };
     };
     testMempoolNetworkMigration = {
-      expr = map (case: (builtins.tryEval (evaluate {
-        nix-bitcoin.configVersion = case.version;
+      expr = map (case: !(hasNoticeAt case.version "Mempool now uses regtest" {
         services.bitcoind.network = case.network;
         services.mempool.enable = case.enable;
-      }).system.stateVersion).success) [
+      })) [
         { version = "0.1.6"; network = "regtest"; enable = true; }
         { version = "0.1.6"; network = "mainnet"; enable = true; }
         { version = "0.1.6"; network = "regtest"; enable = false; }
@@ -854,7 +934,6 @@ let
           nix-bitcoin.configVersion = "0.1.6";
           services.bitcoind.regtest = case.regtest;
           services.mempool.enable = case.enable;
-          _module.check = false;
         }).nix-bitcoin.versioning.incompatibleChanges;
       in {
         network = lib.any (lib.hasInfix "services.bitcoind.regtest has been replaced") notices;
@@ -879,23 +958,23 @@ let
     testMempoolRpcPasswordMigration = let
       password.CORE_RPC.PASSWORD = lib.mkForce "literal-password";
     in {
-      expr = map (case: (builtins.tryEval (evaluate {
-        nix-bitcoin.configVersion = case.version;
+      expr = map (case: passesVersionCheckAt case.version {
         services.mempool = { enable = true; inherit (case) settings; };
-      }).system.stateVersion).success) [
+      }) [
         { version = "0.1.4"; settings = password; }
         { version = "0.1.4"; settings = {}; }
         { version = "0.1.5"; settings = password; }
+        { version = "0.1.6"; settings = password; }
+        { version = "0.2.0"; settings = password; }
         { version = null; settings = password; }
       ];
-      expected = [ false true true true ];
+      expected = [ false false false false true true ];
     };
     testEmptySecretsMigration = {
-      expr = map (case: (builtins.tryEval (evaluate {
-        nix-bitcoin.configVersion = case.version;
+      expr = map (case: !(hasNoticeAt case.version "setup-secrets now fails" {
         nix-bitcoin.setupSecrets = case.setupSecrets;
         services.lnd.enable = case.lnd;
-      }).system.stateVersion).success) [
+      })) [
         { version = "0.1.5"; setupSecrets = true; lnd = false; }
         { version = "0.1.5"; setupSecrets = false; lnd = true; }
         { version = "0.1.5"; setupSecrets = false; lnd = false; }
@@ -1045,11 +1124,11 @@ let
     testVersioningOnionAccessUndefinedUser = {
       expr = {
         undefined = hasAccessUsersNotice onionAccessExternalUser;
-        current = passesVersionCheckAt "0.1.6" onionAccessExternalUser;
+        current = passesVersionCheckAt "0.2.0" onionAccessExternalUser;
         currentFails = map (lib.hasInfix "external-user")
           (failedAssertions (evaluate {
             imports = [ onionAccessExternalUser ];
-            nix-bitcoin.configVersion = "0.1.6";
+            nix-bitcoin.configVersion = "0.2.0";
           }));
         defined = hasAccessUsersNotice onionAccessLoginName;
         disabled = hasAccessUsersNotice {
@@ -1126,10 +1205,7 @@ let
       expected = [ false true true ];
     };
     testTorEnforceMigration = {
-      expr = map (module: (builtins.tryEval (evaluate {
-        imports = [ module ];
-        nix-bitcoin.configVersion = "0.1.5";
-      }).system.stateVersion).success) [
+      expr = map (module: !(hasNotice "Services with `tor.enforce`" module)) [
         { services.bitcoind.enable = true; }
         { services.charge-lnd.enable = true; }
         { imports = [ ../modules/presets/enable-tor.nix ]; services.bitcoind.enable = true; }

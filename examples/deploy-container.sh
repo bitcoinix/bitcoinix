@@ -75,14 +75,18 @@ fi
 #
 read -rd '' src <<EOF || true
 { pkgs, lib, ... }: {
-  containers.demo-node = {
-    extra.addressPrefix = "10.250.0";
-    extra.enableWAN = true;
-    config = { pkgs, config, lib, ... }: {
-      imports = [
-        $(realpath "$configuration")
-      ];
-      nix-bitcoin.generateSecrets = true;
+  containers.demo-node = { config, ... }: {
+    config = {
+      # Core Lightning locks its signing keys in memory.
+      extraFlags = lib.optional config.config.services.clightning.enable "--system-call-filter=@memlock";
+      extra.addressPrefix = "10.250.0";
+      extra.enableWAN = true;
+      config = { pkgs, config, lib, ... }: {
+        imports = [
+          $(realpath "$configuration")
+        ];
+        nix-bitcoin.generateSecrets = true;
+      };
     };
   };
 }

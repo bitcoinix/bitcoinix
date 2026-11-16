@@ -5,6 +5,35 @@ For configuration migrations reported during evaluation, follow the
 
 ## 0.2.0
 
+#### Unstable NixOS base
+
+bitcoinix now uses a single `nixpkgs` input tracking `nixos-unstable` for its system
+and packages. `nix-bitcoin.useVersionLockedPkgs` defaults to `true`. Review the
+[0.2.0 migration guide](upgrading.md#upgrading-to-config-version-020) for the system
+input, package customization, reverse-path filtering, FUSE, I2P validation and
+systemd-nspawn changes. Non-flake module imports, disabling version-locked
+packages, or overriding bitcoinix's nixpkgs input now also move the formerly
+separately pinned unstable service packages with the caller's nixpkgs.
+
+#### TrustedCoin initialization
+
+The pinned TrustedCoin package applies two patches from the
+[upstream startup fix](https://github.com/nbd-wtf/trustedcoin/pull/44) to prevent
+initialization races and reporting height zero without a block source.
+
+#### Electrs uses the unmodified nixpkgs package
+
+Nixpkgs now supplies electrs' pkg-config and zstd build inputs, so the local
+override is no longer needed.
+
+#### Package selection cleanup
+
+The generated `pkgs/pinned.nix` file has been removed. Package selection and
+local overrides now live together in `pkgs/default.nix`; the public
+`legacyPackages.<system>.pinned` paths remain available. The deployment shell and
+package imports without an explicit `pkgs` still read the lock file through
+`pkgs/nixpkgs-pinned.nix`; non-flake NixOS module imports use the system's `pkgs`.
+
 #### Bitcoin network selection
 
 Select the Bitcoin network with `services.bitcoind.network` (`"mainnet"` or
