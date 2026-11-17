@@ -171,7 +171,9 @@ Do not add a config-version notice or bump solely for these changes.
 
 Root `version.nix` records the latest finalized release. **Change it only when
 preparing a release immediately before tagging, never during development.**
-Unreleased notices always warn; released notices block until acknowledged with the user's `configVersion`.
+Unreleased notices warn without blocking deployment or requiring acknowledgement;
+users must review them before deploying. Released notices block until acknowledged
+with the user's `configVersion`. Values newer than `version.nix` are rejected.
 An unset `configVersion` disables migration notices. Removed-option errors and other
 service assertions are independent of this policy.
 

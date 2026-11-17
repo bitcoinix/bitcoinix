@@ -11,8 +11,10 @@ let
   evaluate = module: (base.extendModules { modules = [ module ]; }).config;
   failedAssertions = config:
     map (a: a.message) (builtins.filter (a: !a.assertion) config.assertions);
-  migrationErrors = config: builtins.filter
-    (lib.hasInfix "This version of nix-bitcoin contains") (failedAssertions config);
+  versioningErrors = config: builtins.filter (message:
+    lib.hasInfix "This version of nix-bitcoin contains" message
+    || lib.hasInfix "is newer than the latest finalized release" message
+  ) (failedAssertions config);
   releasedVersion = import ../version.nix;
   changes020Released = lib.versionAtLeast releasedVersion "0.2.0";
 
@@ -346,7 +348,7 @@ let
   };
   operatorAccountExplicitAccess = evaluate operatorAccountGrant;
   # Whether a config written for the last release passes the versioning check
-  passesVersionCheckAt = version: module: migrationErrors (evaluate {
+  passesVersionCheckAt = version: module: versioningErrors (evaluate {
     imports = [ module ];
     nix-bitcoin.configVersion = version;
   }) == [];
@@ -478,7 +480,7 @@ let
         { version = "0.1.4"; enable = false; }
         { version = "0.1.5"; enable = true; }
         { version = "0.1.6"; enable = true; }
-        { version = "0.2.0"; enable = true; }
+        { version = releasedVersion; enable = true; }
         { version = null; enable = true; }
       ];
       expected = [ false (!changes020Released) (!changes020Released) (!changes020Released) true true ];
@@ -511,25 +513,46 @@ let
       expected = true;
     };
     testConfigVersionAssertion = {
-      expr = map (version: !(passesVersionCheckAt version {}))
-        [ "0.1.6" "0.2.0" null ];
-      expected = [ changes020Released false false ];
+      # Exercise both release states even after version.nix advances.
+      expr = map (release: map (version: !(passesVersionCheckAt version {
+        nix-bitcoin.versioning.releasedVersion = release;
+      })) [ "0.1.6" "0.2.0" "0.2.1" null ]) [ "0.1.6" "0.2.0" ];
+      expected = [ [ false true true false ] [ true false true false ] ];
+    };
+    testFutureConfigVersionMessage = {
+      expr = let
+        messages = versioningErrors (evaluate {
+          nix-bitcoin = {
+            configVersion = "0.2.0";
+            versioning.releasedVersion = "0.1.6";
+          };
+        });
+      in map (phrase: lib.any (lib.hasInfix phrase) messages) [
+        ''nix-bitcoin.configVersion = "0.2.0" is newer than the latest finalized release (0.1.6).''
+        ''Set nix-bitcoin.configVersion = "0.1.6";''
+      ];
+      expected = [ true true ];
     };
     testUnreleasedMigrationWarnings = {
-      # Both 0.2.0 notices must remain visible after an early version bump (#282).
-      expr = map (version: let
-        warnings = (evaluate { nix-bitcoin.configVersion = version; }).warnings;
+      expr = map (release: map (version: let
+        warnings = (evaluate {
+          nix-bitcoin = {
+            configVersion = version;
+            versioning.releasedVersion = release;
+          };
+        }).warnings;
       in lib.all (phrase: lib.any (lib.hasInfix phrase) warnings) [
         "bitcoinix now uses only unstable nixpkgs"
         "checkReversePath from true"
-      ]) [ "0.1.6" "0.2.0" null ];
-      expected = [ (!changes020Released) (!changes020Released) false ];
+      ]) [ "0.1.6" "0.2.0" null ]) [ "0.1.6" "0.2.0" ];
+      expected = [ [ true true false ] [ false false false ] ];
     };
     testReleasedMigrationError = {
-      expr = let
-        messages = migrationErrors (evaluate {
+      expr = map (release: let
+        messages = versioningErrors (evaluate {
           nix-bitcoin = {
             configVersion = "0.1.5";
+            versioning.releasedVersion = release;
             setupSecrets = true;
             secretsSetupMethod = lib.mkForce "setup-secrets";
           };
@@ -537,9 +560,12 @@ let
       in {
         released = lib.any (lib.hasInfix "setup-secrets now fails") messages;
         upcoming = lib.any (lib.hasInfix "bitcoinix now uses only unstable nixpkgs") messages;
-        target = lib.any (lib.hasInfix ''set nix-bitcoin.configVersion = "${releasedVersion}";'') messages;
-      };
-      expected = { released = true; upcoming = changes020Released; target = true; };
+        target = lib.any (lib.hasInfix ''set nix-bitcoin.configVersion = "${release}";'') messages;
+      }) [ "0.1.6" "0.2.0" ];
+      expected = [
+        { released = true; upcoming = false; target = true; }
+        { released = true; upcoming = true; target = true; }
+      ];
     };
     testUnstableDefaultNotices = {
       expr = {
@@ -643,7 +669,7 @@ let
       expr = map (value: let
         config = evaluate {
           services.bitcoind.regtest = value;
-          nix-bitcoin.configVersion = "0.2.0";
+          nix-bitcoin.configVersion = releasedVersion;
         };
       in {
         inherit (config.services.bitcoind) network;
@@ -901,7 +927,7 @@ let
         { version = "0.1.6"; enable = true; flags = [ "--lnddir" "/custom/lnd" "--tlscert" "/custom/cert" "--macaroon" "/custom/macaroon" ]; }
         { version = "0.1.6"; enable = true; flags = [ "--lnddir=/custom/lnd" "--tlscert=/custom/cert" "--macaroon=/custom/macaroon" ]; }
         { version = "0.1.6"; enable = true; flags = [ "--lnddir=/custom/lnd" "--tlscert" "/custom/cert" "--macaroon=/custom/macaroon" ]; }
-        { version = "0.2.0"; enable = true; flags = [ "--lnddir=/custom/lnd" ]; }
+        { version = releasedVersion; enable = true; flags = [ "--lnddir=/custom/lnd" ]; }
       ];
       expected = [ false false true true true false false true true true changes020Released ];
     };
@@ -951,7 +977,7 @@ let
         { version = "0.1.6"; network = "regtest"; enable = true; }
         { version = "0.1.6"; network = "mainnet"; enable = true; }
         { version = "0.1.6"; network = "regtest"; enable = false; }
-        { version = "0.2.0"; network = "regtest"; enable = true; }
+        { version = releasedVersion; network = "regtest"; enable = true; }
       ];
       expected = [ false true true changes020Released ];
     };
@@ -992,7 +1018,7 @@ let
         { version = "0.1.4"; settings = {}; }
         { version = "0.1.5"; settings = password; }
         { version = "0.1.6"; settings = password; }
-        { version = "0.2.0"; settings = password; }
+        { version = releasedVersion; settings = password; }
         { version = null; settings = password; }
       ];
       expected = [ false (!changes020Released) (!changes020Released) (!changes020Released) true true ];
@@ -1151,11 +1177,11 @@ let
     testVersioningOnionAccessUndefinedUser = {
       expr = {
         undefined = hasAccessUsersNotice onionAccessExternalUser;
-        current = passesVersionCheckAt "0.2.0" onionAccessExternalUser;
+        current = passesVersionCheckAt releasedVersion onionAccessExternalUser;
         currentFails = map (lib.hasInfix "external-user")
           (failedAssertions (evaluate {
             imports = [ onionAccessExternalUser ];
-            nix-bitcoin.configVersion = "0.2.0";
+            nix-bitcoin.configVersion = releasedVersion;
           }));
         defined = hasAccessUsersNotice onionAccessLoginName;
         disabled = hasAccessUsersNotice {

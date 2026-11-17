@@ -80,7 +80,9 @@ defaults, module integration, and rejected configurations. Failures report the
 case name, expected value, and actual value. These fixtures are independent of
 VM scenarios. The REST allowlist cases also run here, rather than waiting for
 a VM to report evaluation failures. Migration cases check released errors,
-unreleased warnings after an early version bump, and the null opt-out.
+unreleased warnings, rejection of future config versions, and the null opt-out.
+They override the internal released-version option to test both sides of release
+finalization even after `version.nix` advances.
 
 [runner-tests.py](./runner-tests.py) loads the assembled suite and checks test
 selection, ordering, registration errors, and interactive dispatch using a

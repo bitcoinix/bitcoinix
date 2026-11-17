@@ -218,8 +218,12 @@ migration list is final, merge a release-preparation commit that updates:
 - The bitcoinix input pins in those three flakes to `v<version>`.
 - The upgrading guide's final `configVersion` instruction.
 
-The example tests override these pins with the checkout, so the new tag need not
-exist yet. Advancing `version.nix` turns that release's migration warnings into
+The release helper requires `HEAD` to equal `origin/master`, so this preparation
+commit must be on master before tagging. Until the tag is pushed, the example
+flakes on master reference a tag that cannot yet be fetched. The example tests
+override these pins with the checkout and can still run during this interval.
+
+Advancing `version.nix` turns that release's migration warnings into
 blocking errors. Keep each example's value as an explicit one-line assignment;
 importing `version.nix` would acknowledge migrations automatically in user
 configurations. Run

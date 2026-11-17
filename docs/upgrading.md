@@ -8,7 +8,9 @@ Options of removed services and other service assertions can fail evaluation
 regardless of the config version.
 
 Keep `nix-bitcoin.configVersion` set to the released version whose migrations you
-have completed. If it is unset, migration errors and warnings are disabled.
+have completed. Values newer than the latest finalized release in `version.nix`
+are rejected; use the released version named in the error until release finalization.
+If the option is unset, migration errors and warnings are disabled.
 Keep this value explicit: importing the project's `version.nix` would automatically
 acknowledge migrations on each release.
 
@@ -17,9 +19,11 @@ newer than your config version, starting with the oldest. Then set
 `nix-bitcoin.configVersion` to the version named in the error message.
 
 On `master`, review unreleased migration warnings before deploying and keep
-`configVersion` at the latest release. These warnings remain visible even after
-an early version bump. Once the release is finalized, its notices become errors
-until you acknowledge them by updating `configVersion` after migrating.
+`configVersion` at the latest release. These warnings do not block deployment or
+require acknowledgement: deployment can proceed even before a required migration
+is completed. They cannot be acknowledged individually and can repeat after
+migration while their conditions still apply. Once the release is finalized, its
+notices become errors until you acknowledge them by updating `configVersion` after migrating.
 
 ## Updating bitcoinix
 Review the [release notes](./release-notes.md) for changes to packages and flake attributes.
@@ -34,11 +38,6 @@ It refuses to switch to a release older than the one currently pinned. To downgr
 run `fetch-release.sh` with `releaseVersion=<version>` and write its output to `nix-bitcoin-release.nix`.
 
 ## Upgrading to config version 0.2.0
-
-#### Migration warnings on master
-
-Unreleased migrations now warn instead of blocking evaluation. Warnings can repeat
-after a migration until the release is finalized and acknowledged.
 
 #### Unstable NixOS base
 
