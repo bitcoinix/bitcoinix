@@ -752,6 +752,17 @@ let
       expected = [ ":9736" ":9735" ":9736" "" ];
     };
     testNetnsRESTAllowed = { expr = failedAssertions netns; expected = []; };
+    testUnbeholdenWalletAllowedClients = {
+      expr = map (client: let
+        clients = (evaluate {
+          services.unbeholden-wallet = { enable = true; allowedClients = [ client ]; };
+        }).services.unbeholden-wallet.allowedClients;
+      in (builtins.tryEval (builtins.deepSeq clients clients)).success) [
+        "192.0.2.1" "192.0.2.0/24" "2001:db8::1" "2001:db8::/32"
+        "wallet.example.com" "192.0.2.256" "192.0.2.0/33" "2001:db8::/129" "any" ""
+      ];
+      expected = [ true true true true false false false false false false ];
+    };
     testUnbeholdenWalletRejectsAllowedClientsWithNetns = {
       expr = map (lib.hasInfix "allowedClients` is not supported with netns-isolation")
         (failedAssertions (evaluate {

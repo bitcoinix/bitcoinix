@@ -41,7 +41,11 @@ let
       '';
     };
     allowedClients = mkOption {
-      type = with types; listOf str;
+      type = with types; let
+        octet = "(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])";
+        ipv4 = "${octet}(\\.${octet}){3}(/(3[0-2]|[12]?[0-9]))?";
+        ipv6 = "[0-9a-fA-F.]*:[0-9a-fA-F:.]*(/(12[0-8]|1[01][0-9]|[1-9]?[0-9]))?";
+      in listOf (strMatching "${ipv4}|${ipv6}");
       default = [];
       example = [ "192.0.2.10" "192.0.2.0/24" ];
       description = ''
