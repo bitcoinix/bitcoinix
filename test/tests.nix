@@ -189,7 +189,7 @@ let
 
       tests.unbeholden-lnurl = cfg.unbeholden-lnurl.enable;
       test.data.unbeholden-lnurl = {
-        inherit (cfg.unbeholden-lnurl) port backend;
+        inherit (cfg.unbeholden-lnurl) port backend dataDir;
       };
 
       tests.unbeholden-wallet = cfg.unbeholden-wallet.enable;

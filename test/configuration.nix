@@ -551,17 +551,13 @@ let
     (lib.nameValuePair "testLnurl-${backend}-netns" {
       expr = let
         isolated = lnurlConfig backend { nix-bitcoin.netns-isolation.enable = true; };
-        ns = isolated.nix-bitcoin.netns-isolation;
       in {
-        address = isolated.services.unbeholden-lnurl.address;
-        backendConnected = builtins.elem
-          (if backend == "lnd" then "lnd" else "clightning")
-          ns.services.unbeholden-lnurl.connections;
+        inherit (isolated.services.unbeholden-lnurl) address;
+        inherit (isolated.nix-bitcoin.netns-isolation.services.unbeholden-lnurl) connections;
       };
       expected = {
-        address = (lnurlConfig backend { nix-bitcoin.netns-isolation.enable = true; })
-          .nix-bitcoin.netns-isolation.netns.unbeholden-lnurl.address;
-        backendConnected = true;
+        address = "169.254.1.34";
+        connections = [ (if backend == "lnd" then "lnd" else "clightning") "nginx" ];
       };
     })
   ]) [ "lnd" "cln" ]) // {
@@ -583,7 +579,7 @@ let
       expected = { enforce = true; proxy = "socks5://127.0.0.1:9050"; };
     };
     testLnurlRequiresFeature = {
-      expr = builtins.elem "unbeholden-lnurl requires addresses, withdrawals or notifications."
+      expr = builtins.elem "services.unbeholden-lnurl requires addresses, withdraw vouchers, notifications or nostr in its settings."
         (failedAssertions (evaluate { services.unbeholden-lnurl.enable = true; }));
       expected = true;
     };

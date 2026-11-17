@@ -441,7 +441,20 @@ def test_unbeholden_lnurl():
     assert verified == {
         "status": "OK", "settled": False, "preimage": None, "pr": invoice["pr"]
     }, verified
+    count_runes = "lightning-cli showrunes | jq '.runes | length'"
+    if data["backend"] == "cln":
+        runes = succeed(count_runes)
     succeed("systemctl restart unbeholden-lnurl")
     machine.wait_for_unit("unbeholden-lnurl")
+    if data["backend"] == "cln":
+        assert succeed(count_runes) == runes, "A restart created another rune"
+        # A rune with other permissions is revoked
+        rune_file = f"{data['dataDir']}/cln-rune"
+        old_rune = succeed(f"cat {rune_file}")
+        succeed(f"echo outdated > {rune_file}.restrictions", "systemctl restart unbeholden-lnurl")
+        machine.wait_for_unit("unbeholden-lnurl")
+        assert succeed(f"cat {rune_file}") != old_rune, "The rune was not replaced"
+        old = succeed_json(f"lightning-cli showrunes {shlex.quote(old_rune.strip())}")
+        assert old["runes"][0].get("blacklisted"), old
     machine.wait_until_succeeds(f"curl -fsS {url}/health")
     assert succeed_json(f"curl -fsS {url}{shlex.quote(verify_path)}") == verified

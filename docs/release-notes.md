@@ -14,6 +14,13 @@ applicable. A `configVersion` newer than the latest finalized release is rejecte
 Finalizing the release makes its notices blocking errors until acknowledged. See
 the [upgrading guide](upgrading.md) for the version policy.
 
+#### Unbeholden LNURL service
+
+[Unbeholden LNURL](services.md#receive-payments-with-unbeholden-lnurl) v0.3.0 now has
+a native package and service for LND and Core Lightning. It supports Lightning
+Addresses, withdrawal vouchers, ntfy notifications and Nostr zaps, with restricted
+node credentials and persistent keys.
+
 #### Unstable NixOS base
 
 bitcoinix now uses a single `nixpkgs` input tracking `nixos-unstable` for its system
@@ -64,13 +71,6 @@ under a synthetic mainnet directory. Users selecting custom credentials with
 `--lnddir` should follow the [0.2.0 upgrade notes](upgrading.md#upgrading-to-config-version-020).
 
 ## 0.1.6
-
-#### Unbeholden LNURL service
-
-[Unbeholden LNURL](services.md#receive-payments-with-unbeholden-lnurl) v0.3.0 now has
-a native package and service for LND and Core Lightning. It supports Lightning
-Addresses, withdrawal vouchers, ntfy notifications and Nostr zaps, with restricted
-node credentials and persistent keys.
 
 #### Tor enforcement allows only local addresses
 

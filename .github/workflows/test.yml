@@ -87,6 +87,8 @@ jobs:
           - setup-secrets
           - unbeholden-wallet-electrs
           - unbeholden-wallet-electrs-netns
+          - unbeholden-lnurl-lnd
+          - unbeholden-lnurl-cln-netns
           - i2p
           - i2pLocal
     needs: build_test_drivers

@@ -95,6 +95,10 @@
     "channel": "unstable",
     "version": "0.8.7"
   },
+  "unbeholden-lnurl": {
+    "channel": "local",
+    "version": "0.3.0"
+  },
   "unbeholden-wallet": {
     "channel": "local",
     "version": "0.4.0"

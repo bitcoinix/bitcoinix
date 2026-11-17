@@ -247,10 +247,17 @@ Onion domains can use HTTP through `nix-bitcoin.onionServices.unbeholden-lnurl.e
 
 `settings.withdraw` defines vouchers, `settings.notifications.ntfy` enables payment
 notifications, and `settings.nostr = {};` enables zap receipts. Amounts are in
-millisatoshis. Store an ntfy token in a runtime file and set
-`settings.notifications.ntfy.token_file` to its path. The module generates persistent
-verification, voucher and Nostr keys through Bitcoinix secrets. Keep secrets out of
-Nix expressions and the Nix store.
+millisatoshis. `settings` takes the keys of the
+[example config](https://github.com/unbeholdendev/unbeholden-lnurl/blob/master/config.example.yaml),
+except `listen`, `state_dir` and the node connection, which the module sets.
+
+The config is world-readable in the Nix store. Store an ntfy token in a runtime file
+and set `settings.notifications.ntfy.token_file` to its path. On a public ntfy server,
+anyone who knows the topic can read the notifications, so choose a topic that is hard
+to guess or protect it with a token. The module generates persistent verification,
+voucher and Nostr keys through Bitcoinix secrets.
+
+To print the unclaimed vouchers with their URLs, run `sudo unbeholden-lnurl-vouchers`.
 
 Keep `/var/lib/unbeholden-lnurl` and the generated secrets across upgrades. This
 preserves voucher claims, settlement cursors and zap receipts. Changing a voucher

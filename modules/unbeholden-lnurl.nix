@@ -1,177 +1,278 @@
 { config, lib, pkgs, ... }:
+
 with lib;
 let
+  options.services.unbeholden-lnurl = {
+    enable = mkEnableOption "Unbeholden LNURL, a Lightning Address server";
+    backend = mkOption {
+      type = types.enum [ "lnd" "cln" ];
+      default = "lnd";
+      description = "The local Lightning node that creates invoices and pays vouchers.";
+    };
+    address = mkOption {
+      type = types.str;
+      default = "127.0.0.1";
+      description = "HTTP server address.";
+    };
+    port = mkOption {
+      type = types.port;
+      default = 8081;
+      description = "HTTP server port.";
+    };
+    dataDir = mkOption {
+      type = types.path;
+      default = "/var/lib/unbeholden-lnurl";
+      description = "The data directory, holding settlement cursors, voucher claims and zap receipts.";
+    };
+    user = mkOption {
+      type = types.str;
+      default = "unbeholden-lnurl";
+      description = "The user as which to run Unbeholden LNURL.";
+    };
+    group = mkOption {
+      type = types.str;
+      default = cfg.user;
+      defaultText = "config.services.unbeholden-lnurl.user";
+      description = "The group as which to run Unbeholden LNURL.";
+    };
+    package = mkOption {
+      type = types.package;
+      default = config.nix-bitcoin.pkgs.unbeholden-lnurl;
+      defaultText = "config.nix-bitcoin.pkgs.unbeholden-lnurl";
+      description = "The package providing Unbeholden LNURL.";
+    };
+    settings = mkOption {
+      type = types.submodule {
+        freeformType = yaml.type;
+        options = {
+          trusted_proxies = mkOption {
+            type = with types; listOf str;
+            default = [];
+            description = "IP addresses or CIDRs of reverse proxies whose `X-Forwarded-*` headers are trusted.";
+          };
+          outbound_proxy = mkOption {
+            type = with types; nullOr str;
+            default = null;
+            description = "SOCKS5 proxy for ntfy notifications and Nostr publishing.";
+          };
+          verify_key_file = mkOption {
+            type = types.str;
+            default = "${secretsDir}/unbeholden-lnurl-verify";
+            defaultText = "\${config.nix-bitcoin.secretsDir}/unbeholden-lnurl-verify";
+            description = "File with the key for verify URLs. Changing it invalidates old verify URLs.";
+          };
+          withdraw_secret_file = mkOption {
+            type = types.str;
+            default = "${secretsDir}/unbeholden-lnurl-withdraw";
+            defaultText = "\${config.nix-bitcoin.secretsDir}/unbeholden-lnurl-withdraw";
+            description = "File with the voucher secret. Changing it changes every voucher URL.";
+          };
+          addresses = mkOption {
+            type = types.attrsOf (types.submodule {
+              freeformType = yaml.type;
+              options = {
+                min_sendable = mkOption {
+                  type = types.ints.positive;
+                  description = "Minimum amount in millisatoshis.";
+                };
+                max_sendable = mkOption {
+                  type = types.ints.positive;
+                  description = "Maximum amount in millisatoshis.";
+                };
+              };
+            });
+            default = {};
+            description = "Lightning Addresses by user name, or `*` for any name.";
+          };
+          withdraw = mkOption {
+            type = with types; listOf (attrsOf yaml.type);
+            default = [];
+            description = "Withdrawal vouchers.";
+          };
+          notifications.ntfy = mkOption {
+            type = with types; nullOr (attrsOf yaml.type);
+            default = null;
+            description = ''
+              ntfy settlement notifications. Set `token_file` instead of `token`, so that
+              the token stays out of the Nix store.
+            '';
+          };
+          nostr = mkOption {
+            type = types.nullOr (types.submodule {
+              freeformType = yaml.type;
+              options.private_key_file = mkOption {
+                type = types.str;
+                default = "${secretsDir}/unbeholden-lnurl-nostr";
+                defaultText = "\${config.nix-bitcoin.secretsDir}/unbeholden-lnurl-nostr";
+                description = "File with the Nostr private key.";
+              };
+            });
+            default = null;
+            description = "Nostr zap receipts. Set to `{}` to enable them.";
+          };
+        };
+      };
+      default = {};
+      description = ''
+        Unbeholden LNURL configuration. See the
+        [example config](https://github.com/unbeholdendev/unbeholden-lnurl/blob/master/config.example.yaml).
+        `listen`, `state_dir` and the node connection are set by this module.
+        The config is world-readable in the Nix store: put secrets in files.
+      '';
+    };
+    tor = nbLib.tor;
+  };
+
   cfg = config.services.unbeholden-lnurl;
   nbLib = config.nix-bitcoin.lib;
+  secretsDir = config.nix-bitcoin.secretsDir;
   lnd = config.services.lnd;
   cln = config.services.clightning;
-  rest = cln.plugins.clnrest;
-  isLnd = cfg.backend == "lnd";
-  withdraw = cfg.settings.withdraw != [];
-  subscribe = cfg.settings.notifications.ntfy != null || cfg.settings.nostr != null;
-  receiving = cfg.settings.addresses != {};
-  secretDir = config.nix-bitcoin.secretsDir;
-  opt = type: default: description: mkOption { inherit type default description; };
-  str = default: description: opt types.str default description;
-  field = type: description: mkOption { inherit type description; };
-  nullableString = description: opt (types.nullOr types.str) null description;
+  clnrest = cln.plugins.clnrest;
   yaml = pkgs.formats.yaml {};
-  clean = value:
-    if isAttrs value then mapAttrs (_: clean) (filterAttrs (_: v: v != null) value)
-    else if isList value then map clean value else value;
-  settings = clean cfg.settings // {
+
+  isLnd = cfg.backend == "lnd";
+  backendUnit = if isLnd then "lnd" else "clightning";
+  receiving = cfg.settings.addresses != {};
+  withdraw = cfg.settings.withdraw != [];
+  subscribing = cfg.settings.notifications.ntfy != null || cfg.settings.nostr != null;
+
+  runeFile = "${cfg.dataDir}/cln-rune";
+  listVouchers = pkgs.writers.writeBashBin "unbeholden-lnurl-vouchers" ''
+    exec ${pkgs.util-linux}/bin/runuser -u ${cfg.user} -- \
+      ${getExe cfg.package} -config ${configFile} -list-vouchers
+  '';
+  removeNulls = value:
+    if isAttrs value then mapAttrs (_: removeNulls) (filterAttrs (_: v: v != null) value)
+    else if isList value then map removeNulls value
+    else value;
+  configFile = yaml.generate "unbeholden-lnurl.yaml" (removeNulls cfg.settings // {
     listen = nbLib.addressWithPort cfg.address cfg.port;
     state_dir = cfg.dataDir;
-  } // optionalAttrs isLnd {
+  } // (if isLnd then {
     lnd = {
       host = nbLib.addressWithPort lnd.rpcAddress lnd.rpcPort;
       tls_cert = lnd.certPath;
       macaroon = "/run/lnd/unbeholden-lnurl.macaroon";
     };
-  } // optionalAttrs (!isLnd) {
+  } else {
     cln = {
-      url = "https://${nbLib.addressWithPort rest.address rest.port}";
-      rune_file = "/run/unbeholden-lnurl/rune";
+      url = "https://${nbLib.addressWithPort clnrest.address clnrest.port}";
+      rune_file = runeFile;
       ca_cert = "/run/unbeholden-lnurl/ca.pem";
     };
-  };
-  configFile = yaml.generate "unbeholden-lnurl.yaml" settings;
-  methods = optional receiving "invoice"
-    ++ optional (receiving || subscribe) "listinvoices"
-    ++ optional subscribe "waitanyinvoice"
+  }));
+
+  lndPermissions = optional receiving "invoices:write"
+    ++ optional (receiving || subscribing) "invoices:read"
+    ++ optionals withdraw [ "offchain:write" "info:read" ];
+  clnMethods = optional receiving "invoice"
+    ++ optional (receiving || subscribing) "listinvoices"
+    ++ optional subscribing "waitanyinvoice"
     ++ optionals withdraw [ "pay" "listpays" "getinfo" ];
-  restrictions = builtins.toJSON [ (map (method: "method=" + method) methods) ];
+  runeRestrictions = builtins.toJSON [ (map (method: "method=${method}") clnMethods) ];
+
+  # Reuse the rune while its restrictions stay the same. Otherwise revoke it, so
+  # that no rune with the old permissions remains valid.
+  setupCln = nbLib.rootScript "unbeholden-lnurl-setup-cln" ''
+    cli() {
+      ${pkgs.util-linux}/bin/runuser -u ${cln.user} -- ${cln.cli}/bin/lightning-cli "$@"
+    }
+    jq=${pkgs.jq}/bin/jq
+    restrictions=${escapeShellArg runeRestrictions}
+    umask 077
+
+    if [[ -s ${runeFile} && $(< ${runeFile}.restrictions) != "$restrictions" ]]; then
+      id=$(cli showrunes "$(< ${runeFile})" | $jq -er '.runes[0].unique_id')
+      cli blacklistrune "$id" "$id" > /dev/null
+      rm ${runeFile}
+    fi
+    if [[ ! -s ${runeFile} ]]; then
+      cli createrune restrictions="$restrictions" | $jq -er .rune > ${runeFile}.tmp
+      printf '%s' "$restrictions" > ${runeFile}.restrictions
+      chown ${cfg.user}:${cfg.group} ${runeFile}.tmp ${runeFile}.restrictions
+      mv -T ${runeFile}.tmp ${runeFile}
+    fi
+
+    certsDir=$(cli listconfigs clnrest-certs | $jq -er '.configs["clnrest-certs"].value_str // ""')
+    case $certsDir in
+      "") certsDir=${cln.networkDir} ;;
+      /*) ;;
+      *) certsDir=${cln.networkDir}/$certsDir ;;
+    esac
+    install -m 400 -o ${cfg.user} -g ${cfg.group} "$certsDir/ca.pem" /run/unbeholden-lnurl/ca.pem
+  '';
 in {
-  options.services.unbeholden-lnurl = {
-    enable = mkEnableOption "Unbeholden LNURL";
-    backend = opt (types.enum [ "lnd" "cln" ]) "lnd" "Local Lightning backend.";
-    package = mkOption {
-      type = types.package;
-      default = config.nix-bitcoin.pkgs.unbeholden-lnurl;
-      defaultText = "config.nix-bitcoin.pkgs.unbeholden-lnurl";
-      description = "Unbeholden LNURL package.";
-    };
-    address = str "127.0.0.1" "HTTP listen address.";
-    port = opt types.port 8081 "HTTP listen port.";
-    dataDir = opt types.path "/var/lib/unbeholden-lnurl" "Persistent settlement cursors, vouchers and zap receipts.";
-    user = str "unbeholden-lnurl" "Service user.";
-    group = str cfg.user "Service group.";
-    tor = nbLib.tor;
-    settings = {
-      trusted_proxies = opt (types.listOf types.str) [] "Trusted reverse proxy IP addresses or CIDRs.";
-      outbound_proxy = nullableString "SOCKS5 proxy for notifications and Nostr publishing.";
-      verify_key_file = str "${secretDir}/unbeholden-lnurl-verify" "Runtime file containing the persistent verification key.";
-      withdraw_secret_file = str "${secretDir}/unbeholden-lnurl-withdraw" "Runtime file containing the persistent voucher secret.";
-      rate_limit = {
-        per_minute = opt types.ints.positive 60 "Requests per minute.";
-        burst = opt types.ints.positive 30 "Request burst limit.";
-      };
-      addresses = opt (types.attrsOf (types.submodule {
-        options = {
-          description = field types.str "Payment description.";
-          long_description = nullableString "Long payment description.";
-          image_file = nullableString "Runtime path to a PNG or JPEG.";
-          success_message = nullableString "Message after payment.";
-          min_sendable = field types.ints.positive "Minimum millisatoshis.";
-          max_sendable = field types.ints.positive "Maximum millisatoshis.";
-        };
-      })) {} "Lightning addresses, indexed by user name or wildcard.";
-      withdraw = opt (types.listOf (types.submodule {
-        options = {
-          id = nullableString "Voucher ID.";
-          prefix = nullableString "Batch voucher ID prefix.";
-          count = opt (types.nullOr types.ints.positive) null "Batch size.";
-          domain = field types.str "Voucher domain.";
-          description = field types.str "Voucher description.";
-          amount = field types.ints.positive "Voucher millisatoshis.";
-        };
-      })) [] "Withdrawal vouchers.";
-      notifications.ntfy = opt (types.nullOr (types.submodule {
-        options = {
-          url = field types.str "ntfy server URL.";
-          topic = field types.str "ntfy topic.";
-          token_file = nullableString "Runtime path to the ntfy token.";
-        };
-      })) null "Settlement notifications.";
-      nostr = opt (types.nullOr (types.submodule {
-        options.private_key_file = str "${secretDir}/unbeholden-lnurl-nostr" "Runtime path to the persistent Nostr private key.";
-      })) null "Enable Nostr zap receipts.";
-    };
-  };
+  inherit options;
+
   config = mkIf cfg.enable {
     assertions = [ {
-      assertion = receiving || withdraw || subscribe;
-      message = "unbeholden-lnurl requires addresses, withdrawals or notifications.";
+      assertion = receiving || withdraw || subscribing;
+      message = "services.unbeholden-lnurl requires addresses, withdraw vouchers, notifications or nostr in its settings.";
     } ];
+
     services.lnd = mkIf isLnd {
       enable = true;
       macaroons.unbeholden-lnurl = {
-        user = cfg.user;
-        permissions = concatStringsSep "," (map (p: let parts = splitString ":" p; in builtins.toJSON { entity = head parts; action = last parts; }) (optional receiving "invoices:write"
-          ++ optional (receiving || subscribe) "invoices:read"
-          ++ optionals withdraw [ "offchain:write" "info:read" ]));
+        inherit (cfg) user;
+        permissions = concatMapStringsSep "," (permission:
+          let parts = splitString ":" permission;
+          in builtins.toJSON { entity = head parts; action = last parts; }
+        ) lndPermissions;
       };
     };
     services.clightning = mkIf (!isLnd) {
       enable = true;
       plugins.clnrest.enable = true;
     };
-    services.tor = mkIf cfg.tor.proxy { enable = true; client.enable = true; };
+
     services.unbeholden-lnurl.settings.outbound_proxy = mkIf cfg.tor.proxy
       (mkDefault "socks5://${config.nix-bitcoin.torClientAddressWithPort}");
-    users.users.${cfg.user} = { isSystemUser = true; group = cfg.group; };
-    users.groups.${cfg.group} = {};
+
+    environment.systemPackages = optional withdraw listVouchers;
+
+    systemd.tmpfiles.rules = [
+      "d '${cfg.dataDir}' 0700 ${cfg.user} ${cfg.group} - -"
+    ];
+
     systemd.services.unbeholden-lnurl = {
       wantedBy = [ "multi-user.target" ];
-      requires = [ "${if isLnd then "lnd" else "clightning"}.service" ];
-      after = [ "${if isLnd then "lnd" else "clightning"}.service" "nix-bitcoin-secrets.target" ];
+      requires = [ "${backendUnit}.service" ];
+      after = [ "${backendUnit}.service" "nix-bitcoin-secrets.target" ];
       serviceConfig = nbLib.defaultHardening // {
+        ExecStartPre = optional (!isLnd) setupCln;
+        ExecStart = "${getExe cfg.package} -config ${configFile}";
         User = cfg.user;
         Group = cfg.group;
-        StateDirectory = "unbeholden-lnurl";
-        StateDirectoryMode = "0700";
         RuntimeDirectory = "unbeholden-lnurl";
         RuntimeDirectoryMode = "0700";
         WorkingDirectory = cfg.dataDir;
         ReadWritePaths = [ cfg.dataDir ];
-        ExecStart = "${getExe cfg.package} -config ${configFile}";
         Restart = "on-failure";
         RestartSec = "10s";
+        # The server waits up to 2m10s for open requests when stopping
         TimeoutStopSec = "150s";
-        ExecStartPre = optional (!isLnd) (nbLib.rootScript "unbeholden-lnurl-rune" ''
-          cli() {
-            ${pkgs.util-linux}/bin/runuser -u ${escapeShellArg cln.user} -- ${cln.cli}/bin/lightning-cli "$@"
-          }
-          umask 077
-          tmp=$(mktemp -d)
-          trap 'rm -rf "$tmp"' EXIT
-          cli createrune restrictions=${escapeShellArg restrictions} | ${pkgs.jq}/bin/jq -er .rune > "$tmp/rune"
-          certsDir=$(cli listconfigs clnrest-certs | ${pkgs.jq}/bin/jq -er '.configs["clnrest-certs"].value_str // ""')
-          case "$certsDir" in
-            "") certsDir=${escapeShellArg cln.networkDir} ;;
-            /*) ;;
-            *) certsDir=${escapeShellArg cln.networkDir}/$certsDir ;;
-          esac
-          install -m 400 -o ${escapeShellArg cfg.user} -g ${escapeShellArg cfg.group} "$tmp/rune" /run/unbeholden-lnurl/rune
-          install -m 400 -o ${escapeShellArg cfg.user} -g ${escapeShellArg cfg.group} "$certsDir/ca.pem" /run/unbeholden-lnurl/ca.pem
-        '');
       } // nbLib.allowedIPAddresses cfg.tor.enforce;
     };
-    systemd.tmpfiles.rules = [ "d '${cfg.dataDir}' 0700 ${cfg.user} ${cfg.group} - -" ];
+
+    users.users.${cfg.user} = {
+      isSystemUser = true;
+      group = cfg.group;
+    };
+    users.groups.${cfg.group} = {};
+
     nix-bitcoin.secrets = {
       unbeholden-lnurl-verify.user = cfg.user;
       unbeholden-lnurl-withdraw.user = cfg.user;
       unbeholden-lnurl-nostr = mkIf (cfg.settings.nostr != null) { user = cfg.user; };
     };
-    nix-bitcoin.generateSecretsCmds.unbeholden-lnurl = ''
-      ${concatMapStrings (name: ''
-        if isAbsent ${name}; then
-          writeSecret ${name} ${pkgs.openssl}/bin/openssl rand -hex 32
-        else
-          checkKey ${name} "LNURL identities and voucher URLs"
-        fi
-      '') ([ "unbeholden-lnurl-verify" "unbeholden-lnurl-withdraw" ]
-        ++ optional (cfg.settings.nostr != null) "unbeholden-lnurl-nostr")}
-    '';
+    nix-bitcoin.generateSecretsCmds.unbeholden-lnurl = concatMapStrings (name: ''
+      if isAbsent ${name}; then
+        writeSecret ${name} ${pkgs.openssl}/bin/openssl rand -hex 32
+      else
+        checkKey ${name} "LNURL identities and voucher URLs"
+      fi
+    '') ([ "unbeholden-lnurl-verify" "unbeholden-lnurl-withdraw" ]
+      ++ optional (cfg.settings.nostr != null) "unbeholden-lnurl-nostr");
   };
 }
