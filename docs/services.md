@@ -246,13 +246,26 @@ over https. To use the wallet from another device without a tunnel, put an https
 proxy in front of it that passes WebSocket upgrades and the `Host` header through, and add
 its name to `services.unbeholden-wallet.allowedHosts`.
 
+The service only accepts connections from localhost. For a proxy on another host, listen on
+all addresses, allow the proxy's address and open the port:
+
+```nix
+services.unbeholden-wallet = {
+  address = "0.0.0.0";
+  allowedClients = [ "192.0.2.10" ];
+  allowedHosts = [ "wallet.example.com" ];
+};
+networking.firewall.allowedTCPPorts = [ 60846 ];
+```
+
 The service has no authentication. Its `Host` and `Origin` checks stop websites, not other
 clients, so anyone who can reach the proxy can use the Electrum connection and write to the
 service's journal. Keep the proxy on a trusted network or give it its own authentication.
 
-With `netns-isolation`, nginx runs in its own namespace, which drops connections from your
-LAN, so an nginx proxy doesn't serve other devices. Run the proxy in the host network
-namespace instead, and point it at the wallet's `local_address`.
+With `netns-isolation`, nginx and the wallet run in their own namespaces, which drop
+connections from your LAN, so neither an nginx proxy nor `allowedClients` serves other
+devices. Run the proxy in the host network namespace instead, and point it at the wallet's
+`local_address`.
 
 ### Use ZEUS (mobile Lightning wallet) via Tor
 1. Install [ZEUS](https://zeusln.app)

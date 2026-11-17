@@ -134,7 +134,8 @@ def test_tor_enforce():
         deny = show(unit, "IPAddressDeny")
         assert set(deny.split()) == {"0.0.0.0/0", "::/0"}, f"{unit} IPAddressDeny={deny!r}"
         allow = show(unit, "IPAddressAllow")
-        assert set(allow.split()) == set(data["allow"]), f"{unit} IPAddressAllow={allow!r}"
+        expected_allow = set(data["allow"]) | set(data["extraAllow"].get(unit, []))
+        assert set(allow.split()) == expected_allow, f"{unit} IPAddressAllow={allow!r}"
         inaccessible = show(unit, "InaccessiblePaths")
         for m in masks:
             assert m in inaccessible.split(), f"{unit} doesn't mask {m}: {inaccessible!r}"

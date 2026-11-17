@@ -752,6 +752,14 @@ let
       expected = [ ":9736" ":9735" ":9736" "" ];
     };
     testNetnsRESTAllowed = { expr = failedAssertions netns; expected = []; };
+    testUnbeholdenWalletRejectsAllowedClientsWithNetns = {
+      expr = map (lib.hasInfix "allowedClients` is not supported with netns-isolation")
+        (failedAssertions (evaluate {
+          services.unbeholden-wallet = { enable = true; allowedClients = [ "192.0.2.1" ]; };
+          nix-bitcoin.netns-isolation.enable = true;
+        }));
+      expected = [ true ];
+    };
     testNetnsRejectsNftables = {
       expr = map (lib.hasInfix "uses the iptables backend") (failedAssertions netnsNftables);
       expected = [ true ];

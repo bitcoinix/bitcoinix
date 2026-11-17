@@ -54,6 +54,13 @@ Charge-LND reads its certificate and macaroon directly, without staging them
 under a synthetic mainnet directory. Users selecting custom credentials with
 `--lnddir` should follow the [0.2.0 upgrade notes](upgrading.md#upgrading-to-config-version-020).
 
+#### Unbeholden Wallet behind a remote proxy
+
+Unbeholden Wallet only accepted connections from localhost, so `address = "0.0.0.0"`
+alone didn't let a reverse proxy on another host reach it. List the proxy's address in
+the new `services.unbeholden-wallet.allowedClients` option, see
+[Access from another device](services.md#access-from-another-device).
+
 ## 0.1.6
 
 #### Tor enforcement allows only local addresses
