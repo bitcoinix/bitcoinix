@@ -138,6 +138,8 @@ def test_clnrest_admin_rune():
         succeed("systemctl stop clightning")
         if contents is not None:
             succeed(f"printf %s {shlex.quote(contents)} > {rune_file}")
+        # The preceding tests use up clightning's start limit
+        succeed("systemctl reset-failed clightning")
         # Returns after `postStart`, which creates the rune
         succeed("systemctl start clightning")
         rune = succeed(f"cat {rune_file}").rstrip("\n")
