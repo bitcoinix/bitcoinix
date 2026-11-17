@@ -322,8 +322,6 @@ in {
       };
     };
 
-    services.unbeholden-lnurl.address = netns.unbeholden-lnurl.address;
-
     services.bitcoind = let
       allowip = [
         bridgeIp # Every process in the host netns, e.g. the operator user
@@ -356,6 +354,8 @@ in {
 
     services.mempool.address = netns.mempool.address;
     services.mempool.frontend.address = netns.nginx.address;
+
+    services.unbeholden-lnurl.address = netns.unbeholden-lnurl.address;
 
     services.unbeholden-wallet.address = netns.unbeholden-wallet.address;
   }

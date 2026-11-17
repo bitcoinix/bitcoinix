@@ -248,7 +248,7 @@ Onion domains can use HTTP through `nix-bitcoin.onionServices.unbeholden-lnurl.e
 `settings.withdraw` defines vouchers, `settings.notifications.ntfy` enables payment
 notifications, and `settings.nostr = {};` enables zap receipts. Amounts are in
 millisatoshis. `settings` takes the keys of the
-[example config](https://github.com/unbeholdendev/unbeholden-lnurl/blob/master/config.example.yaml),
+[example config](https://github.com/unbeholdendev/unbeholden-lnurl/blob/main/config.example.yaml),
 except `listen`, `state_dir` and the node connection, which the module sets.
 
 The config is world-readable in the Nix store. Store an ntfy token in a runtime file

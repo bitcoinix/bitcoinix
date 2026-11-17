@@ -4,13 +4,13 @@
 }:
 buildGo126Module rec {
   pname = "unbeholden-lnurl";
-  version = "0.3.0";
+  version = "0.4.0";
 
   src = fetchFromGitHub {
     owner = "unbeholdendev";
     repo = "unbeholden-lnurl";
-    rev = "0c36bd4630f49b7b3ac617c98e848f049d18f641";
-    hash = "sha256-a64BMqBLtJLgranDnAR959rv61imvwM9bcEiP2SWCmY=";
+    rev = "f89e6e4f766e1afb4fe197920bcc0856e82bf850";
+    hash = "sha256-kYQXhBUweOSuQbOgB2A8f+e1qI8gtp6E2C8LwJggFGE=";
   };
 
   vendorHash = "sha256-KpeTQidAXnCdpaMCRTIk5TubovDGqRhhtcW/RjBJr1Q=";

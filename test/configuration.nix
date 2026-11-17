@@ -583,6 +583,15 @@ let
         (failedAssertions (evaluate { services.unbeholden-lnurl.enable = true; }));
       expected = true;
     };
+    testLnurlInlineWithdrawSecret = {
+      expr = let config = lnurlConfig "lnd" {
+        services.unbeholden-lnurl.settings.withdraw_secret = "0123456789abcdef0123456789abcdef";
+      }; in {
+        file = config.services.unbeholden-lnurl.settings.withdraw_secret_file;
+        secret = config.nix-bitcoin.secrets ? unbeholden-lnurl-withdraw;
+      };
+      expected = { file = null; secret = false; };
+    };
     testLnurlDisabled = {
       expr = builtins.hasAttr "unbeholden-lnurl" modulesOnly.systemd.services;
       expected = false;

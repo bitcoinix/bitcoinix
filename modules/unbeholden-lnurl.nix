@@ -42,7 +42,7 @@ let
       description = "The package providing Unbeholden LNURL.";
     };
     settings = mkOption {
-      type = types.submodule {
+      type = types.submodule (settings: {
         freeformType = yaml.type;
         options = {
           trusted_proxies = mkOption {
@@ -62,9 +62,10 @@ let
             description = "File with the key for verify URLs. Changing it invalidates old verify URLs.";
           };
           withdraw_secret_file = mkOption {
-            type = types.str;
-            default = "${secretsDir}/unbeholden-lnurl-withdraw";
-            defaultText = "\${config.nix-bitcoin.secretsDir}/unbeholden-lnurl-withdraw";
+            type = with types; nullOr str;
+            default = if settings.config ? withdraw_secret then null
+              else "${secretsDir}/unbeholden-lnurl-withdraw";
+            defaultText = "\${config.nix-bitcoin.secretsDir}/unbeholden-lnurl-withdraw, or null if `withdraw_secret` is set";
             description = "File with the voucher secret. Changing it changes every voucher URL.";
           };
           addresses = mkOption {
@@ -111,11 +112,11 @@ let
             description = "Nostr zap receipts. Set to `{}` to enable them.";
           };
         };
-      };
+      });
       default = {};
       description = ''
         Unbeholden LNURL configuration. See the
-        [example config](https://github.com/unbeholdendev/unbeholden-lnurl/blob/master/config.example.yaml).
+        [example config](https://github.com/unbeholdendev/unbeholden-lnurl/blob/main/config.example.yaml).
         `listen`, `state_dir` and the node connection are set by this module.
         The config is world-readable in the Nix store: put secrets in files.
       '';
@@ -136,6 +137,7 @@ let
   receiving = cfg.settings.addresses != {};
   withdraw = cfg.settings.withdraw != [];
   subscribing = cfg.settings.notifications.ntfy != null || cfg.settings.nostr != null;
+  generateWithdrawSecret = cfg.settings.withdraw_secret_file != null;
 
   runeFile = "${cfg.dataDir}/cln-rune";
   listVouchers = pkgs.writers.writeBashBin "unbeholden-lnurl-vouchers" ''
@@ -263,7 +265,7 @@ in {
 
     nix-bitcoin.secrets = {
       unbeholden-lnurl-verify.user = cfg.user;
-      unbeholden-lnurl-withdraw.user = cfg.user;
+      unbeholden-lnurl-withdraw = mkIf generateWithdrawSecret { user = cfg.user; };
       unbeholden-lnurl-nostr = mkIf (cfg.settings.nostr != null) { user = cfg.user; };
     };
     nix-bitcoin.generateSecretsCmds.unbeholden-lnurl = concatMapStrings (name: ''
@@ -272,7 +274,8 @@ in {
       else
         checkKey ${name} "LNURL identities and voucher URLs"
       fi
-    '') ([ "unbeholden-lnurl-verify" "unbeholden-lnurl-withdraw" ]
+    '') ([ "unbeholden-lnurl-verify" ]
+      ++ optional generateWithdrawSecret "unbeholden-lnurl-withdraw"
       ++ optional (cfg.settings.nostr != null) "unbeholden-lnurl-nostr");
   };
 }
