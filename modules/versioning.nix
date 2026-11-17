@@ -119,7 +119,7 @@ in
       assertion = version == null || versionAtLeast releasedVersion version;
       message = ''
         nix-bitcoin.configVersion = "${toString version}" is newer than the latest finalized release (${releasedVersion}).
-        Set nix-bitcoin.configVersion = "${releasedVersion}"; until the release is finalized.
+        Set nix-bitcoin.configVersion = "${releasedVersion}" until the release is finalized.
       '';
     } {
       assertion = releasedChanges == [];

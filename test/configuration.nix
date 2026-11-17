@@ -529,7 +529,7 @@ let
         });
       in map (phrase: lib.any (lib.hasInfix phrase) messages) [
         ''nix-bitcoin.configVersion = "0.2.0" is newer than the latest finalized release (0.1.6).''
-        ''Set nix-bitcoin.configVersion = "0.1.6";''
+        ''Set nix-bitcoin.configVersion = "0.1.6" until the release is finalized.''
       ];
       expected = [ true true ];
     };
