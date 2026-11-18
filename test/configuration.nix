@@ -1460,6 +1460,15 @@ let
       expr = lib.elem "cln-rpc" btcpayserverCustomClightningGroup.users.users.btcpayserver.extraGroups;
       expected = true;
     };
+    # Before 0.2.0, group clightning could write the clightning data dir
+    testVersioningClightningDataDir = {
+      expr = map (hasNotice "Core Lightning data dir (`services.clightning.dataDir`) is no longer") [
+        { services.clightning.enable = true; }
+        { services.btcpayserver = { enable = true; lightningBackend = "clightning"; }; }
+        { services.lnd.enable = true; }
+      ];
+      expected = [ true true false ];
+    };
     testLndMacaroonRootKeyIds = let
       info = ''{"entity":"info","action":"read"}'';
       onchain = ''{"entity":"onchain","action":"read"}'';
