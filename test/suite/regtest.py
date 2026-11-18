@@ -86,6 +86,9 @@ def test_rbitcoin_mempool():
     api = f"http://{ip('nginx')}:60845/api/v1"
     num_blocks = test_data["num_blocks"]
 
+    # mempool authenticates with rbitcoin's cookie, so it gets no bitcoind RPC user
+    succeed("! test -e /secrets/bitcoin-rpcpassword-mempool")
+
     # Address data comes from rbitcoin's Electrum server, not its RPC.
     # Query by scripthash: mempool decodes addresses as mainnet, so a regtest
     # address would fail before reaching Electrum.
