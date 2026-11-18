@@ -134,9 +134,14 @@ def test_tor_enforce():
         deny = show(unit, "IPAddressDeny")
         assert set(deny.split()) == {"0.0.0.0/0", "::/0"}, f"{unit} IPAddressDeny={deny!r}"
         allow = show(unit, "IPAddressAllow")
-        extra = data["extraAllow"].get(unit, [])
-        expected_allow = set(data["allow"]) | {
-            ipaddress.ip_network(a, strict=False).with_prefixlen for a in extra
+        nets = {
+            ipaddress.ip_network(a, strict=False)
+            for a in data["allow"] + data["extraAllow"].get(unit, [])
+        }
+        # systemd drops entries covered by a broader one
+        expected_allow = {
+            n.with_prefixlen for n in nets
+            if not any(m != n and m.version == n.version and n.subnet_of(m) for m in nets)
         }
         assert set(allow.split()) == expected_allow, f"{unit} IPAddressAllow={allow!r}"
         inaccessible = show(unit, "InaccessiblePaths")

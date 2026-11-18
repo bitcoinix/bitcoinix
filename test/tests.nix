@@ -190,7 +190,7 @@ let
 
       tests.unbeholden-wallet = cfg.unbeholden-wallet.enable;
       test.data.unbeholden-wallet = {
-        inherit (cfg.unbeholden-wallet) electrumServer allowedHosts allowedClients;
+        inherit (cfg.unbeholden-wallet) electrumServer allowedHosts;
       };
 
       tests.lnd = cfg.lnd.enable;
@@ -606,8 +606,9 @@ let
         enable = true;
         allowedHosts = [ "wallet.test" ];
         address = "0.0.0.0";
-        allowedClients = [ "192.0.2.1" ];
+        allowedClients = [ "192.0.2.1" "192.0.2.0/24" ];
       };
+      test.data.unbeholden-wallet-clients = { allowed = "192.0.2.1"; denied = "198.51.100.1"; };
     };
 
     unbeholden-wallet-fulcrum = {
