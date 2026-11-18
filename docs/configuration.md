@@ -203,6 +203,22 @@ services.bitcoind = {
 networking.firewall.interfaces.eth0.allowedTCPPorts = [ config.services.bitcoind.rpc.port ];
 ```
 
+To give a LAN client its own RPC user, add it to `services.bitcoind.rpc.users`:
+```nix
+services.bitcoind.rpc.users.alice = {
+  # The part after `rpcauth=alice:` in the output of
+  # Bitcoin Core's `share/rpcauth/rpcauth.py alice`
+  passwordHMAC = "<salt>$<hmac>";
+  # The RPC methods that alice may call. Without this, alice may call all methods.
+  rpcwhitelist = [ "getblockchaininfo" "getblock" ];
+};
+```
+`passwordHMAC` is written to the world-readable Nix store, like `rpcauth` lines in
+`services.bitcoind.extraConfig`. Any local user can read it and test password
+guesses offline. So use a long random password, like the one that `rpcauth.py`
+generates when you don't pass a password. If an RPC user has a weak password,
+change it. The old HMAC stays readable in the Nix store until it is garbage-collected.
+
 ## Allow connections to electrs
 
 ```nix
@@ -286,6 +302,24 @@ Some services require extra steps:
 - LND
 
   Copy your wallet password to `$secretsDir/lnd-wallet-password` (See: [Secrets dir](#secrets-dir)).
+
+  When lnd on the bitcoinix node starts without a wallet, as after the first deploy, it
+  creates a new wallet and writes its seed to `lnd-seed-mnemonic` in its data dir
+  (`/var/lib/lnd` by default). This seed can't recover your migrated wallet. `rsync -a`
+  keeps files that the old data dir doesn't have, so the file would stay. Before you copy
+  the data, copy the file off the node and remove it from the node. Keep that copy if you
+  sent funds to the new wallet, because the migration replaces that wallet:
+  ```shell
+  scp root@nix-bitcoin-node:/var/lib/lnd/lnd-seed-mnemonic ./new-wallet-seed
+  ssh root@nix-bitcoin-node 'rm /var/lib/lnd/lnd-seed-mnemonic'
+  ```
+  The seed of your migrated wallet is the seed of your old node. If the old data dir has
+  an `lnd-seed-mnemonic`, the copy brings it over.
+
+  If you migrated lnd before, the `lnd-seed-mnemonic` on the node holds your old node's
+  seed only if the old data dir had that file. Otherwise it holds the seed of the wallet
+  that bitcoinix created before the copy, and it can't recover your migrated wallet. Keep
+  your old node's seed as the backup of your wallet.
 
 - BTCPay Server
 

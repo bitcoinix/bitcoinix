@@ -50,6 +50,12 @@ origin=$tmp/origin.git
 work=$tmp/work
 allowPush=$tmp/allow-push
 unexpectedPush=$tmp/unexpected-push
+exampleFiles=(
+    examples/configuration.nix
+    examples/flakes/flake.nix
+    examples/colmena/flake.nix
+    examples/container/flake.nix
+)
 
 # Recreate origin and a work clone with one pushed commit on master
 new_world() {
@@ -63,13 +69,30 @@ EOF
     chmod +x "$origin/hooks/pre-receive"
 
     git init -q "$work"
-    mkdir "$work/helper"
+    mkdir -p "$work/helper"
     cp "$repoRoot/helper/make-release.sh" "$repoRoot/helper/fetch-release.sh" "$work/helper/"
+    local example
+    for example in "${exampleFiles[@]}"; do
+        mkdir -p "$work/${example%/*}"
+        cp "$repoRoot/$example" "$work/$example"
+    done
+    set_release_version 0.1.0
     echo content > "$work/file"
     git -C "$work" add -A
     git -C "$work" commit -q -m "initial commit"
     git -C "$work" remote add origin "$origin"
     push_to_origin master
+}
+
+set_release_version() {
+    printf '"%s"\n' "$1" > "$work/version.nix"
+    local example
+    for example in "${exampleFiles[@]}"; do
+        sed -i \
+            -e "s/configVersion = \"[^\"]*\";/configVersion = \"$1\";/" \
+            -e "s|github:bitcoinix/bitcoinix/v[0-9.]*|github:bitcoinix/bitcoinix/v$1|" \
+            "$work/$example"
+    done
 }
 
 push_to_origin() {
@@ -87,6 +110,8 @@ add_commit() {
 
 # Publish a release that was made with the script
 release() {
+    set_release_version "$1"
+    add_commit "prepare $1"
     run_make --yes "$1" || { echo "setup release $1 failed"; cat "$err"; exit 1; }
     push_to_origin "v$1"
 }
@@ -146,6 +171,7 @@ fi
 # v0.10.0 sorts before v0.9.0 as a string
 new_world
 release 0.9.0
+set_release_version 0.10.0
 add_commit second
 if run_make --yes 0.10.0 && has_tag 0.10.0; then
     pass "0.10.0 is newer than 0.9.0"
@@ -229,6 +255,52 @@ if [[ -z $(git -C "$work" tag --list) ]]; then
 else
     fail "invalid versions: no tag is left behind"
 fi
+
+new_world
+echo '"0.0.9"' > "$work/version.nix"
+add_commit "old release version"
+expect_failure "release version not finalized" "Set version.nix to 0.1.0" --yes 0.1.0
+has_tag 0.1.0 && fail "release version not finalized: no tag is left behind"
+
+new_world
+rm "$work/version.nix"
+add_commit "missing release marker"
+expect_failure "missing release marker" "Missing release marker: version.nix" --yes 0.1.0
+has_tag 0.1.0 && fail "missing release marker: no tag is left behind"
+
+for example in "${exampleFiles[@]}"; do
+    new_world
+    sed -i 's/configVersion = "0.1.0"/configVersion = "0.0.9"/' "$work/$example"
+    add_commit "old configVersion in $example"
+    expect_failure "$example: stale configVersion" "configVersion in $example to 0.1.0" --yes 0.1.0
+    has_tag 0.1.0 && fail "$example: stale configVersion left a tag"
+
+    new_world
+    rm "$work/$example"
+    add_commit "missing $example"
+    expect_failure "$example: missing file" "Missing example: $example" --yes 0.1.0
+    has_tag 0.1.0 && fail "$example: missing file left a tag"
+
+    new_world
+    sed -i '/configVersion = /d' "$work/$example"
+    add_commit "missing configVersion in $example"
+    expect_failure "$example: missing configVersion" "configVersion in $example to 0.1.0" --yes 0.1.0
+    has_tag 0.1.0 && fail "$example: missing configVersion left a tag"
+
+    if [[ $example == */flake.nix ]]; then
+        new_world
+        sed -i 's|github:bitcoinix/bitcoinix/v0.1.0|github:bitcoinix/bitcoinix/v0.0.9|' "$work/$example"
+        add_commit "old release pin in $example"
+        expect_failure "$example: stale release pin" "release pin in $example to v0.1.0" --yes 0.1.0
+        has_tag 0.1.0 && fail "$example: stale release pin left a tag"
+
+        new_world
+        sed -i -E '/(bitcoinix|nix-bitcoin)\.url = /d' "$work/$example"
+        add_commit "missing release pin in $example"
+        expect_failure "$example: missing release pin" "release pin in $example to v0.1.0" --yes 0.1.0
+        has_tag 0.1.0 && fail "$example: missing release pin left a tag"
+    fi
+done
 
 new_world
 git config --file "$GIT_CONFIG_GLOBAL" --unset gpg.format

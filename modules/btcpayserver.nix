@@ -29,7 +29,19 @@ let
       lightningBackend = mkOption {
         type = types.nullOr (types.enum [ "clightning" "lnd" ]);
         default = null;
-        description = "The lightning node implementation to use.";
+        description = ''
+          The lightning node implementation to use.
+
+          With `clightning`, BTCPay Server has full control of the Lightning node,
+          including its funds. It uses lightningd's RPC socket, which allows every
+          method, like `pay`, `withdraw` and `fundchannel`.
+          With `lnd`, BTCPay Server gets its own macaroon, which can't send funds
+          or open or close channels. Use `lnd` when you want BTCPay Server limited.
+          Neither backend limits a hot wallet in BTCPay Server. Switching away from
+          `clightning` stops Core Lightning unless `services.clightning.enable` is set,
+          and then lnd needs another port than Core Lightning.
+          See docs/services.md.
+        '';
       };
       rootpath = mkOption {
         type = types.nullOr types.str;
@@ -272,9 +284,12 @@ in {
     users.groups.${cfg.btcpayserver.group} = {};
 
     nix-bitcoin.secrets = {
+      # Only NBXplorer reads this password. btcpayserver is in NBXplorer's group
+      # to read the API cookie, so the group gets no access here.
       bitcoin-rpcpassword-btcpayserver = {
-        user = cfg.bitcoind.user;
+        user = cfg.nbxplorer.user;
         group = cfg.nbxplorer.group;
+        permissions = "400";
       };
       bitcoin-HMAC-btcpayserver.user = cfg.bitcoind.user;
     };
