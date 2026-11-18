@@ -9,7 +9,7 @@ buildGo126Module rec {
   src = fetchFromGitHub {
     owner = "unbeholdendev";
     repo = "unbeholden-lnurl";
-    rev = "f89e6e4f766e1afb4fe197920bcc0856e82bf850";
+    tag = "v${version}";
     hash = "sha256-kYQXhBUweOSuQbOgB2A8f+e1qI8gtp6E2C8LwJggFGE=";
   };
 
@@ -28,7 +28,6 @@ buildGo126Module rec {
     description = "Self-hosted Lightning Address server for LND and Core Lightning";
     homepage = "https://github.com/unbeholdendev/unbeholden-lnurl";
     license = licenses.mit;
-    platforms = platforms.linux;
     mainProgram = "unbeholden-lnurl";
   };
 }

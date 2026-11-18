@@ -140,8 +140,9 @@ let
   generateWithdrawSecret = cfg.settings.withdraw_secret_file != null;
 
   runeFile = "${cfg.dataDir}/cln-rune";
+  runuser = "${pkgs.util-linux}/bin/runuser";
   listVouchers = pkgs.writers.writeBashBin "unbeholden-lnurl-vouchers" ''
-    exec ${pkgs.util-linux}/bin/runuser -u ${cfg.user} -- \
+    exec ${runuser} -u ${cfg.user} -- \
       ${getExe cfg.package} -config ${configFile} -list-vouchers
   '';
   removeNulls = value:
@@ -149,7 +150,9 @@ let
     else if isList value then map removeNulls value
     else value;
   configFile = yaml.generate "unbeholden-lnurl.yaml" (removeNulls cfg.settings // {
-    listen = nbLib.addressWithPort cfg.address cfg.port;
+    listen = let
+      bare = removePrefix "[" (removeSuffix "]" cfg.address);
+    in "${if hasInfix ":" bare then "[${bare}]" else bare}:${toString cfg.port}";
     state_dir = cfg.dataDir;
   } // (if isLnd then {
     lnd = {
@@ -174,35 +177,47 @@ let
     ++ optionals withdraw [ "pay" "listpays" "getinfo" ];
   runeRestrictions = builtins.toJSON [ (map (method: "method=${method}") clnMethods) ];
 
-  # Reuse the rune while its restrictions stay the same. Otherwise revoke it, so
-  # that no rune with the old permissions remains valid.
+  # `cfg.dataDir` is writable by the service user, and the clnrest certs dir by
+  # the clightning user. So access them only as these users, never as root.
+  # Keep the rune while clightning stored it with these restrictions. Otherwise
+  # revoke it, so that no rune with the old permissions remains valid.
+  # Revoke only a rune that clightning stored, so that a forged rune can't
+  # make this revoke another rune.
+  runeAction = pkgs.writeText "unbeholden-lnurl-rune-action.jq" ''
+    .runes[0] |
+    if .stored == false or .our_rune == false or .blacklisted then "create"
+    elif [.restrictions[] | [.alternatives[] | .fieldname + .condition + .value]] == $want
+    then "keep"
+    else "revoke \(.unique_id)" end
+  '';
   setupCln = nbLib.rootScript "unbeholden-lnurl-setup-cln" ''
     cli() {
-      ${pkgs.util-linux}/bin/runuser -u ${cln.user} -- ${cln.cli}/bin/lightning-cli "$@"
+      ${runuser} -u ${cln.user} -- ${cln.cli}/bin/lightning-cli "$@"
+    }
+    asUser() {
+      ${runuser} -u ${cfg.user} -- "$@"
     }
     jq=${pkgs.jq}/bin/jq
     restrictions=${escapeShellArg runeRestrictions}
     umask 077
 
-    if [[ -s ${runeFile} && $(< ${runeFile}.restrictions) != "$restrictions" ]]; then
-      id=$(cli showrunes "$(< ${runeFile})" | $jq -er '.runes[0].unique_id')
-      cli blacklistrune "$id" "$id" > /dev/null
-      rm ${runeFile}
+    action=create
+    if rune=$(asUser cat ${runeFile} 2>/dev/null) && [[ $rune ]] &&
+       response=$(cli -k showrunes rune="$rune"); then
+      action=$($jq -r --argjson want "$restrictions" -f ${runeAction} <<< "$response")
     fi
-    if [[ ! -s ${runeFile} ]]; then
-      cli createrune restrictions="$restrictions" | $jq -er .rune > ${runeFile}.tmp
-      printf '%s' "$restrictions" > ${runeFile}.restrictions
-      chown ${cfg.user}:${cfg.group} ${runeFile}.tmp ${runeFile}.restrictions
-      mv -T ${runeFile}.tmp ${runeFile}
+    if [[ $action == revoke* ]]; then
+      id=''${action#revoke }
+      cli blacklistrune "$id" "$id" > /dev/null
+    fi
+    if [[ $action != keep ]]; then
+      tmp=$(asUser mktemp ${runeFile}.XXXXXX)
+      cli createrune restrictions="$restrictions" | $jq -er .rune | asUser tee "$tmp" > /dev/null
+      asUser mv -T "$tmp" ${runeFile}
     fi
 
-    certsDir=$(cli listconfigs clnrest-certs | $jq -er '.configs["clnrest-certs"].value_str // ""')
-    case $certsDir in
-      "") certsDir=${cln.networkDir} ;;
-      /*) ;;
-      *) certsDir=${cln.networkDir}/$certsDir ;;
-    esac
-    install -m 400 -o ${cfg.user} -g ${cfg.group} "$certsDir/ca.pem" /run/unbeholden-lnurl/ca.pem
+    cert=$(cli listconfigs clnrest-certs | ${clnrest.serverCertPathFromConfigs})
+    ${runuser} -u ${cln.user} -- cat "''${cert%/*}/ca.pem" | asUser tee /run/unbeholden-lnurl/ca.pem > /dev/null
   '';
 in {
   inherit options;
@@ -239,6 +254,8 @@ in {
 
     systemd.services.unbeholden-lnurl = {
       wantedBy = [ "multi-user.target" ];
+      # `requires` stops this with the backend, but doesn't start it again when
+      # the backend comes back. The backend starts it, see below.
       requires = [ "${backendUnit}.service" ];
       after = [ "${backendUnit}.service" "nix-bitcoin-secrets.target" ];
       serviceConfig = nbLib.defaultHardening // {
@@ -256,6 +273,12 @@ in {
         TimeoutStopSec = "150s";
       } // nbLib.allowedIPAddresses cfg.tor.enforce;
     };
+
+    # Like `startRtl` in ./rtl.nix: `wantedBy` on the backend would make lnd,
+    # which sends STOPPING=1 as it shuts down, restart at once.
+    systemd.services.${backendUnit}.serviceConfig.ExecStartPost = [
+      "-+${config.systemd.package}/bin/systemctl start --no-block unbeholden-lnurl.service"
+    ];
 
     users.users.${cfg.user} = {
       isSystemUser = true;

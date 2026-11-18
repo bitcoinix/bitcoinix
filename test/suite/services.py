@@ -454,13 +454,28 @@ def test_unbeholden_lnurl():
     machine.wait_for_unit("unbeholden-lnurl")
     if data["backend"] == "cln":
         assert succeed(count_runes) == runes, "A restart created another rune"
-        # A rune with other permissions is revoked
         rune_file = f"{data['dataDir']}/cln-rune"
-        old_rune = succeed(f"cat {rune_file}")
-        succeed(f"echo outdated > {rune_file}.restrictions", "systemctl restart unbeholden-lnurl")
+        # A rune with other permissions is revoked
+        other = succeed_json("lightning-cli createrune restrictions='[[\"method=getinfo\"]]'")["rune"]
+        succeed(
+            f"runuser -u unbeholden-lnurl -- tee {rune_file} <<< {other}",
+            "systemctl restart unbeholden-lnurl",
+        )
         machine.wait_for_unit("unbeholden-lnurl")
-        assert succeed(f"cat {rune_file}") != old_rune, "The rune was not replaced"
-        old = succeed_json(f"lightning-cli showrunes {shlex.quote(old_rune.strip())}")
-        assert old["runes"][0].get("blacklisted"), old
+        assert succeed(f"cat {rune_file}").strip() != other, "The rune was not replaced"
+        revoked = succeed_json(f"lightning-cli -k showrunes rune={other}")
+        assert revoked["runes"][0].get("blacklisted"), revoked
+        # The setup accesses the data dir only as the service user, so a
+        # planted symlink can't redirect a read or write to a file of another user
+        target = "/etc/unbeholden-lnurl-target"
+        succeed(
+            f"install -m 600 <(echo original) {target}",
+            f"runuser -u unbeholden-lnurl -- ln -sfT {target} {rune_file}",
+            "systemctl restart unbeholden-lnurl",
+        )
+        machine.wait_for_unit("unbeholden-lnurl")
+        assert_full_match(f"stat -c '%U %a' {target} && cat {target}", "root 600\noriginal\n")
+        assert_full_match(f"stat -c %F {rune_file}", "regular file\n")
+        succeed(f"rm {target}")
     machine.wait_until_succeeds(f"curl -fsS {url}/health")
     assert succeed_json(f"curl -fsS {url}{shlex.quote(verify_path)}") == verified
