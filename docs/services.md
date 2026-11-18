@@ -221,6 +221,40 @@ lose the authenticator, delete `RTL-Config.json` in RTL's data dir
 (`/var/lib/rtl` by default) and restart RTL. bitcoinix then writes a new one
 without the 2FA secret.
 
+### BTCPay Server
+
+#### Lightning backend
+
+`services.btcpayserver.lightningBackend` connects BTCPay Server to the node's lnd or
+Core Lightning. The two backends give BTCPay Server different access.
+
+With `lnd`, BTCPay Server gets its own macaroon, `services.lnd.macaroons.btcpayserver`
+(see [Custom macaroons](#custom-macaroons)). It can read the node's state and create
+invoices and addresses. It can't send funds or open or close channels, so BTCPay
+Server can't make Lightning payouts.
+
+With `clightning`, BTCPay Server has full control of the Lightning node, including its
+funds. It joins the clightning group and uses lightningd's RPC socket `lightning-rpc`,
+which allows every method. So BTCPay Server can pay invoices (`pay`, `xpay`), send
+on-chain funds (`withdraw`), open and close channels (`fundchannel`, `close`) and start
+plugins (`plugin`), which run as the clightning user. With clnrest enabled, the group
+can also read clnrest's admin rune. A bug in BTCPay Server, a malicious BTCPay plugin or
+a stolen admin session can drain the node. The pinned BTCPay Server 2.4.7 uses
+BTCPayServer.Lightning 1.7.14, whose Core Lightning client connects only over this
+socket or TCP and can't use runes. So bitcoinix can't give it restricted access yet.
+
+The backend limits only what BTCPay Server can do with the Lightning node. A hot wallet
+that you create in BTCPay Server keeps its keys on the node, so BTCPay Server can spend it
+with either backend.
+
+Use `lnd` when you want BTCPay Server limited, for example when its web interface is
+reachable from the internet. bitcoinix turns on Core Lightning for BTCPay Server only
+while it's the backend. So if your Core Lightning has channels, set
+`services.clightning.enable = true` before you switch, or close the channels first.
+Otherwise the switch stops Core Lightning, and nothing watches its channels. Both
+daemons use port 9735 by default, so also give lnd another port, for example
+`services.lnd.port = 9736;`.
+
 ### Connect to Unbeholden Wallet
 [Unbeholden Wallet](https://github.com/unbeholdendev/unbeholden-wallet) is a watch-only
 wallet that runs in the browser and hands transactions to an air-gapped signer over QR
