@@ -14,6 +14,7 @@ in {
 
   options = {
     # Used by ../versioning/0.0.65/secure-node-secrets-dir.nix
+    # and ../versioning/0.2.0/secure-node-ssh-password-login.nix
     nix-bitcoin.secure-node-preset-enabled = {};
   };
 
@@ -34,6 +35,12 @@ in {
     # Add a SSH onion service
     services.tor.relay.onionServices.sshd = nbLib.mkOnionService { port = 22; };
     nix-bitcoin.onionAddresses.access.${operatorName} = [ "sshd" ];
+    # The onion service lets anyone try SSH logins over Tor, and the operator
+    # is in the groups that control funds. So accept only keys by default.
+    services.openssh.settings = {
+      PasswordAuthentication = mkDefault false;
+      KbdInteractiveAuthentication = mkDefault false;
+    };
 
     services.bitcoind = {
       enable = true;

@@ -82,15 +82,18 @@ let
       esac
     done
 
+    # Don't look up the public IP. A lookup reveals it to third-party services
+    # over clearnet, also on a node that otherwise uses only Tor.
     if [[ ! $host ]]; then
-      # Use lndconnect to fetch the external ip.
-      # This internally uses https://github.com/GlenDC/go-external-ip, which
-      # queries a set of external ip providers.
-      host=$(
-        ${getExe config.nix-bitcoin.pkgs.lndconnect} --url --nocert \
-          --configfile=/dev/null --adminmacaroonpath=/dev/null \
-          | sed -nE 's|.*?/(.*?):.*|\1|p'
-      )
+      {
+        echo "Usage: nix-bitcoin-wg-connect [--text] <host>"
+        echo
+        echo "<host> is the address where your WireGuard client reaches this node:"
+        echo "its public IP or hostname, or its LAN IP for a client in your local network."
+        echo "'ip address' lists the node's own addresses. Behind NAT, your router shows"
+        echo "the public IP."
+      } >&2
+      exit 1
     fi
 
     config="[Interface]

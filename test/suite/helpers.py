@@ -3,6 +3,7 @@ from urllib.parse import parse_qs, urlparse
 import base64
 import hashlib
 import hmac
+import ipaddress
 import json
 import os
 import re
@@ -36,6 +37,17 @@ def assert_full_match(cmd, regexp):
     out = succeed(cmd)
     if not re.fullmatch(regexp, out):
         raise Exception(f"Pattern '{regexp}' doesn't match '{out}'")
+
+def btcpayserver_admin():
+    """Returns curl's `-u` value for the admin that btcpayserver-admin creates"""
+    # BTCPay accepts Basic auth for the Greenfield API only in an account's first
+    # five minutes, unless its user turns it on. Restart that period.
+    assert_full_match(
+        "runuser -u btcpayserver -- psql -d btcpaydb -c "
+        """'UPDATE "AspNetUsers" SET "Created" = now() WHERE "NormalizedUserName" = $$ADMIN@LOCALHOST$$'""",
+        "UPDATE 1\n",
+    )
+    return "admin@localhost:$(cat /secrets/btcpayserver-admin-password)"
 
 def log_has_string(unit, str):
     return f"journalctl -b --output=cat -u {unit} --grep='{str}'"

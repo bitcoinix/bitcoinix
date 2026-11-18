@@ -78,6 +78,99 @@ The Trezor Bridge (`trezord`) no longer runs by default.
 use the device through it. See
 [Upgrading to config version 0.2.0](upgrading.md#upgrading-to-config-version-020).
 
+
+#### clightning requires the mount of its local replica
+
+With `services.clightning.replication.local.directory`, `clightning` now doesn't
+start while the disk or share under that directory isn't mounted. Before, it wrote
+the replica to the filesystem below the mount point, usually the primary disk, without
+a warning. This works only for mounts that systemd knows, like `fileSystems` entries.
+See [Upgrading to config version 0.2.0](upgrading.md#upgrading-to-config-version-020).
+
+#### `nix-bitcoin-wg-connect` no longer looks up the public IP
+
+`nix-bitcoin-wg-connect` from the WireGuard preset now needs your node's address as an
+argument. Before, it looked up the public IP through public IP lookup services over
+clearnet when you passed no address. See
+[Upgrading to config version 0.2.0](upgrading.md#upgrading-to-config-version-020).
+
+#### bitcoinix creates the BTCPay Server admin account
+
+BTCPay Server makes the first account that registers the server admin, so any local
+user could take the admin account and the internal Lightning node until you registered.
+When BTCPay Server has no admin, bitcoinix now creates the admin account `admin@localhost`
+first, with the password in `$secretsDir/btcpayserver-admin-password`. Existing admins
+stay, so check that they're yours. See the
+[upgrade notes](upgrading.md#btcpay-server-admin-account).
+
+#### Core Lightning data dir no longer writable by its group
+
+The Core Lightning data dir now has mode `0750` instead of `0770`. Before, members of
+the clightning group could write to it. So they could replace the config that
+lightningd loads, or the network dir with `hsm_secret`. Group members keep the RPC
+socket, which gives full control over the node. See
+[Upgrading to config version 0.2.0](upgrading.md#upgrading-to-config-version-020).
+
+#### Own RPC users for Core Lightning and mempool
+
+Core Lightning and mempool added `getblockfrompeer` and `gettxoutsetinfo` to the
+whitelist of the shared `public` RPC user, so every other service of that user
+could call them too. They now connect to bitcoind as their own users, `clightning`
+and `mempool`, and the `public` user keeps the base whitelist. Setups that supply
+secrets themselves need the secrets of the new users, and setups with bitcoind on
+another node also need the users there, see the
+[upgrade notes](upgrading.md#own-rpc-users-for-core-lightning-and-mempool).
+
+#### lnconnect-clnrest finds clnrest's certificate in a custom dir
+
+`lnconnect-clnrest` now asks clightning for clnrest's cert dir, like RTL does. Before,
+it always read `server.pem` from clightning's network dir. So with `clnrest-certs` set,
+it failed or put the wrong certificate into direct connection URLs. Regenerate such URLs.
+When clightning doesn't answer, for example because it's stopped, `lnconnect-clnrest`
+prints a warning and uses the network dir, as before.
+
+#### Backup password and migrated lnd seed
+
+With `nix-bitcoin.generateSecrets`, the backups include the password that decrypts them,
+`backup-encryption-password` in the secrets dir. Keep a copy of it off the node. If you
+migrated lnd from another node, the `lnd-seed-mnemonic` on the node may not hold the
+seed of your wallet. See
+[Migrate existing services to bitcoinix](configuration.md#migrate-existing-services-to-bitcoinix).
+
+#### The secure-node preset turns off SSH password login
+
+The `secure-node.nix` preset now turns off SSH password and keyboard-interactive login
+by default, so its sshd onion service accepts only keys. See
+[Upgrading to config version 0.2.0](upgrading.md#upgrading-to-config-version-020).
+
+#### NBXplorer RPC password permissions
+
+BTCPay Server can no longer read NBXplorer's bitcoind RPC password. Only NBXplorer's
+user can read it now. Before, BTCPay Server could read it through the group that
+gives it NBXplorer's API cookie. See
+[Upgrading to config version 0.2.0](upgrading.md#upgrading-to-config-version-020).
+
+#### BTCPay Server's access to the Lightning node
+
+With `services.btcpayserver.lightningBackend = "clightning"`, BTCPay Server has full
+control of the Lightning node, including its funds. With `lnd`, it gets a restricted
+macaroon. See [Lightning backend](services.md#lightning-backend).
+
+#### Custom RPC users' password HMACs are in the Nix store
+
+The `passwordHMAC` of each custom RPC user in `services.bitcoind.rpc.users` is
+written to the world-readable Nix store. Any local user can read it and test password
+guesses offline. This isn't new, but it wasn't documented. If a custom RPC user has a
+weak password, replace it with a long random one. See
+[Allow bitcoind RPC connections from LAN](configuration.md#allow-bitcoind-rpc-connections-from-lan).
+
+#### Unbeholden Wallet behind a remote proxy
+
+Unbeholden Wallet only accepted connections from localhost, so `address = "0.0.0.0"`
+alone didn't let a reverse proxy on another host reach it. List the proxy's address in
+the new `services.unbeholden-wallet.allowedClients` option, see
+[Access from another device](services.md#access-from-another-device).
+
 ## 0.1.6
 
 #### Tor enforcement allows only local addresses

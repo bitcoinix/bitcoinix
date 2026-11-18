@@ -158,18 +158,25 @@ def test_rpc_whitelist():
 
     machine.wait_until_succeeds("bitcoin-cli getnetworkinfo")
 
-    public_allowed = ["getblockcount"]
-    public_denied = ["scantxoutset", "getblocktemplate", "fundrawtransaction"]
-    (public_allowed if data["clightning-bcli"] else public_denied).append("getblockfrompeer")
-    (public_allowed if data["mempool"] else public_denied).append("gettxoutsetinfo")
-    assert_rpc_access("public", public_allowed, public_denied)
+    # No user may call these in the test scenarios
+    unused = [
+        "scantxoutset", "getblocktemplate", "fundrawtransaction", "setban", "generatetoaddress"
+    ]
+    # Each of these reaches only the user of the service that needs it, never `public`,
+    # which electrs, fulcrum and lnd share
+    granted = ["getblockfrompeer", "gettxoutsetinfo"]
 
+    def assert_grants(user, grants):
+        denied = unused + [method for method in granted if method not in grants]
+        assert_rpc_access(user, ["getblockcount"] + grants, denied)
+
+    assert_grants("public", [])
+    if data["clightning"]:
+        assert_grants("clightning", ["getblockfrompeer"] if data["clightning-bcli"] else [])
+    if data["mempool"]:
+        assert_grants("mempool", ["gettxoutsetinfo"])
     if data["btcpayserver"]:
-        btcpay_allowed = ["getblockcount", "getblockfrompeer"]
-        btcpay_denied = [
-            "scantxoutset", "getblocktemplate", "fundrawtransaction", "setban", "generatetoaddress"
-        ]
-        assert_rpc_access("btcpayserver", btcpay_allowed, btcpay_denied)
+        assert_grants("btcpayserver", ["getblockfrompeer"])
 
 
 @test("lnd-macaroons")
@@ -275,6 +282,11 @@ def test_lnd_macaroons():
     # The live macaroons were never replaced
     assert_full_match(live_macaroons, re.escape(live_before))
     succeed(f"rm -r {canary} {canary_dir} {runtime_dir} {network_dir}")
+
+
+def clnrest_cert_file(cln, name):
+    # A scenario can set `clnrest-certs`. A relative dir starts at the network dir.
+    return os.path.join(cln["networkDir"], test_data.get("clnrest-certs", ""), name)
 
 
 @test("rtl-credentials")
@@ -384,7 +396,7 @@ def test_rtl_credentials():
         check(script, cln["user"], admin_rune, f"{data_dir}/clightning-admin-rune",
               f"printf 'LIGHTNING_RUNE=\"%s\"\\n' \"$(cat {admin_rune})\"",
               invalid_contents=("", "null\n"))
-        cert = f"{cln['networkDir']}/server.pem"
+        cert = clnrest_cert_file(cln, "server.pem")
         check(script, cln["user"], cert, f"{data_dir}/clnrest-cert.pem", f"cat {cert}")
 
     succeed(f"rm -r {canary} {canary_dir}")
@@ -446,8 +458,9 @@ def test_rtl_backend_certs():
               " () => fs.appendFileSync(dir + '/closed', '\\n')))"
               ".listen(port, '127.0.0.1')")
     cln = test_data["rtl-credentials"]["clightning"]
-    issuer_ca = f"{cln['networkDir']}/ca.pem" if cln else ""
-    issuer = f" -CA {issuer_ca} -CAkey {cln['networkDir']}/ca-key.pem" if cln else ""
+    issuer_ca = clnrest_cert_file(cln, "ca.pem") if cln else ""
+    issuer_key = clnrest_cert_file(cln, "ca-key.pem") if cln else ""
+    issuer = f" -CA {issuer_ca} -CAkey {issuer_key}" if cln else ""
     succeed(
         f"mkdir {fake}",
         "openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 -nodes -days 1"

@@ -2,8 +2,10 @@
 #
 # Not listed, because they are expensive, act on peers or touch a wallet:
 # getblockfrompeer, gettxoutsetinfo, scantxoutset, getblocktemplate,
-# fundrawtransaction. Modules whose service calls one of these grant it
-# themselves (clightning.nix, mempool.nix, btcpayserver.nix).
+# fundrawtransaction. A service that calls one of these connects as its own
+# RPC user, whose whitelist adds the method to this list (clightning.nix,
+# mempool.nix, btcpayserver.nix). All services of the `public` user share its
+# whitelist, so a method added there would reach every one of them.
 [
   "echo"
   "getinfo"

@@ -6,6 +6,7 @@
   message = ''
     `services.mempool.settings.CORE_RPC.PASSWORD` is no longer accepted, because
     mempool's settings are copied to the world-readable Nix store. Remove it and
-    save the password to `${config.nix-bitcoin.secretsDir}/bitcoin-rpcpassword-public`.
+    save the password to `${config.nix-bitcoin.secretsDir}/bitcoin-rpcpassword-mempool`.
+    Since 0.2.0, mempool connects to bitcoind as its own RPC user with this password.
   '';
 }

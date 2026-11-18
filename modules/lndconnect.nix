@@ -99,18 +99,43 @@ let
     authSecretPath,
     enableOnion,
     onionService ? null,
-    certPath ? null
+    certPath ? null,
+    # Instead of `certPath`: Bash code that prints the cert path.
+    # It runs only when the URL includes the cert and the args don't set
+    # `--tlscertpath`.
+    getCertPathCmd ? null
   }:
+  let
+    useCertPathCmd = getCertPathCmd != null && !enableOnion;
+    certArg =
+      if enableOnion then "--nocert"
+      # Empty when the args include `--nocert` or `--tlscertpath`
+      else if useCertPathCmd then ''''${certPath:+--tlscertpath="$certPath"}''
+      else if certPath != null then "--tlscertpath='${certPath}'"
+      else "--nocert";
+  in
   # TODO-EXTERNAL:
   # lndconnect requires a --configfile argument, although it's unused
   # https://github.com/LN-Zap/lndconnect/issues/25
   lib.hiPrio (pkgs.writeScriptBin name ''
     ${shebang}
+    ${optionalString useCertPathCmd ''
+      certPath=
+      needsCertPath=1
+      for arg; do
+        case $arg in
+          --nocert|--tlscertpath|--tlscertpath=*) needsCertPath= ;;
+        esac
+      done
+      if [[ $needsCertPath ]]; then
+        certPath=$(${getCertPathCmd}) || exit
+      fi
+    ''}
     url=$(
       ${getExe config.nix-bitcoin.pkgs.lndconnect} --url \
         ${optionalString enableOnion "--host=\"$(cat '${config.nix-bitcoin.onionAddresses.dataDir}/${onionService}')\""} \
         --port=${toString port} \
-        ${if enableOnion || certPath == null then "--nocert" else "--tlscertpath='${certPath}'"} \
+        ${certArg} \
         --adminmacaroonpath='${authSecretPath}' \
         --configfile=/dev/null "$@"
     )
@@ -199,7 +224,23 @@ in {
               enableOnion = clnrest.lnconnect.onion;
               onionService = "${operatorName}/clnrest";
               port = clnrest.port;
-              certPath = "${clightning.networkDir}/server.pem";
+              # Ask clightning for clnrest's cert dir, which `clnrest-certs` can change.
+              # The query fails when clightning is down, or when the caller can't read
+              # a config file that lightning-cli reads, for example an include file.
+              # Then use the default dir, as before.
+              getCertPathCmd = let
+                defaultCert = "${clightning.networkDir}/server.pem";
+              in ''
+                if ! response=$(${clightning.cli}/bin/lightning-cli listconfigs clnrest-certs) ||
+                   ! ${clnrest.serverCertPathFromConfigs} <<< "$response"; then
+                  {
+                    echo "Warning: Can't ask clightning for clnrest's cert dir''${response:+: $response}"
+                    echo "Warning: The URL has the cert from the default dir: ${defaultCert}"
+                    echo "Warning: With clnrest-certs set, run this while clightning runs or pass --tlscertpath."
+                  } >&2
+                  echo '${defaultCert}'
+                fi
+              '';
               authSecretPath = "${clightning.networkDir}/admin-rune";
             }
           )];

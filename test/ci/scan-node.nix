@@ -23,8 +23,8 @@ in
     # infrastructure; backups adds duplicity. Without these the scan would skip
     # exactly the components a deployed node exposes.
     "${f.outPath}/modules/presets/secure-node.nix"
-    # The WireGuard preset adds wireguard-tools, qrencode and lndconnect to the
-    # closure of nodes that use it.
+    # The WireGuard preset adds wireguard-tools and qrencode to the closure of
+    # nodes that use it, and lndconnect with `services.lnd.lndconnect.enable`.
     "${f.outPath}/modules/presets/wireguard.nix"
     {
       nix-bitcoin.generateSecrets = true;
@@ -43,6 +43,8 @@ in
       services.lnd.enable = true;
       # clightning and lnd both default to 9735 (asserted in modules/lnd.nix)
       services.lnd.port = 9736;
+      # Keeps lndconnect in the scan. The WireGuard preset no longer needs it.
+      services.lnd.lndconnect.enable = true;
       services.charge-lnd.enable = true;
 
       services.electrs.enable = true;
