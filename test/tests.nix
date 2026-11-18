@@ -146,6 +146,7 @@ let
         # The complete allow list of each restricted unit
         allow = [ "127.0.0.1/32" "::1/128" ]
           ++ optional netns.enable "169.254.${toString netns.addressblock}.0/24";
+        extraAllow.unbeholden-wallet = cfg.unbeholden-wallet.allowedClients;
       };
       # A custom unit with the restriction, which must start on every node,
       # also when no service enforces Tor
@@ -485,8 +486,14 @@ let
     };
 
     # netns and regtest, without secure-node.nix
-    netnsRegtest = {
+    netnsRegtest = let
+      # Unlike `regtest`, give clnrest's certs a dir of their own.
+      # A relative dir starts at the network dir.
+      clnrestCerts = "rest-certs";
+    in {
       imports = with scenarios; [ netnsBase regtest ];
+      services.clightning.extraConfig = "clnrest-certs=${clnrestCerts}";
+      test.data.clnrest-certs = clnrestCerts;
     };
 
     hardened = {
@@ -589,23 +596,31 @@ let
       };
     };
 
-    unbeholden-wallet-electrs = {
-      imports = [ scenarios.regtestBase ];
+    unbeholden-wallet-electrs-netns = {
+      imports = with scenarios; [ regtestBase netnsBase ];
       services.unbeholden-wallet.enable = true;
       services.unbeholden-wallet.allowedHosts = [ "wallet.test" ];
+    };
+
+    unbeholden-wallet-fulcrum-netns = {
+      imports = [ scenarios.unbeholden-wallet-electrs-netns ];
+      services.unbeholden-wallet.electrumServer = "fulcrum";
+    };
+
+    unbeholden-wallet-electrs = {
+      imports = [ scenarios.regtestBase ];
+      services.unbeholden-wallet = {
+        enable = true;
+        allowedHosts = [ "wallet.test" ];
+        address = "0.0.0.0";
+        allowedClients = [ "192.0.2.1" "192.0.2.0/24" ];
+      };
+      test.data.unbeholden-wallet-clients = { allowed = "192.0.2.1"; denied = "198.51.100.1"; };
     };
 
     unbeholden-wallet-fulcrum = {
       imports = [ scenarios.unbeholden-wallet-electrs ];
       services.unbeholden-wallet.electrumServer = "fulcrum";
-    };
-
-    unbeholden-wallet-electrs-netns = {
-      imports = with scenarios; [ unbeholden-wallet-electrs netnsBase ];
-    };
-
-    unbeholden-wallet-fulcrum-netns = {
-      imports = with scenarios; [ unbeholden-wallet-fulcrum netnsBase ];
     };
 
     # Unstable i2pd's build-time check cannot bind the namespace bridge address.

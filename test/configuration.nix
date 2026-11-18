@@ -368,6 +368,16 @@ let
     services.btcpayserver.enable = true;
   };
   rpcUsers = evaluate rpcUsersServices;
+  hasSshPasswordNotice = hasNotice "so sshd accepts only keys";
+  # The preset publishes sshd as an onion service
+  secureNodeSsh = settings: {
+    imports = [ ../modules/presets/secure-node.nix ];
+    services.openssh = { enable = true; inherit settings; };
+  };
+  sshPasswordOptions = [ "PasswordAuthentication" "KbdInteractiveAuthentication" ];
+  sshPasswordLogin = lib.genAttrs sshPasswordOptions (_: true);
+  getSshPasswordLogin = module:
+    lib.getAttrs sshPasswordOptions (evaluate module).services.openssh.settings;
   # A user that exists only outside `users.users`, for example via useradd or LDAP
   onionAccessExternalUser = {
     nix-bitcoin.onionAddresses.access.external-user = [ "bitcoind" ];
@@ -813,6 +823,14 @@ let
       expected = [ ":9736" ":9735" ":9736" "" ];
     };
     testNetnsRESTAllowed = { expr = failedAssertions netns; expected = []; };
+    testUnbeholdenWalletRejectsAllowedClientsWithNetns = {
+      expr = map (lib.hasInfix "allowedClients` is not supported with netns-isolation")
+        (failedAssertions (evaluate {
+          services.unbeholden-wallet = { enable = true; allowedClients = [ "192.0.2.1" ]; };
+          nix-bitcoin.netns-isolation.enable = true;
+        }));
+      expected = [ true ];
+    };
     testNetnsRejectsNftables = {
       expr = map (lib.hasInfix "uses the iptables backend") (failedAssertions netnsNftables);
       expected = [ true ];
@@ -1389,6 +1407,35 @@ let
         }
       ];
       expected = [ true false false false ];
+    };
+    testSecureNodeSshKeysOnly = {
+      expr = {
+        preset = getSshPasswordLogin (secureNodeSsh {});
+        explicit = getSshPasswordLogin (secureNodeSsh sshPasswordLogin);
+        withoutPreset = getSshPasswordLogin { services.openssh.enable = true; };
+      };
+      expected = {
+        preset = lib.genAttrs sshPasswordOptions (_: false);
+        explicit = sshPasswordLogin;
+        withoutPreset = sshPasswordLogin;
+      };
+    };
+    # Before 0.2.0, the preset kept the NixOS defaults, which allow passwords
+    testVersioningSecureNodeSshPasswords = {
+      expr = {
+        presetAndSshd = hasSshPasswordNotice (secureNodeSsh {});
+        sshdDisabled = hasSshPasswordNotice {
+          imports = [ (secureNodeSsh {}) ];
+          services.openssh.enable = lib.mkForce false;
+        };
+        withoutPreset = hasSshPasswordNotice { services.openssh.enable = true; };
+        # Once 0.2.0 is released, a config at 0.2.0 doesn't get the notice
+        acknowledged = hasNoticeAt "0.2.0" "so sshd accepts only keys" {
+          imports = [ (secureNodeSsh {}) ];
+          nix-bitcoin.versioning.releasedVersion = "0.2.0";
+        };
+      };
+      expected = { presetAndSshd = true; sshdDisabled = false; withoutPreset = false; acknowledged = false; };
     };
     testMempoolCustomUser = {
       expr = with customMempoolUser; {
