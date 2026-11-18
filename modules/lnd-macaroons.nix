@@ -22,17 +22,33 @@ let
           example = ''
             {"entity":"info","action":"read"},{"entity":"onchain","action":"read"}
           '';
-          description = "List of granted macaroon permissions.";
+          description = ''
+            List of granted macaroon permissions.
+            lnd's start fails when lnd lacks the RPC of a `uri` permission.
+          '';
+        };
+        optionalPermissions = mkOption {
+          type = types.str;
+          default = "";
+          example = ''
+            {"entity":"uri","action":"/walletrpc.WalletKit/ListUnspent"}
+          '';
+          description = ''
+            List of `uri` permissions that the macaroon gets only when lnd has their RPC.
+            Some RPCs, like those of `walletrpc`, exist only when lnd's package has
+            their build tag. When lnd lacks the RPC, the macaroon doesn't get the
+            permission, and lnd's start logs a warning.
+          '';
         };
         rootKeyId = mkOption {
           type = types.str;
           readOnly = true;
           default = macaroonRootKeyId name config;
-          defaultText = literalMD "Derived from the name, user and permissions";
+          defaultText = literalMD "Derived from the name, user and both lists of permissions";
           description = ''
             The ID of the macaroon's own lnd root key.
-            A change of the name, user or permissions gives a new ID,
-            which revokes the copies of the previous macaroon.
+            A change of the name, user, permissions or optional permissions gives
+            a new ID, which revokes the copies of the previous macaroon.
           '';
         };
       };
@@ -52,24 +68,72 @@ let
   };
 
   # Sorted and without duplicates, so that equivalent definitions get the same ID.
-  # null unless the permissions are a non-empty list of {entity, action} strings.
+  # null unless the permissions are a list of {entity, action} strings.
   # lncli takes them as `entity:action`, so neither may contain a colon.
   canonicalPermissions = permissions: let
     parsed = builtins.fromJSON "[${permissions}]";
     isPermission = p: isAttrs p && attrNames p == [ "action" "entity" ]
       && isString p.entity && isString p.action && !hasInfix ":" (p.entity + p.action);
     before = a: b: if a.entity == b.entity then a.action < b.action else a.entity < b.entity;
-  in if parsed != [] && all isPermission parsed then sort before (unique parsed) else null;
+  in if all isPermission parsed then sort before (unique parsed) else null;
 
   # The same definition keeps its ID, so lnd reuses its root key and the copies
-  # stay valid across restarts. IDs carry 48 bits of the hash, so two definitions
-  # can be crafted to collide, but only by whoever writes both of them.
-  macaroonRootKeyId = name: { user, permissions, ... }: let
-    hash = builtins.hashString "sha256" (concatStringsSep "\n" [
+  # stay valid across restarts. Without optional permissions, a macaroon keeps the
+  # ID that earlier versions gave it. IDs carry 48 bits of the hash, so two
+  # definitions can be crafted to collide, but only by whoever writes both of them.
+  macaroonRootKeyId = name: { user, permissions, optionalPermissions, ... }: let
+    optionalOnes = canonicalPermissions optionalPermissions;
+    hash = builtins.hashString "sha256" (concatStringsSep "\n" ([
       "bitcoinix-macaroon-v1" name user (builtins.toJSON (canonicalPermissions permissions))
-    ]);
+    ] ++ optional (optionalOnes != []) (builtins.toJSON optionalOnes)));
   in toString (fromHexString (macaroonIdTag + substring 0 12 hash));
   rootKeyIds = mapAttrsToList (_: macaroon: macaroon.rootKeyId) cfg.macaroons;
+
+  # As lncli takes them: `entity:action`
+  lncliPermissions = permissions: map (p: "${p.entity}:${p.action}") (canonicalPermissions permissions);
+
+  # lnd refuses to bake a `uri` permission for an RPC that it doesn't register, and
+  # a package built without a subserver's build tag, like `walletrpc`, doesn't
+  # register the subserver's RPCs. Only for optional permissions does the script
+  # ask lnd for its RPCs. A required permission of an RPC that lnd lacks fails it.
+  optionalOnly = macaroon: subtractLists (lncliPermissions macaroon.permissions)
+    (lncliPermissions macaroon.optionalPermissions);
+  hasOptionalPermissions = any (macaroon: optionalOnly macaroon != []) (attrValues cfg.macaroons);
+  # Under the script's `set -eo pipefail`, each error here fails the start:
+  # no process substitution hides one.
+  keepRegistered = ''
+    # The RPCs that lnd registers
+    rpcs=$(lncli listpermissions | head -c 1048576 |
+      ${jq} -nr -f ${./lnd-macaroons/registered-rpcs.jq})
+    declare -A registered=()
+    while IFS= read -r rpc; do
+      registered[$rpc]=1
+    done <<< "$rpcs"
+    # Usage: keepRegistered <name> <uri:rpc>...
+    # Sets `kept` to the permissions whose RPC lnd registers, and warns about the others
+    keepRegistered() {
+      local name=$1 permission
+      shift
+      kept=()
+      for permission in "$@"; do
+        if [[ ''${registered[''${permission#uri:}]-} ]]; then
+          kept+=("$permission")
+        else
+          echo "Warning: Macaroon $name doesn't get optional permission $permission," \
+            "because lnd doesn't register this RPC. lnd's package may lack the RPC's build tag." >&2
+        fi
+      done
+    }
+  '';
+  bakeMacaroon = name: macaroon: let
+    bake = "bake ${escapeShellArgs ([ name macaroon.user macaroon.rootKeyId ]
+      ++ lncliPermissions macaroon.permissions)}";
+  in if optionalOnly macaroon == [] then ''
+    ${bake}
+  '' else ''
+    keepRegistered ${escapeShellArgs ([ name ] ++ optionalOnly macaroon)}
+    ${bake} "''${kept[@]}"
+  '';
 
   jq = "${pkgs.jq}/bin/jq";
   runuser = "${pkgs.util-linux}/bin/runuser";
@@ -190,10 +254,8 @@ let
       chown "$user": "$tmpMacaroon"
       mv -fT "$tmpMacaroon" "$RUNTIME_DIRECTORY/$name.macaroon"
     }
-    ${concatStrings (mapAttrsToList (name: macaroon: ''
-      bake ${escapeShellArgs ([ name macaroon.user macaroon.rootKeyId ]
-        ++ map (p: "${p.entity}:${p.action}") (canonicalPermissions macaroon.permissions))}
-    '') cfg.macaroons)}
+    ${optionalString hasOptionalPermissions keepRegistered
+      + concatStrings (mapAttrsToList bakeMacaroon cfg.macaroons)}
     # Deleting a root key doesn't close the streams that were opened with it.
     # Restart lnd once to close them. The next start finds no stale IDs.
     # Restart after this start has finished, as a restart during it would kill
@@ -222,11 +284,20 @@ in {
           `.`, `_` and `-`, must not start with `.` and may have at most 246 characters.
         '';
       }
-      { assertion = canonicalPermissions macaroon.permissions != null;
+      { assertion = !elem (canonicalPermissions macaroon.permissions) [ null [] ];
         message = ''
           services.lnd.macaroons.${name}.permissions must be a non-empty, comma-separated
           list of objects like {"entity":"info","action":"read"}, with exactly these two
           fields, both strings without a colon.
+        '';
+      }
+      { assertion = let optionalOnes = canonicalPermissions macaroon.optionalPermissions; in
+          optionalOnes != null && all (p: p.entity == "uri" && p.action != "") optionalOnes;
+        message = ''
+          services.lnd.macaroons.${name}.optionalPermissions must be a comma-separated
+          list of `uri` permissions like {"entity":"uri","action":"/walletrpc.WalletKit/ListUnspent"},
+          with exactly these two fields, both strings without a colon, and a non-empty
+          action. Put other permissions in `permissions`.
         '';
       }
     ]) cfg.macaroons);

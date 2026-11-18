@@ -87,4 +87,31 @@ class DeletedTests(unittest.TestCase):
                 self.assertNotEqual(self.deleted(output), 0)
 
 
+class RegisteredRpcsTests(unittest.TestCase):
+    def registered(self, output):
+        result = jq(["-nr", "-f", filters / "registered-rpcs.jq"], output)
+        return result.returncode, result.stdout.split()
+
+    def test_valid_output(self):
+        # lncli indents its output
+        output = json.dumps({"method_permissions": {
+            "/lnrpc.Lightning/GetInfo": {"permissions": [{"entity": "info", "action": "read"}]},
+            "/walletrpc.WalletKit/ListUnspent": {"permissions": []},
+        }}, indent=4)
+        self.assertEqual(self.registered(output),
+                         (0, ["/lnrpc.Lightning/GetInfo", "/walletrpc.WalletKit/ListUnspent"]))
+
+    def test_rejects_unexpected_output_without_printing_rpcs(self):
+        valid = '{"method_permissions":{"/lnrpc.Lightning/GetInfo":{}}}'
+        for output in [
+            "", "null", "[]", "{}", '{"method_permissions":{}}', '{"method_permissions":null}',
+            '{"method_permissions":["/lnrpc.Lightning/GetInfo"]}', f"[{valid}]",
+            valid + valid, valid[:-2],
+        ]:
+            with self.subTest(output=output):
+                status, printed = self.registered(output)
+                self.assertNotEqual(status, 0)
+                self.assertEqual(printed, [])
+
+
 unittest.main()

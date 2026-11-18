@@ -145,6 +145,7 @@ def test_clnrest_admin_rune():
     # but never a valid rune.
     data = test_data["clnrest-admin-rune"]
     rune_file = data["file"]
+    rtl_file = data["rtlFile"]
     getinfo = f"https://{ip('clightning')}:{data['port']}/v1/getinfo"
 
     def clnrest_accepts(rune):
@@ -158,8 +159,9 @@ def test_clnrest_admin_rune():
         succeed("systemctl stop clightning")
         if contents is not None:
             succeed(f"printf %s {shlex.quote(contents)} > {rune_file}")
-        # The preceding tests use up clightning's start limit
-        succeed("systemctl reset-failed clightning")
+        # The preceding tests use up the start limits of clightning and of RTL,
+        # which clightning's start starts
+        succeed("systemctl reset-failed clightning" + (" rtl" if rtl_file else ""))
         # Returns after `postStart`, which creates the rune
         succeed("systemctl start clightning")
         rune = succeed(f"cat {rune_file}").rstrip("\n")
@@ -173,6 +175,11 @@ def test_clnrest_admin_rune():
     machine.wait_for_unit("clightning")
     # Otherwise, `clnrest_accepts` wouldn't check the rune
     assert not clnrest_accepts("null"), "clnrest accepts the rune 'null'"
+    rtl_rune = None
+    if rtl_file:
+        # RTL's start installs its rune. On a fresh VM, the start waits for lnd.
+        succeed("systemctl reset-failed rtl", "systemctl start rtl")
+        rtl_rune = succeed(f"cat {rtl_file}")
 
     rune = succeed(f"cat {rune_file}").rstrip("\n")
     assert start_with(None) == rune, f"A start replaced the valid rune in {rune_file}"
@@ -181,11 +188,11 @@ def test_clnrest_admin_rune():
         with machine.nested(f"rune file contents: {contents!r}"):
             rune = start_with(contents)
 
-    if rtl_file := data["rtlFile"]:
-        # RTL stopped with clightning, and clightning's start started it again,
-        # so RTL copied the new rune
+    if rtl_file:
+        # RTL stopped with clightning, and clightning's start started it again.
+        # RTL has a rune of its own, which it keeps.
         machine.wait_for_unit("rtl")
-        assert_full_match(f"cat {rtl_file}", re.escape(f'LIGHTNING_RUNE="{rune}"\n'))
+        assert succeed(f"cat {rtl_file}") == rtl_rune, f"RTL's rune in {rtl_file} changed"
 
 
 # Impure: restarts lnd on a new data dir, then on the original one
@@ -266,8 +273,8 @@ def test_lnd_wallet_init():
 # Impure: stops, starts and terminates lnd and clightning
 @test("rtl-stops-with-backend")
 def test_rtl_stops_with_backend():
-    # RTL sends the lnd admin macaroon and the clightning admin rune to its
-    # backends. So it must stop with a backend's unit, and start again only
+    # RTL sends its lnd macaroon and its clightning rune to its backends.
+    # So it must stop with a backend's unit, and start again only
     # after the backend's start finished.
     data = test_data["rtl-credentials"]
     backends = [unit for unit in ("lnd", "clightning") if data[unit]]
@@ -435,8 +442,8 @@ def test_lnd_macaroon_revocation():
         succeed(f"install -m 400 -o {data['user']} /run/lnd/{name}.macaroon {copy}")
         info = succeed_json(f"{lncli} printmacaroon --macaroon_file {copy}")
         assert info["root_key_id"] == configured[name], (name, info)
-        # getinfo, which checks the macaroons, needs info:read
-        if "info:read" not in info["permissions"]:
+        # getinfo, which checks the macaroons, needs info:read or its `uri` permission
+        if not {"info:read", "uri:/lnrpc.Lightning/GetInfo"} & set(info["permissions"]):
             return None
         assert_valid(copy)
         return copy
