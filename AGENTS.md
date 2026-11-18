@@ -166,7 +166,8 @@ when they update. A release note alone is not enough. This includes:
   or sandboxing restriction
 
 The exception is changes confined to package or flake attributes, with no change to
-module configuration or service behavior: document these in `docs/release-notes.md`.
+module configuration or service behavior: document these in
+`docs/release-notes/<version>/<title>.md` for the upcoming release.
 Do not add a config-version notice or bump solely for these changes.
 
 Root `version.nix` records the latest finalized release. **Change it only when
@@ -189,13 +190,13 @@ For each entry:
   arguments it uses) and returning `{ condition = ...; message = ...; }`.
   `modules/versioning.nix` supplies the version from the directory name and loads
   notices in increasing version order, then alphabetically by filename. It appends
-  a reference to the matching version section in `docs/upgrading.md` for versions
-  0.1.0 and newer.
+  a reference to `docs/upgrading/<version>.md` when that page exists, or to
+  `docs/upgrading.md`, starting at 0.1.0.
 - Set `condition` so only affected users see it, e.g. users who already set the
   new value don't.
 - The `message` says what changed and what to do. Put longer migration steps in
-  `docs/upgrading.md` under "Upgrading to config version <version>"; the message
-  does not need to repeat the reference to that section.
+  `docs/upgrading/<version>/<title>.md`; the message does not need to repeat
+  the reference to the upgrade notes.
 - Keep `version.nix` and all examples' `nix-bitcoin.configVersion` at the latest
   released version while adding changes or migration notices. Advance both only
   when finalizing the migration list immediately before tagging
@@ -215,20 +216,38 @@ On every change, re-check whether the docs (`README.md`, `docs/`, `dev/README.md
 new feature or a behaviour change MUST be reflected in the docs, in the same PR.
 Pages under `docs/` must be listed in `docs/SUMMARY.md` to appear in the mdBook build.
 
-- Release notes: record notable release changes, including package and flake-attribute
-  changes, in `docs/release-notes.md` under `## <version>`, newest version first.
-  Start each change entry with a descriptive fourth-level heading (`#### <title>`).
-  Add to the upcoming release; edit released sections only to fix errors. Link to
-  `docs/upgrading.md` for configuration migrations instead of duplicating their steps.
+- During development, keep each change in a separate Markdown file to avoid merge
+  conflicts, like the notices in `modules/versioning/<version>/`. Use descriptive,
+  lowercase, hyphen-separated filenames (`<title>.md`) and start each file with
+  a fourth-level heading (`#### <title>`). For each release, the indexes and
+  `docs/SUMMARY.md` list only the version pages. The TBD pages each link to the
+  corresponding draft directory. Adding a draft requires only its own file.
+  CI rejects links to individual drafts in the indexes and sidebar. If a PR
+  misses its release, move its drafts and any new Nix migration notices to the
+  next open milestone. CI checks new notice paths against the base branch's
+  finalized version and rejects draft files or TBD pages for finalized versions.
+- Release notes: record notable changes, including package and flake-attribute
+  changes, in `docs/release-notes/<version>/<title>.md`. Link to the corresponding
+  upgrade note for configuration migrations instead of duplicating their steps.
 - Upgrade notes: every entry under `modules/versioning/` with a non-trivial migration
-  gets text in `docs/upgrading.md`. Each version has one `## Upgrading to config version <version>`
-  section, newest version first, ending with the line that sets `configVersion`.
-  For an unreleased version, explicitly defer that assignment until the release
-  is finalized; users following master must keep the latest released version.
-  Start each change entry with a descriptive fourth-level heading (`#### <title>`),
-  keeping its explanation and migration steps together under that heading.
-  Add to the section of the upcoming release; never edit sections of released versions
-  except to fix errors.
+  gets text in `docs/upgrading/<version>/<title>.md`. Keep the explanation and
+  migration steps together in that file. The TBD upgrade page tells users
+  following master to keep the latest released `configVersion` until the upcoming
+  release is finalized.
+- `docs/release-notes.md` and `docs/upgrading.md` are indexes and explain the layout.
+  Released versions have one concatenated page each at
+  `docs/release-notes/<version>.md` and `docs/upgrading/<version>.md`, linked newest
+  first. Edit released pages only to fix errors.
+- At release time, replace the TBD contents of the two per-version pages with
+  the consolidated draft notes in the release-preparation commit. Preserve each
+  draft heading on its corresponding version page so CI and the signing helper
+  can check that every entry was included. End the upgrade page with the
+  instruction to set `nix-bitcoin.configVersion = "<version>";` after migrating.
+  Rebase relative links, replace links to individual files with links
+  to the matching headings in the consolidated pages, drop the upcoming labels
+  from both indexes, and remove the individual Markdown files. Keep the Nix notices in
+  `modules/versioning/<version>/` separate. See "Cutting a release" in
+  `dev/README.md` for the full procedure.
 - Removed or renamed options, commands, paths and services: grep `README.md`, `docs/`
   and `examples/` and update or remove every mention. Docs must not describe features
   that no longer exist.

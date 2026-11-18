@@ -388,7 +388,7 @@ let
       inherit (operatorAccountOnion.services.clightning) enable port plugins;
     };
   };
-  # The migration that docs/upgrading.md describes for a disabled role
+  # The migration that docs/upgrading/0.1.6.md describes for a disabled role
   operatorAccountGrant = {
     imports = [ operatorAccountOnion ];
     nix-bitcoin.onionAddresses.access.alice = [ "clnrest" ];

@@ -200,13 +200,49 @@ they control state compatibility, not the package channel.
 A release is a signed, annotated git tag and nothing else. There are no release archives
 and no GitHub release assets. Signing needs the maintainer's key, so this cannot run in CI.
 
-Before tagging, review the version's section in [the release notes](../docs/release-notes.md)
-and make sure it covers notable changes, including package and flake-attribute changes.
+Before tagging, review the draft files under `docs/release-notes/<version>/`
+and make sure they cover notable changes, including package and flake-attribute changes.
 Breaking module or service changes also need an entry in
 `modules/versioning/<version>/<identifier>.nix`, with non-trivial migrations documented in
 [the upgrading guide](../docs/upgrading.md).
-Each change entry in the release notes and upgrading guide starts with a descriptive
-fourth-level heading (`#### <title>`) within its version section.
+During development, put each change in its own file under
+`docs/release-notes/<version>/` or `docs/upgrading/<version>/`, using a descriptive,
+lowercase, hyphen-separated filename and a fourth-level heading (`#### <title>`).
+Each draft version page starts its body with `TBD.` and links to its draft
+directory on GitHub. Both indexes and
+`docs/SUMMARY.md` list the version pages, so adding a draft requires only its own
+file. Earlier releases keep their consolidated pages at `docs/release-notes/<version>.md`
+and `docs/upgrading/<version>.md`. Edit those pages only to fix errors.
+
+At release time, consolidate the Markdown files in the release-preparation commit:
+
+1. Replace the TBD contents of the two version pages. Concatenate
+   `docs/release-notes/<version>/*.md` into
+   `docs/release-notes/<version>.md`, headed `# Release notes <version>`, and
+   `docs/upgrading/<version>/*.md` into `docs/upgrading/<version>.md`, headed
+   `# Upgrading to config version <version>`. Keep a blank line between entries.
+   Group related changes and put prerequisite migrations first. Preserve each
+   draft's heading on its corresponding page.
+2. Adjust relative links for the new parent directory. Replace all links to
+   individual change files with links to their headings in the consolidated pages,
+   including links from release notes to upgrade notes. Check references in
+   `README.md`, `docs/`, `examples/`, `modules/` and `helper/`.
+3. End the upgrade page with the instruction to set
+   `nix-bitcoin.configVersion = "<version>";` after completing the migrations.
+   Remove the development-only instruction to keep the previous config version.
+4. Remove the `(upcoming)` labels from the version links in `docs/release-notes.md`
+   and `docs/upgrading.md`. When opening the next development version, add its TBD
+   pages and link them from the indexes and `docs/SUMMARY.md`.
+5. Remove the consolidated Markdown fragments and their now-empty version
+   directories. Leave `modules/versioning/<version>/*.nix` separate.
+6. Build the book with `nix shell --inputs-from . nixpkgs#mdbook -c mdbook build`
+   and check that navigation and links reach the new pages and headings.
+
+CI checks the two indexes and the sidebar for links to individual drafts. On a
+release PR it also compares the draft headings on the target branch with the
+consolidated pages. If a PR misses its release, move its Markdown drafts and any
+new Nix migration notices to the next open milestone before merging it. CI
+checks new notice paths against the finalized version on the target branch.
 
 Root [`version.nix`](../version.nix) records the latest finalized release. **Do not
 change it during development, including when adding migration notices.** Once the
@@ -216,7 +252,8 @@ migration list is final, merge a release-preparation commit that updates:
 - `configVersion` in `examples/configuration.nix` and
   `examples/{flakes,colmena,container}/flake.nix` to `<version>`.
 - The bitcoinix input pins in those three flakes to `v<version>`.
-- The upgrading guide's final `configVersion` instruction.
+- The consolidated release and upgrade pages, their links and navigation, and the
+  upgrade page's final `configVersion` instruction, as described above.
 
 The release helper requires `HEAD` to equal `origin/master`, so this preparation
 commit must be on master before tagging. Until the tag is pushed, the example
@@ -253,6 +290,8 @@ Before signing, the script checks that:
 - `<version>` is a stable `X.Y.Z` that is greater than every existing release tag
 - `version.nix` and all four examples' `configVersion` values equal `<version>`,
   and the three example flakes pin `v<version>`
+- every draft heading from before release preparation appears on its consolidated
+  page, and finalized versions have no draft files or TBD pages
 - `gpg.format` is `ssh`, `user.signingkey` is set and the allowed signers file exists
 
 It then creates the signed tag and verifies it with `helper/fetch-release.sh`, the same
@@ -293,8 +332,8 @@ Add a compromised key to `helper/release-keys/ssh-revoked-keys` instead (and kee
 `ssh-allowed-signers`); every tag it signed is then rejected. See SECURITY.md.
 
 `.github/CODEOWNERS` assigns the release-signing files (the key files, `fetch-release.sh`,
-`make-release.sh`, `release.yml` and `SECURITY.md`) to the maintainers. It
-only has an effect if a branch protection rule (or ruleset) on `master` requires review from
-code owners, which is a repository setting made in GitHub. Code owners need write access to
-the repository, otherwise GitHub ignores them. With two maintainers listed, a change by one
-of them needs the other's approval.
+`make-release.sh`, both `check-release-notes` files, `release.yml` and `SECURITY.md`) to the
+maintainers. It only has an effect if a branch protection rule (or ruleset) on `master`
+requires review from code owners, which is a repository setting made in GitHub. Code
+owners need write access to the repository, otherwise GitHub ignores them. With two
+maintainers listed, a change by one of them needs the other's approval.

@@ -4,7 +4,7 @@
 # Uses throwaway ssh keys and a local bare repository as `origin`, so no network
 # access and no maintainer key are needed. The origin rejects every push that the
 # test does not make itself, which proves that the script never publishes.
-# Run directly or via `nix shell nixpkgs#{git,openssh,gnutar}`.
+# See "Checks without a VM" in test/README.md for the Nix shell command.
 set -euo pipefail
 
 scriptDir=$(cd "${BASH_SOURCE[0]%/*}" && pwd)
@@ -50,6 +50,8 @@ origin=$tmp/origin.git
 work=$tmp/work
 allowPush=$tmp/allow-push
 unexpectedPush=$tmp/unexpected-push
+out=$tmp/stdout
+err=$tmp/stderr
 exampleFiles=(
     examples/configuration.nix
     examples/flakes/flake.nix
@@ -70,7 +72,7 @@ EOF
 
     git init -q "$work"
     mkdir -p "$work/helper"
-    cp "$repoRoot/helper/make-release.sh" "$repoRoot/helper/fetch-release.sh" "$work/helper/"
+    cp "$repoRoot/helper/"{make-release.sh,fetch-release.sh,check-release-notes.sh,check-release-notes.py} "$work/helper/"
     local example
     for example in "${exampleFiles[@]}"; do
         mkdir -p "$work/${example%/*}"
@@ -120,7 +122,6 @@ origin_refs() { git -C "$origin" for-each-ref; }
 
 # run_make [args...] -> captures stdout in $out, stderr in $err
 run_make() {
-    out=$tmp/stdout; err=$tmp/stderr
     # No stdin: the script must never need a terminal when it is not given one
     allowedSigners=$signers revokedKeys=$revoked bash "$work/helper/make-release.sh" "$@" \
         >"$out" 2>"$err" </dev/null
@@ -184,7 +185,11 @@ fi
 # expect_failure <description> <regex expected in stderr> <script args...>
 # The state it ran against is left in place, so callers can assert on it.
 expect_failure() {
-    if run_make "${@:3}"; then
+    expect_rejection "$1" "$2" run_make "${@:3}"
+}
+
+expect_rejection() {
+    if "${@:3}"; then
         fail "$1 (accepted)"
     elif grep -qiE -- "$2" "$err"; then
         pass "$1"
@@ -192,6 +197,10 @@ expect_failure() {
         fail "$1 (rejected, but not for the expected reason)"
         sed 's/^/       /' "$err"
     fi
+}
+
+run_notes() {
+    bash "$work/helper/check-release-notes.sh" "$@" >"$out" 2>"$err"
 }
 
 new_world
@@ -267,6 +276,117 @@ rm "$work/version.nix"
 add_commit "missing release marker"
 expect_failure "missing release marker" "Missing release marker: version.nix" --yes 0.1.0
 has_tag 0.1.0 && fail "missing release marker: no tag is left behind"
+
+new_world
+mkdir -p "$work/docs/upgrading/0.1.0" "$work/docs/release-notes/0.0.9" "$work/docs/upgrading/0.1.10"
+for draft in docs/upgrading/0.1.0/late.md docs/release-notes/0.0.9/late.md docs/upgrading/0.1.10/future.md; do
+    echo '#### A draft' > "$work/$draft"
+    git -C "$work" add "$draft"
+done
+echo 'TBD. Notes will be consolidated here.' > "$work/docs/release-notes/0.1.0.md"
+git -C "$work" add docs/release-notes/0.1.0.md
+add_commit "unconsolidated release notes"
+expect_failure "drafts in a finalized version" "Draft docs/upgrading/0.1.0/late.md" --yes 0.1.0
+expect_failure "drafts in older versions" "Draft docs/release-notes/0.0.9/late.md" --yes 0.1.0
+expect_failure "TBD in a finalized version" "Replace the TBD contents of docs/release-notes/0.1.0.md" --yes 0.1.0
+has_tag 0.1.0 && fail "unconsolidated release notes: no tag is left behind"
+
+git -C "$work" rm -q docs/upgrading/0.1.0/late.md docs/release-notes/0.0.9/late.md
+echo '#### The consolidated notes' > "$work/docs/release-notes/0.1.0.md"
+add_commit "consolidated release notes"
+if run_make --yes 0.1.0; then
+    pass "drafts for later versions can remain"
+else
+    fail "drafts for later versions can remain"; sed 's/^/       /' "$err"
+fi
+
+new_world
+mkdir -p "$work/docs/"{release-notes,upgrading}/0.2.0 "$work/modules/versioning/0.1.0"
+echo '#### Release entry' > "$work/docs/release-notes/0.2.0/change.md"
+for draft in first second; do
+    echo '#### Migrate *wallets*' > "$work/docs/upgrading/0.2.0/$draft.md"
+done
+echo '#### Another migration' > "$work/docs/upgrading/0.2.0/third.md"
+echo 'TBD.' > "$work/docs/upgrading/0.2.0.md"
+echo 'TBD.' > "$work/docs/release-notes/0.2.0.md"
+echo 'old notice' > "$work/modules/versioning/0.1.0/old.nix"
+for index in SUMMARY upgrading release-notes; do
+    cat > "$work/docs/$index.md" <<'EOF'
+- [Version page](upgrading/0.2.0.md)
+- [Draft directory](https://github.com/bitcoinix/bitcoinix/tree/master/docs/upgrading/0.2.0)
+- [Upstream note](https://github.com/other/repo/blob/master/docs/upgrading/0.2.0/old.md)
+- Markdown example `[Draft](upgrading/0.2.0/example.md)`
+EOF
+done
+git -C "$work" add docs modules
+add_commit "add draft notes"
+draftBase=$(git -C "$work" rev-parse HEAD)
+
+echo '- [Draft](./upgrading/0.2.0/first.md#steps)' >> "$work/docs/SUMMARY.md"
+printf '\n[Draft][entry]\n\n[entry]: <release-notes/0.2.0/change.md>\n' >> "$work/docs/release-notes.md"
+echo '<a href="https://github.com/bitcoinix/bitcoinix/blob/master/docs/upgrading/0.2.0/first.md">Draft</a>' >> "$work/docs/upgrading.md"
+for index in SUMMARY upgrading release-notes; do
+    expect_rejection "$index rejects individual draft links" "docs/$index.md: link to the version page" run_notes 0.1.0 "$draftBase"
+done
+git -C "$work" restore docs/{SUMMARY,upgrading,release-notes}.md
+
+git -C "$work" switch -qc prepare
+set_release_version 0.2.0
+git -C "$work" rm -qr docs/{release-notes,upgrading}/0.2.0
+cat > "$work/docs/upgrading/0.2.0.md" <<'EOF'
+# Upgrading to config version 0.2.0
+
+#### Another migration
+
+#### Migrate wallets
+
+```md
+#### Migrate wallets
+```
+EOF
+echo '# Release notes 0.2.0' > "$work/docs/release-notes/0.2.0.md"
+# Existing notices can be renamed within their version. A notice added while
+# finalizing 0.2.0 still belongs to the release being prepared.
+git -C "$work" mv modules/versioning/0.1.0/{old,renamed}.nix
+mkdir -p "$work/modules/versioning/0.2.0"
+echo 'on-time notice' > "$work/modules/versioning/0.2.0/on-time.nix"
+git -C "$work" add modules
+git -C "$work" commit -qam "prepare release with missing headings"
+git -C "$work" switch -q master
+add_commit "concurrent change on master"
+draftBase=$(git -C "$work" rev-parse HEAD)
+git -C "$work" merge -q --no-ff -m "merge release preparation" prepare
+push_to_origin master
+expect_rejection "release PR checks each copy of a repeated heading" 'missing the heading "Migrate wallets"' run_notes 0.2.0 "$draftBase"
+expect_failure "signing checks the corresponding release page" 'release-notes/0.2.0.md is missing the heading "Release entry"' --yes 0.2.0
+
+# The tag can be cut after a follow-up commit. The original drafts must still be checked.
+echo '# Comment added after release preparation' >> "$work/version.nix"
+add_commit "clarify release marker"
+expect_failure "later commits preserve the consolidation check" 'missing the heading "Migrate wallets"' --yes 0.2.0
+printf '\n#### Migrate wallets\n' >> "$work/docs/upgrading/0.2.0.md"
+printf '\n#### Release entry\n' >> "$work/docs/release-notes/0.2.0.md"
+add_commit "restore omitted entries"
+releaseBase=$(git -C "$work" rev-parse HEAD)
+
+# A late PR can move its Markdown to the next milestone yet leave the notice behind.
+for guide in upgrading release-notes; do
+    mkdir -p "$work/docs/$guide/0.2.1"
+    echo '#### Late entry' > "$work/docs/$guide/0.2.1/late.md"
+done
+echo 'late notice' > "$work/modules/versioning/0.2.0/late.nix"
+git -C "$work" add docs modules
+add_commit "retarget only the Markdown"
+expect_rejection "late PR checks new migration notices against its base" "New migration notice modules/versioning/0.2.0/late.nix" run_notes 0.2.0 "$releaseBase"
+expect_failure "tagging detects a late notice after finalization" "New migration notice modules/versioning/0.2.0/late.nix" --yes 0.2.0
+mkdir -p "$work/modules/versioning/0.2.1"
+git -C "$work" mv modules/versioning/{0.2.0,0.2.1}/late.nix
+add_commit "retarget the Nix notice"
+if run_notes 0.2.0 "$releaseBase" && run_notes 0.2.0 "$draftBase" && run_make --yes 0.2.0; then
+    pass "complete reordered pages and properly retargeted notices pass CI and signing"
+else
+    fail "complete reordered pages and properly retargeted notices pass CI and signing"; sed 's/^/       /' "$err"
+fi
 
 for example in "${exampleFiles[@]}"; do
     new_world
