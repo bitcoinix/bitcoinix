@@ -255,7 +255,8 @@ The config is world-readable in the Nix store. Store an ntfy token in a runtime 
 and set `settings.notifications.ntfy.token_file` to its path. On a public ntfy server,
 anyone who knows the topic can read the notifications, so choose a topic that is hard
 to guess or protect it with a token. The module generates persistent verification,
-voucher and Nostr keys through Bitcoinix secrets.
+voucher and Nostr keys through Bitcoinix secrets. Setting `settings.withdraw_secret`
+instead skips the voucher key but puts the secret in the world-readable store.
 
 To print the unclaimed vouchers with their URLs, run `sudo unbeholden-lnurl-vouchers`.
 
