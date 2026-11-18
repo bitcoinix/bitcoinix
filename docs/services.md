@@ -78,7 +78,9 @@ systemctl show bitcoind
 ### Connect to bitcoinix node through the SSH onion service
 The `secure-node.nix` preset adds an onion service for SSH. It lets you reach and deploy
 to your node through Tor, e.g. when it's behind NAT. It uses the SSH keys that you
-already deploy with.
+already deploy with. By default, the preset turns off SSH password login
+(`services.openssh.settings.PasswordAuthentication` and `KbdInteractiveAuthentication`),
+so sshd accepts only keys, also over the node's IP address.
 
 1. Get the SSH onion address (excluding the port suffix)
 
