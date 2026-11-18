@@ -41,17 +41,14 @@ let
       '';
     };
     allowedClients = mkOption {
-      type = with types; let
-        octet = "(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])";
-        ipv4 = "${octet}(\\.${octet}){3}(/(3[0-2]|[12]?[0-9]))?";
-        ipv6 = "[0-9a-fA-F.]*:[0-9a-fA-F:.]*(/(12[0-8]|1[01][0-9]|[1-9]?[0-9]))?";
-      in listOf (strMatching "${ipv4}|${ipv6}");
+      type = with types; listOf str;
       default = [];
       example = [ "192.0.2.10" "192.0.2.0/24" ];
       description = ''
         IP addresses or networks, in addition to localhost, that can connect to the service,
         e.g. an https reverse proxy on another host. Set {option}`services.unbeholden-wallet.address`
         to a non-local address too.
+        systemd ignores entries it can't parse.
         The service can also open connections to these addresses.
         This doesn't open the firewall port.
         Not supported with netns-isolation.

@@ -378,9 +378,12 @@ def test_unbeholden_wallet():
     assert_full_match(f"{status} -H 'Host: evil.example'", "403")
     for host in test_data["unbeholden-wallet"]["allowedHosts"]:
         assert_full_match(f"{status} -H 'Host: {host}'", "200")
-    for client in test_data["unbeholden-wallet"]["allowedClients"]:
-        allowed = client.split("/")[0]
-        denied = "192.0.2.2"
+    clients = test_data["unbeholden-wallet"]["allowedClients"]
+    if clients:
+        networks = [ipaddress.ip_network(c, strict=False) for c in clients]
+        allowed = networks[0].network_address
+        denied = ipaddress.ip_address("198.51.100.1")
+        assert not any(denied in n for n in networks), networks
         succeed(f"ip addr add {allowed}/32 dev lo", f"ip addr add {denied}/32 dev lo")
         remote = f"curl -s -o /dev/null -w '%{{http_code}}' -m 5 {allowed}:60846 --interface"
         assert_full_match(f"{remote} {allowed}", "200")

@@ -606,7 +606,7 @@ let
         enable = true;
         allowedHosts = [ "wallet.test" ];
         address = "0.0.0.0";
-        allowedClients = [ "192.0.2.1/32" ];
+        allowedClients = [ "192.0.2.1" ];
       };
     };
 
