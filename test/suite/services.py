@@ -332,7 +332,7 @@ def test_mempool():
     machine.wait_until_succeeds(
         log_has_string("mempool", "Mempool Server is running on port 8999")
     )
-    # config.json holds the public RPC password
+    # config.json holds mempool's RPC password
     conf = "/var/cache/mempool/config.json"
     assert_file_metadata(conf, owner="mempool", mode="600")
     # A file with laxer permissions (created by earlier versions) is replaced
