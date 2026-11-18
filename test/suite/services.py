@@ -249,6 +249,12 @@ def test_btcpayserver():
     assert_running("nbxplorer")
     machine.wait_until_succeeds(log_has_string("nbxplorer", "BTC: RPC connection successful"))
     wait_for_open_port(ip("nbxplorer"), 24444)
+    # btcpayserver is in NBXplorer's group to read the API cookie. That group
+    # must not give it NBXplorer's bitcoind RPC password.
+    rpc_password = "/secrets/bitcoin-rpcpassword-btcpayserver"
+    assert_file_metadata(rpc_password, owner="nbxplorer", mode="400")
+    machine.fail(f"runuser -u btcpayserver -- cat {rpc_password}")
+    succeed("runuser -u btcpayserver -- cat /var/lib/nbxplorer/*/.cookie")
     # Regression guard: NBXplorer's .NET host takes its content root from the
     # working directory and (by default) watches it recursively. With no
     # WorkingDirectory that was `/`, i.e. an inotify watch per directory of the

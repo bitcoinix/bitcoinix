@@ -170,6 +170,8 @@
   # your BTCPay Server usage, like invoice creation times, with your IP address.
   #
   # Enable this option to connect BTCPay Server to Core Lightning.
+  # BTCPay Server then has full control of the node, including its funds.
+  # See "BTCPay Server" in ../docs/services.md.
   # services.btcpayserver.lightningBackend = "clightning";
   #
   # Enable this option to connect BTCPay Server to LND.
@@ -293,5 +295,7 @@
   # The bitcoinix release version that your config is compatible with.
   # When upgrading to a backwards-incompatible release, bitcoinix will display an
   # error and provide instructions for migrating your config to the new release.
-  nix-bitcoin.configVersion = "0.2.0";
+  # On master, unreleased migrations warn; keep this at the latest released version.
+  # Keep this explicit: importing version.nix would automatically acknowledge migrations.
+  nix-bitcoin.configVersion = "0.1.6";
 }

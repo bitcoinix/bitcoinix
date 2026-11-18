@@ -68,6 +68,9 @@ nix build --no-link .#checks.x86_64-linux.cve-tools
 # Run the same fixtures on any host with Nix, including macOS.
 nix shell --inputs-from . nixpkgs#python3 -c python3 test/ci/cve-tests.py test/ci
 
+# Check all example versions/pins and tag signing in temporary local repositories.
+nix shell --inputs-from . nixpkgs#{git,openssh,gnutar} -c ./test/make-release-test.sh
+
 # Evaluate the flake and run checks for the current supported system.
 nix flake check --all-systems
 ```
@@ -76,7 +79,10 @@ nix flake check --all-systems
 defaults, module integration, and rejected configurations. Failures report the
 case name, expected value, and actual value. These fixtures are independent of
 VM scenarios. The REST allowlist cases also run here, rather than waiting for
-a VM to report evaluation failures.
+a VM to report evaluation failures. Migration cases check released errors,
+unreleased warnings, rejection of future config versions, and the null opt-out.
+They override the internal released-version option to test both sides of release
+finalization even after `version.nix` advances.
 
 [runner-tests.py](./runner-tests.py) loads the assembled suite and checks test
 selection, ordering, registration errors, and interactive dispatch using a
@@ -95,7 +101,8 @@ The `deployment_examples` job runs [ci/deployment-examples.sh](./ci/deployment-e
 [../examples](../examples) with its own tool against the checkout, one step per example:
 `examples/flakes` with `nixos-rebuild build --flake` and `examples/colmena` with
 `colmena build`. The examples pin a release and its `configVersion`; the script locks
-them to the checkout and sets the checkout's latest `configVersion`.
+them to the checkout and uses root `version.nix` for
+`configVersion`, retaining unreleased migration warnings.
 The `shellcheck` and `nixos_search` jobs run independently, so shell linting and
 fast checks can finish while package and option extraction is still running.
 The required `ci_gate` waits for all jobs and validates both successes and expected

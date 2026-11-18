@@ -108,6 +108,26 @@ check_version_is_newest() {
         die "Version $version is not greater than the latest release $highest."
 }
 
+check_migrations_finalized() {
+    local releasedVersion example exampleVersion examplePin
+    [[ -f version.nix ]] || die "Missing release marker: version.nix."
+    releasedVersion=$(nix eval --raw --file version.nix)
+    [[ $releasedVersion == "$version" ]] ||
+        die "Set version.nix to $version in the release-preparation commit."
+    for example in examples/configuration.nix examples/flakes/flake.nix \
+        examples/colmena/flake.nix examples/container/flake.nix; do
+        [[ -f $example ]] || die "Missing example: $example."
+        exampleVersion=$(sed -nE 's/^[[:space:]]*(nix-bitcoin\.)?configVersion = "([^"]+)";$/\2/p' "$example")
+        [[ $exampleVersion == "$version" ]] ||
+            die "Set nix-bitcoin.configVersion in $example to $version in the release-preparation commit."
+        if [[ $example == */flake.nix ]]; then
+            examplePin=$(sed -nE 's#^[[:space:]]*(bitcoinix|nix-bitcoin)\.url = "github:[^/]+/[^/]+/v([^"]+)";$#\2#p' "$example")
+            [[ $examplePin == "$version" ]] ||
+                die "Set the bitcoinix release pin in $example to v$version in the release-preparation commit."
+        fi
+    done
+}
+
 check_signing_config() {
     [[ $(git config --get gpg.format || true) == ssh ]] ||
         die "git config gpg.format must be 'ssh'. Releases are SSH-signed."
@@ -161,6 +181,7 @@ check_clean
 check_up_to_date
 check_tag_absent
 check_version_is_newest
+check_migrations_finalized
 check_signing_config
 
 commit=$(git rev-parse HEAD)
