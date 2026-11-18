@@ -70,6 +70,33 @@ Charge-LND reads its certificate and macaroon directly, without staging them
 under a synthetic mainnet directory. Users selecting custom credentials with
 `--lnddir` should follow the [0.2.0 upgrade notes](upgrading.md#upgrading-to-config-version-020).
 
+#### The secure-node preset turns off SSH password login
+
+The `secure-node.nix` preset now turns off SSH password and keyboard-interactive login
+by default, so its sshd onion service accepts only keys. See
+[Upgrading to config version 0.2.0](upgrading.md#upgrading-to-config-version-020).
+
+#### NBXplorer RPC password permissions
+
+BTCPay Server can no longer read NBXplorer's bitcoind RPC password. Only NBXplorer's
+user can read it now. Before, BTCPay Server could read it through the group that
+gives it NBXplorer's API cookie. See
+[Upgrading to config version 0.2.0](upgrading.md#upgrading-to-config-version-020).
+
+#### BTCPay Server's access to the Lightning node
+
+With `services.btcpayserver.lightningBackend = "clightning"`, BTCPay Server has full
+control of the Lightning node, including its funds. With `lnd`, it gets a restricted
+macaroon. See [Lightning backend](services.md#lightning-backend).
+
+#### Custom RPC users' password HMACs are in the Nix store
+
+The `passwordHMAC` of each custom RPC user in `services.bitcoind.rpc.users` is
+written to the world-readable Nix store. Any local user can read it and test password
+guesses offline. This isn't new, but it wasn't documented. If a custom RPC user has a
+weak password, replace it with a long random one. See
+[Allow bitcoind RPC connections from LAN](configuration.md#allow-bitcoind-rpc-connections-from-lan).
+
 ## 0.1.6
 
 #### Tor enforcement allows only local addresses
