@@ -843,7 +843,9 @@ See the [module](https://github.com/bitcoinix/bitcoinix/blob/master/modules/clig
 for all options.
 
 `clightning` requires the replication target: it doesn't start while the target is
-unavailable, e.g. when the SSHFS mount fails.
+unavailable, e.g. when the SSHFS mount fails. For a local directory, this works only
+when systemd knows the mount that holds the directory. See
+[Local directory target](#local-directory-target).
 
 Also back up:
 - the static file `hsm_secret` (`/var/lib/clightning/bitcoin/hsm_secret` by default).
@@ -943,10 +945,27 @@ Core Lightning will now replicate database files to `local.directory`. This
 can be used to replicate to an external HDD by mounting it at path
 `local.directory`.
 
+`clightning` requires the mounts for `local.directory`. With `encrypt`,
+`clightning-replication-mounts` requires them too. While the disk isn't mounted,
+`clightning` doesn't start, so the replica can't land on the primary disk.
+systemd can only wait for the mounts it knows, so declare the disk in `fileSystems`:
+```nix
+fileSystems."/var/backup/clightning" = {
+  device = "/dev/disk/by-uuid/<uuid of the disk's filesystem>";
+  fsType = "ext4";
+  # Boot without the disk. clightning stays stopped then.
+  options = [ "nofail" ];
+};
+```
+systemd finds the mounts from the path as written and doesn't follow symlinks.
+So set `local.directory` to the mount point or a directory below it, not to a
+symlink. A directory on the root filesystem has no mount to wait for.
+
 #### Custom remote destination
 
 Follow the steps in section "Local directory target" above and mount a custom remote
-destination (e.g., an NFS or SMB share) to `local.directory`.\
+destination (e.g., an NFS or SMB share) to `local.directory`. Declare the share in
+`fileSystems`, so that `clightning` doesn't start without it.\
 You might want to disable `local.setupDirectory` in order to create the mount directory
 yourself with custom permissions.
 

@@ -63,6 +63,14 @@ Charge-LND reads its certificate and macaroon directly, without staging them
 under a synthetic mainnet directory. Users selecting custom credentials with
 `--lnddir` should follow the [0.2.0 upgrade notes](upgrading.md#upgrading-to-config-version-020).
 
+#### clightning requires the mount of its local replica
+
+With `services.clightning.replication.local.directory`, `clightning` now doesn't
+start while the disk or share under that directory isn't mounted. Before, it wrote
+the replica to the filesystem below the mount point, usually the primary disk, without
+a warning. This works only for mounts that systemd knows, like `fileSystems` entries.
+See [Upgrading to config version 0.2.0](upgrading.md#upgrading-to-config-version-020).
+
 #### `nix-bitcoin-wg-connect` no longer looks up the public IP
 
 `nix-bitcoin-wg-connect` from the WireGuard preset now needs your node's address as an
