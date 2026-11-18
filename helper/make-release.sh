@@ -1,5 +1,5 @@
 #!/usr/bin/env nix-shell
-#!nix-shell -i bash -p bash coreutils git gnugrep gnused gnutar openssh cmark python3
+#!nix-shell -i bash -p bash coreutils git gnugrep gnused gnutar openssh cmark mdbook python3
 set -euo pipefail
 
 # Create and sign a bitcoinix release tag, then verify it exactly as users will.

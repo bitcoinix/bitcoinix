@@ -220,9 +220,11 @@ Pages under `docs/` must be listed in `docs/SUMMARY.md` to appear in the mdBook 
   conflicts, like the notices in `modules/versioning/<version>/`. Use descriptive,
   lowercase, hyphen-separated filenames (`<title>.md`) and start each file with
   a fourth-level heading (`#### <title>`). For each release, the indexes and
-  `docs/SUMMARY.md` list only the version pages. The TBD pages each link to the
-  corresponding draft directory. Adding a draft requires only its own file.
-  CI rejects links to individual drafts in the indexes and sidebar. If a PR
+  `docs/SUMMARY.md` list only the version pages. In the PR adding the first
+  draft for a milestone, run `helper/open-release-notes.py <version>` and
+  commit the two TBD pages and navigation entries it creates. Subsequent
+  drafts need only their own files. CI checks that both pages are linked
+  from the indexes and sidebar and rejects links there to individual drafts. If a PR
   misses its release, move its drafts and any new Nix migration notices to the
   next open milestone. CI checks new notice paths against the base branch's
   finalized version and rejects draft files or TBD pages for finalized versions.

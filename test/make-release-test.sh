@@ -72,18 +72,51 @@ EOF
 
     git init -q "$work"
     mkdir -p "$work/helper"
-    cp "$repoRoot/helper/"{make-release.sh,fetch-release.sh,check-release-notes.sh,check-release-notes.py} "$work/helper/"
+    cp "$repoRoot/helper/"{make-release.sh,fetch-release.sh,check-release-notes.sh,check-release-notes.py,open-release-notes.py} "$work/helper/"
     local example
     for example in "${exampleFiles[@]}"; do
         mkdir -p "$work/${example%/*}"
         cp "$repoRoot/$example" "$work/$example"
     done
+    mkdir "$work/docs"
+    printf '# Summary\n\n- [Upgrading](upgrading.md)\n- [Release notes](release-notes.md)\n' > "$work/docs/SUMMARY.md"
+    printf '# Upgrading\n\n## Versions\n' > "$work/docs/upgrading.md"
+    printf '# Release notes\n\n## Versions\n' > "$work/docs/release-notes.md"
+    echo '"0.0.0"' > "$work/version.nix"
+    prepare_notes 0.1.0
     set_release_version 0.1.0
     echo content > "$work/file"
     git -C "$work" add -A
     git -C "$work" commit -q -m "initial commit"
     git -C "$work" remote add origin "$origin"
     push_to_origin master
+}
+
+open_notes() {
+    "$work/helper/open-release-notes.py" "$1" >/dev/null
+}
+
+finish_indexes() {
+    local guide
+    for guide in upgrading release-notes; do
+        sed -i "\\|($guide/$1.md)|s/ (upcoming)$//" "$work/docs/$guide.md"
+    done
+}
+
+footer() {
+    cat <<EOF
+
+After migrating your configuration, set \`nix-bitcoin.configVersion = "$1";\`.
+EOF
+}
+
+prepare_notes() {
+    open_notes "$1"
+    printf '# Release notes %s\n' "$1" > "$work/docs/release-notes/$1.md"
+    printf '# Upgrading to config version %s\n' "$1" > "$work/docs/upgrading/$1.md"
+    footer "$1" >> "$work/docs/upgrading/$1.md"
+    finish_indexes "$1"
+    git -C "$work" add docs
 }
 
 set_release_version() {
@@ -112,6 +145,7 @@ add_commit() {
 
 # Publish a release that was made with the script
 release() {
+    prepare_notes "$1"
     set_release_version "$1"
     add_commit "prepare $1"
     run_make --yes "$1" || { echo "setup release $1 failed"; cat "$err"; exit 1; }
@@ -172,6 +206,7 @@ fi
 # v0.10.0 sorts before v0.9.0 as a string
 new_world
 release 0.9.0
+prepare_notes 0.10.0
 set_release_version 0.10.0
 add_commit second
 if run_make --yes 0.10.0 && has_tag 0.10.0; then
@@ -292,7 +327,9 @@ expect_failure "TBD in a finalized version" "Replace the TBD contents of docs/re
 has_tag 0.1.0 && fail "unconsolidated release notes: no tag is left behind"
 
 git -C "$work" rm -q docs/upgrading/0.1.0/late.md docs/release-notes/0.0.9/late.md
-echo '#### The consolidated notes' > "$work/docs/release-notes/0.1.0.md"
+printf '# Release notes 0.1.0\n\n#### The consolidated notes\n' > "$work/docs/release-notes/0.1.0.md"
+open_notes 0.1.10
+git -C "$work" add docs
 add_commit "consolidated release notes"
 if run_make --yes 0.1.0; then
     pass "drafts for later versions can remain"
@@ -302,17 +339,37 @@ fi
 
 new_world
 mkdir -p "$work/docs/"{release-notes,upgrading}/0.2.0 "$work/modules/versioning/0.1.0"
-echo '#### Release entry' > "$work/docs/release-notes/0.2.0/change.md"
+printf '#### Release entry\n\nRead the wallet migration instructions.\n' > "$work/docs/release-notes/0.2.0/change.md"
 for draft in first second; do
     echo '#### Migrate *wallets*' > "$work/docs/upgrading/0.2.0/$draft.md"
 done
 echo '#### Another migration' > "$work/docs/upgrading/0.2.0/third.md"
-echo 'TBD.' > "$work/docs/upgrading/0.2.0.md"
-echo 'TBD.' > "$work/docs/release-notes/0.2.0.md"
+echo '#### Withdrawn during development' > "$work/docs/upgrading/0.2.0/withdrawn.md"
 echo 'old notice' > "$work/modules/versioning/0.1.0/old.nix"
-for index in SUMMARY upgrading release-notes; do
-    cat > "$work/docs/$index.md" <<'EOF'
-- [Version page](upgrading/0.2.0.md)
+git -C "$work" add docs
+expect_rejection "the first draft needs both milestone pages" 'Missing version page docs/release-notes/0.2.0.md' run_notes 0.1.0 HEAD
+open_notes 0.2.0
+git -C "$work" add docs
+open_notes 0.2.0
+if git -C "$work" diff --quiet -- docs; then
+    pass "opening a milestone twice preserves the pages and navigation"
+else
+    fail "opening a milestone twice preserves the pages and navigation"
+fi
+for guide in upgrading release-notes; do
+    for index in SUMMARY "$guide"; do
+        sed -i "\\|]($guide/0.2.0.md)|d" "$work/docs/$index.md"
+        expect_rejection "first drafts need the $guide entry in $index" "docs/$index.md: add a link to docs/$guide/0.2.0.md" run_notes 0.1.0 HEAD
+        open_notes 0.2.0
+    done
+done
+if python3 "$work/helper/open-release-notes.py" 0.1.0 >"$out" 2>"$err"; then
+    fail "opening a finalized milestone is rejected"
+else
+    pass "opening a finalized milestone is rejected"
+fi
+for index in upgrading release-notes; do
+    cat >> "$work/docs/$index.md" <<'EOF'
 - [Draft directory](https://github.com/bitcoinix/bitcoinix/tree/master/docs/upgrading/0.2.0)
 - [Upstream note](https://github.com/other/repo/blob/master/docs/upgrading/0.2.0/old.md)
 - Markdown example `[Draft](upgrading/0.2.0/example.md)`
@@ -320,6 +377,8 @@ EOF
 done
 git -C "$work" add docs modules
 add_commit "add draft notes"
+git -C "$work" rm -q docs/upgrading/0.2.0/withdrawn.md
+add_commit "withdraw an unreleased change while the milestone is still open"
 draftBase=$(git -C "$work" rev-parse HEAD)
 
 echo '- [Draft](./upgrading/0.2.0/first.md#steps)' >> "$work/docs/SUMMARY.md"
@@ -331,7 +390,6 @@ done
 git -C "$work" restore docs/{SUMMARY,upgrading,release-notes}.md
 
 git -C "$work" switch -qc prepare
-set_release_version 0.2.0
 git -C "$work" rm -qr docs/{release-notes,upgrading}/0.2.0
 cat > "$work/docs/upgrading/0.2.0.md" <<'EOF'
 # Upgrading to config version 0.2.0
@@ -345,13 +403,21 @@ cat > "$work/docs/upgrading/0.2.0.md" <<'EOF'
 ```
 EOF
 echo '# Release notes 0.2.0' > "$work/docs/release-notes/0.2.0.md"
+footer 0.2.0 >> "$work/docs/upgrading/0.2.0.md"
+finish_indexes 0.2.0
 # Existing notices can be renamed within their version. A notice added while
 # finalizing 0.2.0 still belongs to the release being prepared.
 git -C "$work" mv modules/versioning/0.1.0/{old,renamed}.nix
 mkdir -p "$work/modules/versioning/0.2.0"
 echo 'on-time notice' > "$work/modules/versioning/0.2.0/on-time.nix"
 git -C "$work" add modules
-git -C "$work" commit -qam "prepare release with missing headings"
+git -C "$work" commit -qam "consolidate notes with missing headings"
+beforeBump=$(git -C "$work" rev-parse HEAD)
+expect_rejection "CI catches premature consolidation before the bump" 'keep the TBD page' run_notes 0.1.0 "$draftBase"
+set_release_version 0.2.0
+git -C "$work" commit -qam "bump the release version separately"
+expect_rejection "CI catches entries dropped in a previous commit" 'missing the heading "Migrate wallets"' run_notes 0.2.0 "$beforeBump"
+expect_rejection "tag mode catches entries dropped before the version bump" 'missing the heading "Migrate wallets"' run_notes 0.2.0
 git -C "$work" switch -q master
 add_commit "concurrent change on master"
 draftBase=$(git -C "$work" rev-parse HEAD)
@@ -364,16 +430,59 @@ expect_failure "signing checks the corresponding release page" 'release-notes/0.
 echo '# Comment added after release preparation' >> "$work/version.nix"
 add_commit "clarify release marker"
 expect_failure "later commits preserve the consolidation check" 'missing the heading "Migrate wallets"' --yes 0.2.0
-printf '\n#### Migrate wallets\n' >> "$work/docs/upgrading/0.2.0.md"
-printf '\n#### Release entry\n' >> "$work/docs/release-notes/0.2.0.md"
+sed -i '/^After migrating/i #### Migrate wallets\n' "$work/docs/upgrading/0.2.0.md"
+cat >> "$work/docs/release-notes/0.2.0.md" <<'EOF'
+
+#### Release entry
+
+See the [second wallet migration](../upgrading/0.2.0.md#migrate-wallets-1).
+EOF
 add_commit "restore omitted entries"
 releaseBase=$(git -C "$work" rev-parse HEAD)
+
+# Exercise both public entry points with a clean, pushed tree for each case.
+reject_notes_change() {
+    add_commit "$1"
+    expect_rejection "CI: $1" "$2" run_notes 0.2.0 "$releaseBase"
+    expect_failure "signing: $1" "$2" --yes 0.2.0
+    has_tag 0.2.0 && fail "$1 left a tag"
+    git -C "$work" restore --source="$releaseBase" --staged --worktree -- docs
+}
+
+for guide in upgrading release-notes; do
+    page="$work/docs/$guide/0.2.0.md"
+    sed -i '1d' "$page"
+    reject_notes_change "missing $guide title" 'start the page with'
+    sed -i "\\|]($guide/0.2.0.md)|s/$/ (upcoming)/" "$work/docs/$guide.md"
+    reject_notes_change "$guide still marked upcoming" 'remove the \(upcoming\) label'
+done
+rm "$work/docs/upgrading/0.2.0.md"
+reject_notes_change "missing finalized upgrade page" 'Missing version page docs/upgrading/0.2.0.md'
+page="$work/docs/upgrading/0.2.0.md"
+sed -i '/^After migrating/d' "$page"
+reject_notes_change "missing final configVersion instruction" 'end with an instruction to set'
+sed -i 's/configVersion = "0.2.0"/configVersion = "0.1.0"/' "$page"
+reject_notes_change "wrong final configVersion" 'end with an instruction to set'
+sed -i '/^After migrating/i While in development, keep nix-bitcoin.configVersion = "0.1.0";\n' "$page"
+reject_notes_change "development instruction alongside the correct footer" 'remove the development instruction'
+page="$work/docs/release-notes/0.2.0.md"
+sed -i '/^See the \[second wallet migration\]/d' "$page"
+reject_notes_change "a heading survives but its entry text is gone" 'Restore the entry text'
+echo '[Migration](../../upgrading/0.2.0/first.md)' >> "$page"
+reject_notes_change "unconverted draft link" 'replace the link to the individual draft'
+echo '[Migration](../../upgrading/0.2.0.md)' >> "$page"
+reject_notes_change "relative link still starts in the draft directory" 'broken link.*missing target'
+echo '[Migration](../upgrading/0.2.0.md#migrate-wallets-2)' >> "$page"
+reject_notes_change "link to a missing rendered heading" 'broken link.*missing anchor'
+echo '[Migration](upgrading/0.2.0.md#old-migration)' >> "$work/docs/release-notes.md"
+reject_notes_change "link into a missing heading from another chapter" 'broken link.*missing anchor'
 
 # A late PR can move its Markdown to the next milestone yet leave the notice behind.
 for guide in upgrading release-notes; do
     mkdir -p "$work/docs/$guide/0.2.1"
     echo '#### Late entry' > "$work/docs/$guide/0.2.1/late.md"
 done
+open_notes 0.2.1
 echo 'late notice' > "$work/modules/versioning/0.2.0/late.nix"
 git -C "$work" add docs modules
 add_commit "retarget only the Markdown"

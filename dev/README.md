@@ -208,11 +208,22 @@ Breaking module or service changes also need an entry in
 During development, put each change in its own file under
 `docs/release-notes/<version>/` or `docs/upgrading/<version>/`, using a descriptive,
 lowercase, hyphen-separated filename and a fourth-level heading (`#### <title>`).
-Each draft version page starts its body with `TBD.` and links to its draft
-directory on GitHub. Both indexes and
-`docs/SUMMARY.md` list the version pages, so adding a draft requires only its own
-file. Earlier releases keep their consolidated pages at `docs/release-notes/<version>.md`
-and `docs/upgrading/<version>.md`. Edit those pages only to fix errors.
+The **first draft PR for a milestone** also opens its version pages. After writing
+the draft, run the helper with the version chosen for the milestone and commit
+its output in the same PR.
+
+```bash
+nix shell --inputs-from . nixpkgs#python3 -c helper/open-release-notes.py <version>
+```
+
+The helper creates `# Release notes <version>` and `# Upgrading to config version <version>`
+pages. Each starts with a `TBD.` paragraph and links to the drafts on GitHub.
+The upgrade page tells readers to keep the latest released `configVersion` during
+development. The helper adds both pages to their indexes and to `docs/SUMMARY.md`.
+It can be rerun to restore missing entries. Subsequent draft PRs add only their
+own files. Earlier releases keep their consolidated pages at
+`docs/release-notes/<version>.md` and `docs/upgrading/<version>.md`. Edit those
+pages only to fix errors.
 
 At release time, consolidate the Markdown files in the release-preparation commit:
 
@@ -231,18 +242,18 @@ At release time, consolidate the Markdown files in the release-preparation commi
    `nix-bitcoin.configVersion = "<version>";` after completing the migrations.
    Remove the development-only instruction to keep the previous config version.
 4. Remove the `(upcoming)` labels from the version links in `docs/release-notes.md`
-   and `docs/upgrading.md`. When opening the next development version, add its TBD
-   pages and link them from the indexes and `docs/SUMMARY.md`.
+   and `docs/upgrading.md`.
 5. Remove the consolidated Markdown fragments and their now-empty version
    directories. Leave `modules/versioning/<version>/*.nix` separate.
-6. Build the book with `nix shell --inputs-from . nixpkgs#mdbook -c mdbook build`
-   and check that navigation and links reach the new pages and headings.
 
-CI checks the two indexes and the sidebar for links to individual drafts. On a
-release PR it also compares the draft headings on the target branch with the
-consolidated pages. If a PR misses its release, move its Markdown drafts and any
-new Nix migration notices to the next open milestone before merging it. CI
-checks new notice paths against the finalized version on the target branch.
+CI and the signing helper check the version pages, navigation and draft headings.
+They reject headings that have lost their entry text and build the book to check
+link targets and anchors both on the consolidated pages and in links to them
+from other chapters. If a PR misses its release, move its Markdown drafts
+and any new Nix migration notices to the next open milestone before merging it.
+CI checks new notice paths against the finalized version on the target branch.
+To run the same documentation check locally after committing release preparation, use
+`nix shell --inputs-from . nixpkgs#{cmark,mdbook,python3} -c bash helper/check-release-notes.sh <version>`.
 
 Root [`version.nix`](../version.nix) records the latest finalized release. **Do not
 change it during development, including when adding migration notices.** Once the
@@ -290,8 +301,11 @@ Before signing, the script checks that:
 - `<version>` is a stable `X.Y.Z` that is greater than every existing release tag
 - `version.nix` and all four examples' `configVersion` values equal `<version>`,
   and the three example flakes pin `v<version>`
-- every draft heading from before release preparation appears on its consolidated
-  page, and finalized versions have no draft files or TBD pages
+- each draft heading appears on the corresponding version page, including when
+  consolidation and the version bump are separate commits
+- the pages have their release titles, working book links and navigation entries,
+  the upgrade page ends with the new `configVersion` instruction, and the
+  finalized version has no draft files, TBD paragraphs or upcoming labels
 - `gpg.format` is `ssh`, `user.signingkey` is set and the allowed signers file exists
 
 It then creates the signed tag and verifies it with `helper/fetch-release.sh`, the same

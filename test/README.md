@@ -69,7 +69,7 @@ nix build --no-link .#checks.x86_64-linux.cve-tools
 nix shell --inputs-from . nixpkgs#python3 -c python3 test/ci/cve-tests.py test/ci
 
 # Check example pins, release notes, migration notices and tag signing in local repositories.
-nix shell --inputs-from . nixpkgs#{bash,cmark,coreutils,git,gnugrep,gnused,gnutar,openssh,python3} \
+nix shell --inputs-from . nixpkgs#{bash,cmark,coreutils,git,gnugrep,gnused,gnutar,mdbook,openssh,python3} \
   -c ./test/make-release-test.sh
 
 # Evaluate the flake and run checks for the current supported system.
