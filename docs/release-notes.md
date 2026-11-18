@@ -63,6 +63,12 @@ Charge-LND reads its certificate and macaroon directly, without staging them
 under a synthetic mainnet directory. Users selecting custom credentials with
 `--lnddir` should follow the [0.2.0 upgrade notes](upgrading.md#upgrading-to-config-version-020).
 
+#### BTCPay Server's access to the Lightning node
+
+With `services.btcpayserver.lightningBackend = "clightning"`, BTCPay Server has full
+control of the Lightning node, including its funds. With `lnd`, it gets a restricted
+macaroon. See [Lightning backend](services.md#lightning-backend).
+
 #### Custom RPC users' password HMACs are in the Nix store
 
 The `passwordHMAC` of each custom RPC user in `services.bitcoind.rpc.users` is
