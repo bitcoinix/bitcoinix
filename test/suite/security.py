@@ -277,6 +277,11 @@ def test_lnd_macaroons():
     succeed(f"rm -r {canary} {canary_dir} {runtime_dir} {network_dir}")
 
 
+def clnrest_cert_file(cln, name):
+    # A scenario can set `clnrest-certs`. A relative dir starts at the network dir.
+    return os.path.join(cln["networkDir"], test_data.get("clnrest-certs", ""), name)
+
+
 @test("rtl-credentials")
 def test_rtl_credentials():
     # The lnd macaroon and the clightning rune are copied to RTL by root scripts.
@@ -384,7 +389,7 @@ def test_rtl_credentials():
         check(script, cln["user"], admin_rune, f"{data_dir}/clightning-admin-rune",
               f"printf 'LIGHTNING_RUNE=\"%s\"\\n' \"$(cat {admin_rune})\"",
               invalid_contents=("", "null\n"))
-        cert = f"{cln['networkDir']}/server.pem"
+        cert = clnrest_cert_file(cln, "server.pem")
         check(script, cln["user"], cert, f"{data_dir}/clnrest-cert.pem", f"cat {cert}")
 
     succeed(f"rm -r {canary} {canary_dir}")
@@ -446,8 +451,9 @@ def test_rtl_backend_certs():
               " () => fs.appendFileSync(dir + '/closed', '\\n')))"
               ".listen(port, '127.0.0.1')")
     cln = test_data["rtl-credentials"]["clightning"]
-    issuer_ca = f"{cln['networkDir']}/ca.pem" if cln else ""
-    issuer = f" -CA {issuer_ca} -CAkey {cln['networkDir']}/ca-key.pem" if cln else ""
+    issuer_ca = clnrest_cert_file(cln, "ca.pem") if cln else ""
+    issuer_key = clnrest_cert_file(cln, "ca-key.pem") if cln else ""
+    issuer = f" -CA {issuer_ca} -CAkey {issuer_key}" if cln else ""
     succeed(
         f"mkdir {fake}",
         "openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 -nodes -days 1"

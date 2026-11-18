@@ -421,6 +421,10 @@ lnconnect-clnrest --host 192.168.1.10
 ```
 Always pass `--host` here. Without it (and without `onion`), the commands detect your
 external IP by querying public IP lookup services over clearnet.
+`lnconnect-clnrest` puts clnrest's server certificate into this URL. It asks clightning
+for clnrest's cert dir (`clnrest-certs`). When clightning doesn't answer, it prints a
+warning and uses clightning's network dir. So with `clnrest-certs` set, run it while
+clightning runs, or pass `--tlscertpath`.
 
 ### Use ZEUS (mobile Lightning wallet) via WireGuard
 
