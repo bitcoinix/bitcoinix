@@ -313,8 +313,8 @@ expect_failure "missing release marker" "Missing release marker: version.nix" --
 has_tag 0.1.0 && fail "missing release marker: no tag is left behind"
 
 new_world
-mkdir -p "$work/docs/upgrading/0.1.0" "$work/docs/release-notes/0.0.9" "$work/docs/upgrading/0.1.10"
-for draft in docs/upgrading/0.1.0/late.md docs/release-notes/0.0.9/late.md docs/upgrading/0.1.10/future.md; do
+mkdir -p "$work/docs/upgrading/0.1.0/nested" "$work/docs/release-notes/0.0.9" "$work/docs/upgrading/0.1.10"
+for draft in docs/upgrading/0.1.0/{late.md,nested/step.md,missed.markdown} docs/release-notes/0.0.9/late.md docs/upgrading/0.1.10/future.md; do
     echo '#### A draft' > "$work/$draft"
     git -C "$work" add "$draft"
 done
@@ -323,10 +323,12 @@ git -C "$work" add docs/release-notes/0.1.0.md
 add_commit "unconsolidated release notes"
 expect_failure "drafts in a finalized version" "Draft docs/upgrading/0.1.0/late.md" --yes 0.1.0
 expect_failure "drafts in older versions" "Draft docs/release-notes/0.0.9/late.md" --yes 0.1.0
+expect_failure "nested drafts in a finalized version" "Draft docs/upgrading/0.1.0/nested/step.md" --yes 0.1.0
+expect_failure ".markdown drafts in a finalized version" "Draft docs/upgrading/0.1.0/missed.markdown" --yes 0.1.0
 expect_failure "TBD in a finalized version" "Replace the TBD contents of docs/release-notes/0.1.0.md" --yes 0.1.0
 has_tag 0.1.0 && fail "unconsolidated release notes: no tag is left behind"
 
-git -C "$work" rm -q docs/upgrading/0.1.0/late.md docs/release-notes/0.0.9/late.md
+git -C "$work" rm -qr docs/upgrading/0.1.0 docs/release-notes/0.0.9/late.md
 printf '# Release notes 0.1.0\n\n#### The consolidated notes\n' > "$work/docs/release-notes/0.1.0.md"
 open_notes 0.1.10
 git -C "$work" add docs
@@ -339,10 +341,23 @@ fi
 
 new_world
 mkdir -p "$work/docs/"{release-notes,upgrading}/0.2.0 "$work/modules/versioning/0.1.0"
-printf '#### Release entry\n\nRead the wallet migration instructions.\n' > "$work/docs/release-notes/0.2.0/change.md"
+cat > "$work/docs/release-notes/0.2.0/change.md" <<'EOF'
+#### Release entry
+
+See the
+[second wallet migration][wallet].
+
+```sh
+wallet-check --offline
+wallet-check --verify
+```
+
+[wallet]: ../../upgrading/0.2.0/second.md
+EOF
 for draft in first second; do
-    echo '#### Migrate *wallets*' > "$work/docs/upgrading/0.2.0/$draft.md"
+    printf '#### Migrate *wallets*\n\nBack up the wallet.\n' > "$work/docs/upgrading/0.2.0/$draft.md"
 done
+printf '\nVerify the backup before restarting.\n' >> "$work/docs/upgrading/0.2.0/second.md"
 echo '#### Another migration' > "$work/docs/upgrading/0.2.0/third.md"
 echo '#### Withdrawn during development' > "$work/docs/upgrading/0.2.0/withdrawn.md"
 echo 'old notice' > "$work/modules/versioning/0.1.0/old.nix"
@@ -350,6 +365,22 @@ git -C "$work" add docs
 expect_rejection "the first draft needs both milestone pages" 'Missing version page docs/release-notes/0.2.0.md' run_notes 0.1.0 HEAD
 open_notes 0.2.0
 git -C "$work" add docs
+draftDir=docs/upgrading/0.2.0
+cat > "$work/$draftDir/no-heading.md" <<'EOF'
+```md
+#### Only a code example
+```
+EOF
+git -C "$work" add "$draftDir/no-heading.md"
+expect_rejection "a draft needs a real heading in its own PR" 'no-heading.md: start the draft with a fourth-level heading' run_notes 0.1.0 HEAD
+git -C "$work" rm -qf "$draftDir/no-heading.md"
+mkdir -p "$work/$draftDir/nested"
+for misplaced in nested/change.md change.markdown; do
+    echo '#### A misplaced draft' > "$work/$draftDir/$misplaced"
+    git -C "$work" add "$draftDir/$misplaced"
+    expect_rejection "CI catches a misplaced draft at $misplaced" "$misplaced: put each draft directly in" run_notes 0.1.0 HEAD
+    git -C "$work" rm -qf "$draftDir/$misplaced"
+done
 open_notes 0.2.0
 if git -C "$work" diff --quiet -- docs; then
     pass "opening a milestone twice preserves the pages and navigation"
@@ -375,10 +406,16 @@ for index in upgrading release-notes; do
 - Markdown example `[Draft](upgrading/0.2.0/example.md)`
 EOF
 done
-git -C "$work" add docs modules
+echo '[Wallet migration](docs/upgrading/0.2.0/second.md)' > "$work/README.md"
+git -C "$work" add docs modules README.md
 add_commit "add draft notes"
 git -C "$work" rm -q docs/upgrading/0.2.0/withdrawn.md
 add_commit "withdraw an unreleased change while the milestone is still open"
+# Simulate a draft that the previous checker allowed onto master.
+mkdir -p "$work/$draftDir/legacy"
+printf '#### Legacy migration\n\nRetain this migration.\n' > "$work/$draftDir/legacy/change.markdown"
+git -C "$work" add "$draftDir/legacy/change.markdown"
+add_commit "legacy draft in a nested directory"
 draftBase=$(git -C "$work" rev-parse HEAD)
 
 echo '- [Draft](./upgrading/0.2.0/first.md#steps)' >> "$work/docs/SUMMARY.md"
@@ -398,6 +435,10 @@ cat > "$work/docs/upgrading/0.2.0.md" <<'EOF'
 
 #### Migrate wallets
 
+Back up the wallet.
+
+Verify the backup before restarting.
+
 ```md
 #### Migrate wallets
 ```
@@ -405,6 +446,7 @@ EOF
 echo '# Release notes 0.2.0' > "$work/docs/release-notes/0.2.0.md"
 footer 0.2.0 >> "$work/docs/upgrading/0.2.0.md"
 finish_indexes 0.2.0
+echo '[Wallet migration](docs/upgrading/0.2.0.md#migrate-wallets-1)' > "$work/README.md"
 # Existing notices can be renamed within their version. A notice added while
 # finalizing 0.2.0 still belongs to the release being prepared.
 git -C "$work" mv modules/versioning/0.1.0/{old,renamed}.nix
@@ -418,24 +460,30 @@ set_release_version 0.2.0
 git -C "$work" commit -qam "bump the release version separately"
 expect_rejection "CI catches entries dropped in a previous commit" 'missing the heading "Migrate wallets"' run_notes 0.2.0 "$beforeBump"
 expect_rejection "tag mode catches entries dropped before the version bump" 'missing the heading "Migrate wallets"' run_notes 0.2.0
+expect_rejection "a historical nested .markdown draft also needs consolidation" 'missing the heading "Legacy migration"' run_notes 0.2.0
 git -C "$work" switch -q master
 add_commit "concurrent change on master"
 draftBase=$(git -C "$work" rev-parse HEAD)
 git -C "$work" merge -q --no-ff -m "merge release preparation" prepare
 push_to_origin master
-expect_rejection "release PR checks each copy of a repeated heading" 'missing the heading "Migrate wallets"' run_notes 0.2.0 "$draftBase"
+expect_rejection "release PR checks each copy of a repeated heading" 'missing the heading "Migrate wallets"' run_notes 0.2.0 'HEAD^1'
 expect_failure "signing checks the corresponding release page" 'release-notes/0.2.0.md is missing the heading "Release entry"' --yes 0.2.0
 
 # The tag can be cut after a follow-up commit. The original drafts must still be checked.
 echo '# Comment added after release preparation' >> "$work/version.nix"
 add_commit "clarify release marker"
 expect_failure "later commits preserve the consolidation check" 'missing the heading "Migrate wallets"' --yes 0.2.0
-sed -i '/^After migrating/i #### Migrate wallets\n' "$work/docs/upgrading/0.2.0.md"
+sed -i '/^After migrating/i #### Migrate wallets\n\nBack up the wallet.\n\n#### Legacy migration\n\nRetain this migration.\n' "$work/docs/upgrading/0.2.0.md"
 cat >> "$work/docs/release-notes/0.2.0.md" <<'EOF'
 
 #### Release entry
 
 See the [second wallet migration](../upgrading/0.2.0.md#migrate-wallets-1).
+
+```sh
+wallet-check --offline
+wallet-check --verify
+```
 EOF
 add_commit "restore omitted entries"
 releaseBase=$(git -C "$work" rev-parse HEAD)
@@ -446,7 +494,7 @@ reject_notes_change() {
     expect_rejection "CI: $1" "$2" run_notes 0.2.0 "$releaseBase"
     expect_failure "signing: $1" "$2" --yes 0.2.0
     has_tag 0.2.0 && fail "$1 left a tag"
-    git -C "$work" restore --source="$releaseBase" --staged --worktree -- docs
+    git -C "$work" restore --source="$releaseBase" --staged --worktree -- docs README.md
 }
 
 for guide in upgrading release-notes; do
@@ -465,9 +513,17 @@ sed -i 's/configVersion = "0.2.0"/configVersion = "0.1.0"/' "$page"
 reject_notes_change "wrong final configVersion" 'end with an instruction to set'
 sed -i '/^After migrating/i While in development, keep nix-bitcoin.configVersion = "0.1.0";\n' "$page"
 reject_notes_change "development instruction alongside the correct footer" 'remove the development instruction'
+sed -i -e '/^Verify the backup before restarting\./d' \
+    -e '/^#### Another migration/a Verify the backup before restarting.' "$page"
+reject_notes_change "a migration step moved under an unrelated heading" 'missing draft text under "Migrate wallets".*Verify the backup'
 page="$work/docs/release-notes/0.2.0.md"
-sed -i '/^See the \[second wallet migration\]/d' "$page"
-reject_notes_change "a heading survives but its entry text is gone" 'Restore the entry text'
+sed -i '/^#### Release entry/,$d' "$page"
+printf '#### Release entry\n' >> "$page"
+reject_notes_change "a heading survives but its entry text is gone" 'missing draft text under "Release entry"'
+sed -i '/^wallet-check --verify$/d' "$page"
+reject_notes_change "a command is missing from an otherwise complete entry" 'missing draft text.*wallet-check --verify'
+echo '[Wallet migration](docs/upgrading/0.2.0/second.md)' > "$work/README.md"
+reject_notes_change "README still links to a deleted draft" 'README.md: replace the link to the finalized draft'
 echo '[Migration](../../upgrading/0.2.0/first.md)' >> "$page"
 reject_notes_change "unconverted draft link" 'replace the link to the individual draft'
 echo '[Migration](../../upgrading/0.2.0.md)' >> "$page"
@@ -493,6 +549,14 @@ git -C "$work" mv modules/versioning/{0.2.0,0.2.1}/late.nix
 add_commit "retarget the Nix notice"
 if run_notes 0.2.0 "$releaseBase" && run_notes 0.2.0 "$draftBase" && run_make --yes 0.2.0; then
     pass "complete reordered pages and properly retargeted notices pass CI and signing"
+    push_to_origin v0.2.0
+    sed -i 's/wallet-check --verify/wallet-check --verify-backup/' "$work/docs/release-notes/0.2.0.md"
+    add_commit "correct a command in the published guide"
+    if run_notes 0.2.0 'HEAD^1'; then
+        pass "CI accepts errata after the release tag"
+    else
+        fail "CI accepts errata after the release tag"; sed 's/^/       /' "$err"
+    fi
 else
     fail "complete reordered pages and properly retargeted notices pass CI and signing"; sed 's/^/       /' "$err"
 fi

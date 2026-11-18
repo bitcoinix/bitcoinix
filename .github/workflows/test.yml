@@ -111,7 +111,8 @@ jobs:
         run: ./test/ci/check-versions.sh
       - name: Check release notes and migration notices
         env:
-          BASE_COMMIT: ${{ github.event.pull_request.base.sha || github.event.before }}
+          # The test merge can include target-branch commits newer than the PR event.
+          BASE_COMMIT: ${{ github.event_name == 'pull_request' && 'HEAD^1' || github.event.before }}
         run: |
           finalized=$(nix eval --raw --file version.nix)
           nix shell --inputs-from . nixpkgs#{cmark,mdbook,python3} -c \

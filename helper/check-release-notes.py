@@ -1,6 +1,6 @@
 """Check release notes against the PR base, or against release preparation before tagging."""
 
-from collections import Counter
+from collections import defaultdict
 from dataclasses import dataclass, field
 from functools import cache
 from html.parser import HTMLParser
@@ -16,9 +16,9 @@ from urllib.parse import unquote, urlsplit
 
 
 VERSION = r"[0-9]+\.[0-9]+\.[0-9]+"
-NOTE = re.compile(rf"docs/(?P<guide>release-notes|upgrading)/(?P<version>{VERSION})(?P<draft>/[^/]+)?\.md")
+NOTE = re.compile(rf"docs/(?P<guide>release-notes|upgrading)/(?P<version>{VERSION})(?:\.md|/(?P<draft>.+))", re.S)
 NOTICE = re.compile(rf"modules/versioning/({VERSION})/[^/]+\.nix")
-DRAFT_LINK = re.compile(rf"(?:^|/)(?:upgrading|release-notes)/{VERSION}/[^/]+\.(?:md|html)$")
+DRAFT_LINK = re.compile(rf"(?:^|/)(?:upgrading|release-notes)/(?P<version>{VERSION})/.+\.(?:md|markdown|html)$", re.I | re.S)
 INDEXES = ("docs/SUMMARY.md", "docs/upgrading.md", "docs/release-notes.md")
 GUIDES = {"release-notes": "Release notes", "upgrading": "Upgrading to config version"}
 CONFIG_VERSION = re.compile(r'\bnix-bitcoin\.configVersion\s*=\s*"([^"]+)"\s*;')
@@ -52,8 +52,21 @@ def version_at(revision):
 @dataclass
 class Block:
     tag: str
+    start: int
+    end: int = 0
     text: str = ""
     links: list = field(default_factory=list)
+
+
+@dataclass
+class NoteLine:
+    text: str
+    code: bool
+
+    def tokens(self):
+        # Prose may wrap differently on the version page. A command or an
+        # indented line of configuration must still match a whole literal line.
+        return [(True, self.text)] if self.code else [(False, word) for word in self.text.split()]
 
 
 class Document(HTMLParser):
@@ -64,6 +77,7 @@ class Document(HTMLParser):
         self.links = []
         self.ids = set()
         self.blocks = []
+        self.text = []
         self.open_blocks = []
         self.read_blocks = not book
         self.in_chapter = not book
@@ -80,7 +94,11 @@ class Document(HTMLParser):
             self.in_chapter = True
         if self.in_chapter:
             if self.read_blocks and tag in ("h1", "h2", "h3", "h4", "h5", "h6", "li", "p", "pre"):
-                self.open_blocks.append(Block(tag))
+                self.open_blocks.append(Block(tag, len(self.text)))
+            if tag == "img" and attrs.get("alt"):
+                self.handle_data(attrs["alt"])
+            elif tag == "br":
+                self.handle_data("\n")
             link = attrs.get({"a": "href", "img": "src"}.get(tag))
             if link:
                 self.links.append(link)
@@ -88,24 +106,40 @@ class Document(HTMLParser):
                     block.links.append(link)
 
     def handle_data(self, data):
-        for block in self.open_blocks:
-            block.text += data
+        if self.read_blocks:
+            self.text.append(data)
 
     def handle_endtag(self, tag):
         if self.open_blocks and self.open_blocks[-1].tag == tag:
-            self.blocks.append(self.open_blocks.pop())
+            block = self.open_blocks.pop()
+            block.end = len(self.text)
+            block.text = "".join(self.text[block.start:block.end])
+            self.blocks.append(block)
         if tag == "main":
             self.in_chapter = False
 
     def entries(self, *, skip_footer=False):
-        entries = []
-        blocks = self.blocks[:-1] if skip_footer else self.blocks
-        for block in blocks:
-            if block.tag == "h4":
-                entries.append((block.text, False))
-            elif entries and block.tag in ("p", "pre", "li") and (block.text.strip() or block.links):
-                entries[-1] = (entries[-1][0], True)
-        return entries
+        # Inline links contribute their labels. Code and nested list items
+        # contribute their text once, in the order a reader sees it.
+        headings = [block for block in self.blocks if block.tag == "h4"]
+        end = self.blocks[-1].start if skip_footer else len(self.text)
+        stops = [block.start for block in headings[1:]] + [end]
+        return [(heading.text, self.entry_lines(heading.end, stop)) for heading, stop in zip(headings, stops)]
+
+    def entry_lines(self, start, end):
+        lines = []
+
+        def append(text, *, code=False):
+            lines.extend(NoteLine(line if code else line.strip(), code)
+                         for line in text.splitlines() if code or line.strip())
+
+        for block in self.blocks:
+            if block.tag == "pre" and start <= block.start < end:
+                append("".join(self.text[start:block.start]))
+                append(block.text, code=True)
+                start = block.end
+        append("".join(self.text[start:end]))
+        return lines
 
     def has_tbd(self):
         return any(block.tag == "p" and block.text.startswith("TBD.") for block in self.blocks)
@@ -121,14 +155,18 @@ def markdown(source):
     return Document(subprocess.check_output(["cmark", "--unsafe"], input=source).decode())
 
 
-def links_to_draft(link):
+def linked_draft(link):
     url = urlsplit(link)
     path = posixpath.normpath(unquote(url.path))
     if url.netloc and url.hostname != "docs.bitcoinix.net":
         if (url.hostname not in ("github.com", "raw.githubusercontent.com")
                 or not path.startswith("/bitcoinix/bitcoinix/")):
-            return False
-    return DRAFT_LINK.search(path) is not None
+            return None
+    return DRAFT_LINK.search(path)
+
+
+def is_markdown_draft(note):
+    return note and note["draft"] and note["draft"].lower().endswith((".md", ".markdown"))
 
 
 def local_chapter(link, page):
@@ -163,7 +201,7 @@ def check_page(page, guide, number, upcoming):
         if doc.has_tbd():
             yield f"Replace the TBD contents of {page} before finalizing version {number}."
         for link in doc.links:
-            if links_to_draft(link):
+            if linked_draft(link):
                 yield f"{page}: replace the link to the individual draft {link}."
         if guide == "upgrading":
             assignment = f'nix-bitcoin.configVersion = "{number}";'
@@ -180,7 +218,7 @@ def check_tree(documents, finalized, number):
             yield f"Missing release navigation: {index}."
             continue
         for link in markdown(Path(index).read_bytes()).links:
-            if links_to_draft(link):
+            if linked_draft(link):
                 yield f"{index}: link to the version page instead of the individual draft {link}."
 
     # Require both guides for the release being signed and for each open milestone.
@@ -190,6 +228,13 @@ def check_tree(documents, finalized, number):
         note = NOTE.fullmatch(path)
         if not note:
             continue
+        if note["draft"]:
+            if not re.fullmatch(r"[^/\r\n]+\.md", note["draft"]):
+                yield f"{path}: put each draft directly in docs/{note['guide']}/{note['version']}/ as <title>.md."
+            if is_markdown_draft(note):
+                doc = markdown(Path(path).read_bytes())
+                if not doc.blocks or doc.blocks[0].tag != "h4" or not doc.blocks[0].text.strip():
+                    yield f"{path}: start the draft with a fourth-level heading (#### <title>)."
         if version(note["version"]) > finalized:
             pages.update((guide, note["version"]) for guide in GUIDES)
         elif note["draft"]:
@@ -209,6 +254,13 @@ def check_tree(documents, finalized, number):
         for index in ("docs/SUMMARY.md", f"docs/{guide}.md"):
             if index in documents:
                 yield from check_navigation(index, page, upcoming)
+
+    # The repository README links directly to drafts while a milestone is open.
+    if Path("README.md").is_file() and "README.md" in paths(None, "README.md"):
+        for link in markdown(Path("README.md").read_bytes()).links:
+            draft = linked_draft(link)
+            if draft and version(draft["version"]) <= finalized:
+                yield f"README.md: replace the link to the finalized draft {link} with its version page and heading."
 
 
 def check_new_notices(base, finalized):
@@ -270,36 +322,75 @@ def release_drafts(prepared, number):
         # Newest first if the same path was removed and later reused.
         note = NOTE.fullmatch(path)
         if note and note["version"] == number and note["draft"]:
-            drafts.setdefault(path, None if destination and destination["draft"] else old_blob)
+            drafts.setdefault(path, None if is_markdown_draft(destination) else old_blob)
     return drafts
 
 
+def matching_lines(draft, section):
+    """Count draft lines preserved in order, allowing new text between them."""
+    words = [token for line in section for token in line.tokens()]
+    start = 0
+    for i, line in enumerate(draft):
+        expected = line.tokens()
+        for pos in range(start, len(words) - len(expected) + 1):
+            if words[pos:pos + len(expected)] == expected:
+                start = pos + len(expected)
+                break
+        else:
+            return i
+    return len(draft)
+
+
+def check_entries(page, heading, drafts, sections):
+    # One published section per draft, including when titles repeat. A short
+    # draft may fit either of two sections, while a longer one fits only one.
+    candidates = []
+    owners = {}
+
+    def assign(draft, visited):
+        for section in candidates[draft]:
+            if section in visited:
+                continue
+            visited.add(section)
+            if section not in owners or assign(owners[section], visited):
+                owners[section] = draft
+                return True
+        return False
+
+    for i, (path, lines) in enumerate(drafts):
+        counts = [matching_lines(lines, section) for section in sections]
+        candidates.append([j for j, count in enumerate(counts) if count == len(lines)])
+        if assign(i, set()):
+            continue
+        if sections and not candidates[i]:
+            yield f'{page}: missing draft text under "{heading}" from {path}: {lines[max(counts)].text!r}.'
+        else:
+            yield f'{page} is missing the heading "{heading}" with its draft text from {path}.'
+
+
 def check_consolidation(documents, prepared, number):
-    remaining = {}
+    drafts = defaultdict(list)
     for path, old_blob in release_drafts(prepared, number).items():
         note = NOTE.fullmatch(path)
-        if not old_blob or not note or not note["draft"]:
+        if not old_blob or not is_markdown_draft(note):
             continue
         page = f"docs/{note['guide']}/{note['version']}.md"
-        if page not in remaining:
-            remaining[page] = Counter()
-            if page in documents:
-                doc = markdown(Path(page).read_bytes())
-                footer = note["guide"] == "upgrading" and doc.ends_with_config_version(number)
-                remaining[page].update(doc.entries(skip_footer=footer))
         entries = markdown(git("cat-file", "blob", old_blob)).entries()
         if not entries:
             yield f"{path} has no fourth-level heading to match in {page}."
-        available = remaining[page]
-        for heading, has_text in entries:
-            if available[heading, has_text]:
-                available[heading, has_text] -= 1
-            elif available[heading, not has_text]:
-                available[heading, not has_text] -= 1
-                if has_text:
-                    yield f'{page} has only the heading "{heading}" from {path}. Restore the entry text.'
-            else:
-                yield f'{page} is missing the heading "{heading}" from {path}.'
+        for heading, lines in entries:
+            drafts[page, heading].append((path, lines))
+
+    published = defaultdict(list)
+    for guide in GUIDES:
+        page = f"docs/{guide}/{number}.md"
+        if page in documents:
+            doc = markdown(Path(page).read_bytes())
+            footer = guide == "upgrading" and doc.ends_with_config_version(number)
+            for heading, lines in doc.entries(skip_footer=footer):
+                published[page, heading].append(lines)
+    for (page, heading), entries in drafts.items():
+        yield from check_entries(page, heading, entries, published[page, heading])
 
 
 def check_published_links(documents, finalized):
@@ -377,7 +468,9 @@ def check(number, base):
     yield from tree_errors
     prepared, parent, previous = release_preparation(finalized)
     # GitHub sends an all-zero "before" SHA on the first push of a branch.
-    if base and not re.fullmatch("0+", base):
+    if base and re.fullmatch("0+", base):
+        base = None
+    if base:
         yield from check_new_notices(base, version_at(base))
     else:
         # Catch notices added between finalization and signing the tag.
@@ -391,6 +484,10 @@ def check(number, base):
             if note and previous < version(note["version"]) <= finalized:
                 numbers.add(note["version"])
     for page_version in sorted(numbers, key=version):
+        # Once this tag is on the target branch, CI must allow corrections to
+        # published prose. Signing always compares against the original drafts.
+        if base and git("tag", "--merged", base, "--list", f"v{page_version}").strip():
+            continue
         yield from check_consolidation(documents, prepared, page_version)
     if not tree_errors:
         yield from check_published_links(documents, finalized)

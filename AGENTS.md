@@ -190,8 +190,9 @@ For each entry:
   arguments it uses) and returning `{ condition = ...; message = ...; }`.
   `modules/versioning.nix` supplies the version from the directory name and loads
   notices in increasing version order, then alphabetically by filename. It appends
-  a reference to `docs/upgrading/<version>.md` when that page exists, or to
-  `docs/upgrading.md`, starting at 0.1.0.
+  a reference to `docs/upgrading/<version>/` while the draft directory exists,
+  then to `docs/upgrading/<version>.md` after consolidation. It falls back to
+  `docs/upgrading.md` for versions starting at 0.1.0 without either path.
 - Set `condition` so only affected users see it, e.g. users who already set the
   new value don't.
 - The `message` says what changed and what to do. Put longer migration steps in
@@ -219,8 +220,9 @@ Pages under `docs/` must be listed in `docs/SUMMARY.md` to appear in the mdBook 
 - During development, keep each change in a separate Markdown file to avoid merge
   conflicts, like the notices in `modules/versioning/<version>/`. Use descriptive,
   lowercase, hyphen-separated filenames (`<title>.md`) and start each file with
-  a fourth-level heading (`#### <title>`). For each release, the indexes and
-  `docs/SUMMARY.md` list only the version pages. In the PR adding the first
+  a fourth-level heading (`#### <title>`). CI checks the heading and requires
+  drafts to be `.md` files directly inside the version directory. The indexes
+  and `docs/SUMMARY.md` list only the version pages. In the PR adding the first
   draft for a milestone, run `helper/open-release-notes.py <version>` and
   commit the two TBD pages and navigation entries it creates. Subsequent
   drafts need only their own files. CI checks that both pages are linked
@@ -242,9 +244,9 @@ Pages under `docs/` must be listed in `docs/SUMMARY.md` to appear in the mdBook 
   first. Edit released pages only to fix errors.
 - At release time, replace the TBD contents of the two per-version pages with
   the consolidated draft notes in the release-preparation commit. Preserve each
-  draft heading on its corresponding version page so CI and the signing helper
-  can check that every entry was included. End the upgrade page with the
-  instruction to set `nix-bitcoin.configVersion = "<version>";` after migrating.
+  draft's heading and text together. CI and the signing helper compare the text
+  under each heading, allowing rebased link destinations. End the upgrade page
+  with the instruction to set `nix-bitcoin.configVersion = "<version>";` after migrating.
   Rebase relative links, replace links to individual files with links
   to the matching headings in the consolidated pages, drop the upcoming labels
   from both indexes, and remove the individual Markdown files. Keep the Nix notices in

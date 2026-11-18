@@ -233,7 +233,7 @@ At release time, consolidate the Markdown files in the release-preparation commi
    `docs/upgrading/<version>/*.md` into `docs/upgrading/<version>.md`, headed
    `# Upgrading to config version <version>`. Keep a blank line between entries.
    Group related changes and put prerequisite migrations first. Preserve each
-   draft's heading on its corresponding page.
+   draft's text under its heading on the corresponding page.
 2. Adjust relative links for the new parent directory. Replace all links to
    individual change files with links to their headings in the consolidated pages,
    including links from release notes to upgrade notes. Check references in
@@ -246,10 +246,12 @@ At release time, consolidate the Markdown files in the release-preparation commi
 5. Remove the consolidated Markdown fragments and their now-empty version
    directories. Leave `modules/versioning/<version>/*.nix` separate.
 
-CI and the signing helper check the version pages, navigation and draft headings.
-They reject headings that have lost their entry text and build the book to check
-link targets and anchors both on the consolidated pages and in links to them
-from other chapters. If a PR misses its release, move its Markdown drafts
+CI checks that every draft is a `.md` file directly inside its version directory
+and starts with a fourth-level heading. CI and the signing helper compare the text
+under each heading, allowing rebased links and rewrapped prose. Migration steps
+and command lines must survive consolidation. Both checks build the book to verify
+link targets and anchors on the consolidated pages and in links from other chapters.
+If a PR misses its release, move its Markdown drafts
 and any new Nix migration notices to the next open milestone before merging it.
 CI checks new notice paths against the finalized version on the target branch.
 To run the same documentation check locally after committing release preparation, use
@@ -301,7 +303,7 @@ Before signing, the script checks that:
 - `<version>` is a stable `X.Y.Z` that is greater than every existing release tag
 - `version.nix` and all four examples' `configVersion` values equal `<version>`,
   and the three example flakes pin `v<version>`
-- each draft heading appears on the corresponding version page, including when
+- each draft's heading and text appear on the corresponding version page, including when
   consolidation and the version bump are separate commits
 - the pages have their release titles, working book links and navigation entries,
   the upgrade page ends with the new `configVersion` instruction, and the
