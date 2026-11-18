@@ -314,7 +314,8 @@ let
 
       tests.rbitcoin = cfg.rbitcoin.enable;
       services.rbitcoin = {
-        network = mkIf cfg.bitcoind.regtest "regtest";
+        # Follows bitcoind, which it syncs from
+        network = cfg.bitcoind.network;
         # Ports that don't collide with bitcoind, electrs and fulcrum
         port = 18454;
         rpc.port = 18453;
