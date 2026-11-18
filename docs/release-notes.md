@@ -63,6 +63,22 @@ Charge-LND reads its certificate and macaroon directly, without staging them
 under a synthetic mainnet directory. Users selecting custom credentials with
 `--lnddir` should follow the [0.2.0 upgrade notes](upgrading.md#upgrading-to-config-version-020).
 
+#### Hardware wallet access requires group hardware-wallets
+
+The Ledger and Trezor udev rules of `services.hardware-wallets` no longer let the
+user of the active local session use the device, so only members of group
+`hardware-wallets` can use it. The Ledger rule now matches every Ledger device, not
+only product `0001`. See
+[Upgrading to config version 0.2.0](upgrading.md#upgrading-to-config-version-020).
+
+#### Trezor Bridge runs only on request
+
+The Trezor Bridge (`trezord`) no longer runs by default.
+`services.hardware-wallets.trezorBridge` turns it on, and then every local user can
+use the device through it. See
+[Upgrading to config version 0.2.0](upgrading.md#upgrading-to-config-version-020).
+
+
 #### clightning requires the mount of its local replica
 
 With `services.clightning.replication.local.directory`, `clightning` now doesn't

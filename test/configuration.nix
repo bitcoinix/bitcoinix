@@ -294,6 +294,33 @@ let
     services.btcpayserver = { enable = true; lightningBackend = "clightning"; };
     services.clightning = { user = "cln-custom"; group = "cln-rpc"; };
   };
+  trezor = { services.hardware-wallets.trezor = true; };
+  trezorWithBridge = {
+    imports = [ trezor ];
+    services.hardware-wallets.trezorBridge = true;
+  };
+  # The rule lines of the Ledger and Trezor udev rules
+  hardwareWalletRules = let
+    config = evaluate { services.hardware-wallets = { ledger = true; trezor = true; }; };
+    packages = builtins.filter (pkg: lib.elem pkg.name [ "ledger-udev-rules" "trezord-udev-rules" ])
+      config.services.udev.packages;
+  in map (pkg: builtins.filter (line: line != "" && !lib.hasPrefix "#" line)
+    (lib.splitString "\n" pkg.text)) packages;
+  # A system with udev and the Trezor Bridge, whose rules the build below checks
+  hardwareWalletSystem = (pkgs.nixos {
+    imports = [ nixBitcoinModule ];
+    boot.loader.grub.enable = false;
+    fileSystems."/" = { device = "/dev/vda"; fsType = "ext4"; };
+    system.stateVersion = "26.05";
+    nix-bitcoin.secretsSetupMethod = "manual";
+    services.hardware-wallets = { ledger = true; trezor = true; trezorBridge = true; };
+  }).config;
+  trezorBridge = module: let config = evaluate module; in {
+    enable = config.services.trezord.enable;
+    groups = config.systemd.services.trezord.serviceConfig.SupplementaryGroups or null;
+    warnings = builtins.length
+      (builtins.filter (lib.hasInfix "trezord can't open the Trezor") config.warnings);
+  };
   btcpayserverCustomUser = evaluate {
     services.btcpayserver = { enable = true; user = "btcpay-custom"; group = "payments"; };
   };
@@ -1586,6 +1613,71 @@ let
       ];
       expected = [ 0 1 1 0 ];
     };
+    # Each rule gives the device to the group and takes the `uaccess` tag away,
+    # which would give it to the active local session too
+    # The Ledger rules match every product of vendor 2c97 and the HW.1 IDs of
+    # vendor 2581, as systemd's hwdb does
+    testHardwareWalletRulesUseOnlyTheGroup = {
+      expr = map (lines: {
+        count = builtins.length lines;
+        groupOnly = lib.all (line: lib.hasInfix ''GROUP="hardware-wallets"'' line
+          && lib.hasInfix ''TAG-="uaccess"'' line && !lib.hasInfix ''TAG+="uaccess"'' line) lines;
+        ledgerVendorWide = lib.any (line: lib.hasInfix ''"2c97"'' line && !lib.hasInfix "idProduct" line) lines;
+        ledgerHw1 = lib.any (line: lib.hasInfix ''"2581"'' line && lib.hasInfix "1b7c|2b7c|3b7c|4b7c" line) lines;
+      }) hardwareWalletRules;
+      expected = [
+        { count = 2; groupOnly = true; ledgerVendorWide = true; ledgerHw1 = true; }
+        { count = 5; groupOnly = true; ledgerVendorWide = false; ledgerHw1 = false; }
+      ];
+    };
+    testTrezorBridgeIsOptIn = let
+      # The bridge enabled directly, which our rules keep from the device
+      # unless trezord gets the group some other way
+      trezord = module: { imports = [ trezor module ]; services.trezord.enable = true; };
+      group = "hardware-wallets";
+    in {
+      expr = map trezorBridge [
+        trezor
+        trezorWithBridge
+        { services.hardware-wallets.trezorBridge = true; }
+        (trezord {})
+        (trezord { users.users.trezord.extraGroups = [ group ]; })
+        (trezord { users.groups.${group}.members = [ "trezord" ]; })
+        (trezord { systemd.services.trezord.serviceConfig.Group = group; })
+        (trezord { systemd.services.trezord.serviceConfig.SupplementaryGroups = group; })
+        (trezord { systemd.services.trezord.serviceConfig.SupplementaryGroups = "audio ${group}"; })
+        (trezord { services.hardware-wallets.group = "trezord"; })
+        # The nixpkgs rules alone give the device to trezord
+        { services.trezord.enable = true; }
+      ];
+      expected = [
+        { enable = false; groups = null; warnings = 0; }
+        { enable = true; groups = [ group ]; warnings = 0; }
+        { enable = false; groups = null; warnings = 0; }
+        { enable = true; groups = null; warnings = 1; }
+        { enable = true; groups = null; warnings = 0; }
+        { enable = true; groups = null; warnings = 0; }
+        { enable = true; groups = null; warnings = 0; }
+        { enable = true; groups = group; warnings = 0; }
+        { enable = true; groups = "audio ${group}"; warnings = 0; }
+        { enable = true; groups = null; warnings = 0; }
+        { enable = true; groups = null; warnings = 0; }
+      ];
+    };
+    testVersioningHardwareWalletAccess = {
+      expr = map (module: map (phrase: hasNotice phrase module) [
+        "are now available only to members of group"
+        "The Trezor Bridge (trezord) no longer runs"
+      ]) [
+        trezor
+        trezorWithBridge
+        # The bridge enabled directly keeps running, and a warning covers it
+        { imports = [ trezor ]; services.trezord.enable = true; }
+        { services.hardware-wallets.ledger = true; }
+        { services.trezord.enable = true; }
+      ];
+      expected = [ [ true true ] [ true false ] [ true false ] [ true false ] [ false false ] ];
+    };
     # Without its disk, a local replica would land on the disk below the mount point
     testReplicationRequiresLocalMounts = {
       expr = map replicationRequiredMounts [
@@ -1679,6 +1771,26 @@ else
         ${replicationGenerator} || fail "the $identity identity failed"
         [[ $(< $key.pub) == kept ]] || fail "the .pub of the $identity identity was changed"
       done
+    )
+
+    # udevd sorts its rule files by name. On NixOS it reads them from
+    # /etc/udev/rules.d, which also holds copies of systemd's own rules. The
+    # hardware wallet rules must run after the nixpkgs Trezor rules and systemd's
+    # uaccess rules, and before the rules that apply the uaccess tag.
+    (
+      rules=${hardwareWalletSystem.environment.etc."udev/rules.d".source}
+      systemd=${hardwareWalletSystem.systemd.package}
+      fail() { echo "Hardware wallet udev rules: $*" >&2; exit 1; }
+      order=$(ls "$rules" | LC_ALL=C sort \
+        | grep -E '^(51-trezor|70-uaccess|71-hardware-wallets-[a-z]+|73-seat-late)\.rules$' | tr '\n' ' ')
+      expected="51-trezor.rules 70-uaccess.rules 71-hardware-wallets-ledger.rules 71-hardware-wallets-trezor.rules 73-seat-late.rules "
+      [[ $order == "$expected" ]] || fail "unexpected order: $order"
+      grep -qF 'ENV{ID_HARDWARE_WALLET}=="1", TAG+="uaccess"' "$rules/70-uaccess.rules" \
+        || fail "70-uaccess.rules no longer tags hardware wallets, recheck our rules"
+      grep -qF 'TAG=="uaccess' "$rules/73-seat-late.rules" \
+        || fail "73-seat-late.rules no longer applies the uaccess tag, recheck our rules"
+      $systemd/bin/udevadm verify --resolve-names=never "$rules"/71-hardware-wallets-*.rules \
+        || fail "udevadm verify failed"
     )
 
     echo '${toString (builtins.length (builtins.attrNames tests))} configuration tests passed' > "$out"
