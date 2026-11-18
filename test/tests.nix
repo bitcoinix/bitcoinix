@@ -78,7 +78,8 @@ let
         btcpayserver = cfg.btcpayserver.enable;
         clightning = cfg.clightning.enable;
         clightning-bcli = cfg.clightning.enable && cfg.clightning.useBcliPlugin;
-        mempool = cfg.mempool.enable;
+        # With rbitcoin, mempool uses rbitcoin's cookie and has no bitcoind user
+        mempool = cfg.mempool.enable && cfg.mempool.electrumServer != "rbitcoin";
       };
 
       tests.bitcoind-rest = cfg.bitcoind.enable;
