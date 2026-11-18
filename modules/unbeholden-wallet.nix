@@ -40,6 +40,20 @@ let
         Other names are refused, so a website can't reach the Electrum relay through DNS rebinding.
       '';
     };
+    allowedClients = mkOption {
+      type = with types; listOf str;
+      default = [];
+      example = [ "192.0.2.10" "192.0.2.0/24" ];
+      description = ''
+        IP addresses or networks, in addition to localhost, that can connect to the service,
+        e.g. an https reverse proxy on another host. Set {option}`services.unbeholden-wallet.address`
+        to a non-local address too.
+        systemd ignores entries it can't parse.
+        The service can also open connections to these addresses.
+        This doesn't open the firewall port.
+        Not supported with netns-isolation.
+      '';
+    };
     electrumServer = mkOption {
       type = types.enum [ "electrs" "fulcrum" ];
       default = "electrs";
@@ -78,6 +92,15 @@ in {
   inherit options;
 
   config = mkIf cfg.enable {
+    assertions = [
+      { assertion = cfg.allowedClients == [] || !config.nix-bitcoin.netns-isolation.enable;
+        message = ''
+          `services.unbeholden-wallet.allowedClients` is not supported with netns-isolation,
+          whose namespaces drop connections from other hosts.
+        '';
+      }
+    ];
+
     services.electrs.enable = mkIf (cfg.electrumServer == "electrs") true;
     services.fulcrum.enable = mkIf (cfg.electrumServer == "fulcrum") true;
 
@@ -97,7 +120,9 @@ in {
         Group = cfg.group;
         Restart = "on-failure";
         RestartSec = "10s";
-      } // nbLib.allowLocalIPAddresses
+      } // nbLib.allowLocalIPAddresses // {
+        IPAddressAllow = nbLib.allowLocalIPAddresses.IPAddressAllow ++ cfg.allowedClients;
+      }
         # Bun's JIT needs the same exemptions as Node's
         // nbLib.nodejs;
     };

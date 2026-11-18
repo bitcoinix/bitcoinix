@@ -384,6 +384,13 @@ def test_unbeholden_wallet():
     assert_full_match(f"{status} -H 'Host: evil.example'", "403")
     for host in test_data["unbeholden-wallet"]["allowedHosts"]:
         assert_full_match(f"{status} -H 'Host: {host}'", "200")
+    probe = test_data.get("unbeholden-wallet-clients")
+    if probe:
+        allowed, denied = probe["allowed"], probe["denied"]
+        succeed(f"ip addr add {allowed}/32 dev lo", f"ip addr add {denied}/32 dev lo")
+        remote = f"curl -s -o /dev/null -w '%{{http_code}}' -m 5 {allowed}:60846 --interface"
+        assert_full_match(f"{remote} {allowed}", "200")
+        machine.fail(f"{remote} {denied}")
     # Mainnet fixtures never sync, so their Electrum backend may not listen.
     if "regtest" not in enabled_tests:
         return
