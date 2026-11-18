@@ -115,6 +115,49 @@ let
   # host's reload-on-change watcher has nothing to watch and would only ever
   # walk the content root recursively. Turn it off.
   dotnetNoReload = { DOTNET_hostBuilder__reloadConfigOnChange = "false"; };
+
+  nbExplorerUrl = "http://${nbLib.addressWithPort cfg.nbxplorer.address cfg.nbxplorer.port}/";
+  nbExplorerCookie = "${cfg.nbxplorer.dataDir}/${nbLib.networkName { mainnet = "Main"; regtest = "RegTest"; }}/.cookie";
+  # BTCPay binds to every `bind` it finds in its config file and command line
+  btcpayserverConfig = bind: builtins.toFile "btcpayserver-config" (''
+    network=${bitcoind.network}
+    bind=${bind}
+    port=${toString cfg.btcpayserver.port}
+    socksendpoint=${config.nix-bitcoin.torClientAddressWithPort}
+    btcexplorerurl=${nbExplorerUrl}
+    btcexplorercookiefile=${nbExplorerCookie}
+    postgres=User ID=${cfg.btcpayserver.user};Host=/run/postgresql;Database=btcpaydb
+  '' + optionalString (cfg.btcpayserver.rootpath != null) ''
+    rootpath=${cfg.btcpayserver.rootpath}
+  '' + optionalString (cfg.btcpayserver.lightningBackend == "clightning") ''
+    btclightning=type=clightning;server=unix:///${cfg.clightning.dataDir}/${nbLib.networkName { mainnet = "bitcoin"; }}/lightning-rpc
+  '' + optionalString (cfg.btcpayserver.lightningBackend == "lnd")
+    (
+      "btclightning=type=lnd-rest;" +
+      "server=https://${nbLib.address cfg.lnd.restAddress}:${toString cfg.lnd.restPort}/;" +
+      "macaroonfilepath=/run/lnd/btcpayserver.macaroon;" +
+      "certfilepath=${config.services.lnd.certPath}" +
+      "\n"
+    ));
+  btcpayserverCmd = bind: "${cfg.btcpayserver.package}/bin/btcpayserver --conf=${btcpayserverConfig bind} --datadir='${cfg.btcpayserver.dataDir}'";
+  # The settings that both btcpayserver and btcpayserver-admin run BTCPay with
+  btcpayserverServiceConfig = nbLib.defaultHardening // {
+    User = cfg.btcpayserver.user;
+    # Since 2.4.0, btcpayserver uses `Host.CreateDefaultBuilder`, which sets the
+    # ASP.NET content root to the working directory instead of the app directory.
+    # The web root (`wwwroot`) is resolved relative to the content root, so
+    # btcpayserver must be started from its app directory.
+    WorkingDirectory = "${cfg.btcpayserver.package}/lib/btcpayserver";
+    ReadWritePaths = [ cfg.btcpayserver.dataDir ];
+    MemoryDenyWriteExecute = false;
+  };
+
+  adminEmail = "admin@localhost";
+  adminPasswordFile = "${config.nix-bitcoin.secretsDir}/btcpayserver-admin-password";
+  # BTCPay adds a missing leading `/` to `rootpath`, and `/` means no prefix
+  rootPath = optionalString (cfg.btcpayserver.rootpath != null)
+    (removeSuffix "/" "/${removePrefix "/" cfg.btcpayserver.rootpath}");
+  apiUrl = "http://127.0.0.1:${toString cfg.btcpayserver.port}${rootPath}/api/v1";
 in {
   inherit options;
 
@@ -202,7 +245,7 @@ in {
         # for each directory created afterwards. On a node that builds, this
         # exhausted the per-user inotify watch limit within days and systemd
         # then failed to set up cgroup accounting for every new unit.
-        # Use the immutable app directory (as btcpayserver does below), NOT the
+        # Use the immutable app directory (as btcpayserver does), NOT the
         # data directory: a writable content root would let anything running
         # as the nbxplorer user drop an `appsettings.json` that overrides the
         # Nix-managed settings.config on the next start.
@@ -214,57 +257,75 @@ in {
       } // nbLib.allowedIPAddresses cfg.nbxplorer.tor.enforce;
     };
 
-    systemd.services.btcpayserver = let
-      nbExplorerUrl = "http://${nbLib.addressWithPort cfg.nbxplorer.address cfg.nbxplorer.port}/";
-      nbExplorerCookie = "${cfg.nbxplorer.dataDir}/${nbLib.networkName { mainnet = "Main"; regtest = "RegTest"; }}/.cookie";
-      configFile = builtins.toFile "btcpayserver-config" (''
-        network=${bitcoind.network}
-        bind=${cfg.btcpayserver.address}
-        port=${toString cfg.btcpayserver.port}
-        socksendpoint=${config.nix-bitcoin.torClientAddressWithPort}
-        btcexplorerurl=${nbExplorerUrl}
-        btcexplorercookiefile=${nbExplorerCookie}
-        postgres=User ID=${cfg.btcpayserver.user};Host=/run/postgresql;Database=btcpaydb
-      '' + optionalString (cfg.btcpayserver.rootpath != null) ''
-        rootpath=${cfg.btcpayserver.rootpath}
-      '' + optionalString (cfg.btcpayserver.lightningBackend == "clightning") ''
-        btclightning=type=clightning;server=unix:///${cfg.clightning.dataDir}/${nbLib.networkName { mainnet = "bitcoin"; }}/lightning-rpc
-      '' + optionalString (cfg.btcpayserver.lightningBackend == "lnd")
-        (
-          "btclightning=type=lnd-rest;" +
-          "server=https://${nbLib.address cfg.lnd.restAddress}:${toString cfg.lnd.restPort}/;" +
-          "macaroonfilepath=/run/lnd/btcpayserver.macaroon;" +
-          "certfilepath=${config.services.lnd.certPath}" +
-          "\n"
-        ));
-    in rec {
+    systemd.services.btcpayserver = rec {
       wantedBy = [ "multi-user.target" ];
       environment = dotnetNoReload;
       requires = [ "postgresql.target" ];
       wants = [ "nbxplorer.service" ]
               ++ optional (cfg.btcpayserver.lightningBackend != null) "${cfg.btcpayserver.lightningBackend}.service";
       after = requires ++ wants;
-      serviceConfig = nbLib.defaultHardening // {
-        ExecStart = ''
-          ${cfg.btcpayserver.package}/bin/btcpayserver --conf=${configFile} \
-            --datadir='${cfg.btcpayserver.dataDir}'
-        '';
-        User = cfg.btcpayserver.user;
-        # Since 2.4.0, btcpayserver uses `Host.CreateDefaultBuilder`, which sets the
-        # ASP.NET content root to the working directory instead of the app directory.
-        # The web root (`wwwroot`) is resolved relative to the content root, so
-        # btcpayserver must be started from its app directory.
-        WorkingDirectory = "${cfg.btcpayserver.package}/lib/btcpayserver";
+      serviceConfig = btcpayserverServiceConfig // {
+        ExecStart = btcpayserverCmd cfg.btcpayserver.address;
         # Also restart after the program has exited successfully.
         # This is required to support restarting from the web interface after
         # interactive plugin installation.
         # Restart rate limiting is implemented via the `startLimit*` options below.
         Restart = "always";
-        ReadWritePaths = [ cfg.btcpayserver.dataDir ];
-        MemoryDenyWriteExecute = false;
       } // nbLib.allowedIPAddresses cfg.btcpayserver.tor.enforce;
       startLimitIntervalSec = 30;
       startLimitBurst = 10;
+    };
+
+    # BTCPay Server makes the first account that registers the server admin,
+    # which can use the internal Lightning node. Until then, anyone who can
+    # reach its port can take that account. So create the admin before
+    # btcpayserver opens the port: run BTCPay in a private network namespace,
+    # which no other process can reach, and register through its API. BTCPay
+    # then closes registration, because `disable-registration` defaults to true.
+    systemd.services.btcpayserver-admin = rec {
+      description = "Create the BTCPay Server admin account";
+      requiredBy = [ "btcpayserver.service" ];
+      before = requiredBy;
+      requires = [ "postgresql.target" ];
+      after = requires ++ [ "nix-bitcoin-secrets.target" ];
+      environment = dotnetNoReload;
+      path = [ config.services.postgresql.package pkgs.curl pkgs.jq ];
+      script = ''
+        # Before BTCPay's first start, the tables don't exist and psql fails
+        hasAdmin=$(psql -d btcpaydb -tA 2>/dev/null <<'EOF' || true
+          SELECT EXISTS (SELECT 1 FROM "AspNetUserRoles" ur
+            JOIN "AspNetRoles" r ON r."Id" = ur."RoleId" WHERE r."Name" = 'ServerAdmin')
+        EOF
+        )
+        if [[ $hasAdmin == t ]]; then
+          exit 0
+        fi
+
+        # Loopback is the only interface in this namespace
+        ${btcpayserverCmd "127.0.0.1"} &
+        btcpay=$!
+        until curl -fs -o /dev/null ${escapeShellArg "${apiUrl}/health"}; do
+          kill -0 "$btcpay"
+          sleep 1
+        done
+        status=$(
+          jq -n --rawfile pw '${adminPasswordFile}' \
+            '{email: "${adminEmail}", password: ($pw | sub("\n+$"; "")), isAdministrator: true}' |
+          curl -sS -o /dev/null -w '%{http_code}' -H 'Content-Type: application/json' \
+            -d @- ${escapeShellArg "${apiUrl}/users"}
+        )
+        kill "$btcpay"
+        wait "$btcpay" || true
+        # 401: BTCPay has an admin, which the query above didn't find
+        [[ $status == 200 || $status == 201 || $status == 401 ]]
+      '';
+      serviceConfig = btcpayserverServiceConfig // {
+        Type = "oneshot";
+        PrivateNetwork = true;
+        IPAddressAllow = "localhost";
+        # The first start of BTCPay creates its database tables
+        TimeoutStartSec = "10min";
+      };
     };
 
     users.users.${cfg.nbxplorer.user} = {
@@ -292,9 +353,13 @@ in {
         permissions = "400";
       };
       bitcoin-HMAC-btcpayserver.user = cfg.bitcoind.user;
+      btcpayserver-admin-password = {
+        inherit (cfg.btcpayserver) user group;
+      };
     };
     nix-bitcoin.generateSecretsCmds.btcpayserver = ''
       makeBitcoinRPCPassword btcpayserver
+      makePasswordSecret btcpayserver-admin-password
     '';
   };
 }

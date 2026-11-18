@@ -298,6 +298,23 @@ def test_btcpayserver():
     # Test web server response
     assert_matches(f"curl -fsS -L {ip('btcpayserver')}:23000", "Welcome to BTCPay Server")
 
+    # The admin exists before btcpayserver opens its port, so an anonymous
+    # request can't create the first admin. Registration is closed.
+    assert_matches("systemctl show -P PrivateNetwork btcpayserver-admin", "yes")
+    api = f"http://{ip('btcpayserver')}:23000/api/v1"
+    me = succeed_json(f'curl -fsS -u "{btcpayserver_admin()}" {api}/users/me')
+    assert "ServerAdmin" in me["roles"], me
+    for is_admin in ["true", "false"]:
+        assert_full_match(
+            f"curl -sS -o /dev/null -w '%{{http_code}}' -X POST {api}/users "
+            "-H 'Content-Type: application/json' "
+            f"""-d '{{"email": "user@localhost", "password": "user-password", "isAdministrator": {is_admin}}}'""",
+            "401",
+        )
+    assert_full_match(
+        f"curl -sS -o /dev/null -w '%{{http_code}}' {ip('btcpayserver')}:23000/register", "302"
+    )
+
 
 @test("rtl")
 def test_rtl():

@@ -63,6 +63,15 @@ Charge-LND reads its certificate and macaroon directly, without staging them
 under a synthetic mainnet directory. Users selecting custom credentials with
 `--lnddir` should follow the [0.2.0 upgrade notes](upgrading.md#upgrading-to-config-version-020).
 
+#### bitcoinix creates the BTCPay Server admin account
+
+BTCPay Server makes the first account that registers the server admin, so any local
+user could take the admin account and the internal Lightning node until you registered.
+When BTCPay Server has no admin, bitcoinix now creates the admin account `admin@localhost`
+first, with the password in `$secretsDir/btcpayserver-admin-password`. Existing admins
+stay, so check that they're yours. See the
+[upgrade notes](upgrading.md#btcpay-server-admin-account).
+
 #### Core Lightning data dir no longer writable by its group
 
 The Core Lightning data dir now has mode `0750` instead of `0770`. Before, members of
