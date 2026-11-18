@@ -101,6 +101,9 @@
   # following commands after the LND service starts:
   #   mkdir -p ./backups/lnd/
   #   scp bitcoin-node:/var/lib/lnd/lnd-seed-mnemonic ./backups/lnd/
+  # bitcoinix creates this file only with a new wallet. If you migrated your
+  # wallet from another node, your seed is the seed of that node. See
+  # "Migrate existing services to bitcoinix" in ../docs/configuration.md.
   #
   # You should also back up your channel state after opening new channels.
   # This will allow you to recover off-chain funds, by force-closing channels.
@@ -224,6 +227,12 @@
   # Set a frequency for automatic backups, for example:
   # services.backups.frequency = "daily";
   # services.backups.enable = true;
+  #
+  # With nix-bitcoin.generateSecrets, bitcoinix encrypts the backups with a
+  # generated password. The backups include it, but you need it to decrypt them.
+  # So keep a copy off the node. With the default `nix-bitcoin.secretsDir`:
+  #   mkdir -p ./backups/
+  #   scp bitcoin-node:/etc/nix-bitcoin-secrets/backup-encryption-password ./backups/
   #
   # You can pull the localBackups folder with
   # `scp -r bitcoin-node:/var/lib/localBackups /my-backup-path/`

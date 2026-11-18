@@ -63,6 +63,14 @@ Charge-LND reads its certificate and macaroon directly, without staging them
 under a synthetic mainnet directory. Users selecting custom credentials with
 `--lnddir` should follow the [0.2.0 upgrade notes](upgrading.md#upgrading-to-config-version-020).
 
+#### Backup password and migrated lnd seed
+
+With `nix-bitcoin.generateSecrets`, the backups include the password that decrypts them,
+`backup-encryption-password` in the secrets dir. Keep a copy of it off the node. If you
+migrated lnd from another node, the `lnd-seed-mnemonic` on the node may not hold the
+seed of your wallet. See
+[Migrate existing services to bitcoinix](configuration.md#migrate-existing-services-to-bitcoinix).
+
 #### The secure-node preset turns off SSH password login
 
 The `secure-node.nix` preset now turns off SSH password and keyboard-interactive login
