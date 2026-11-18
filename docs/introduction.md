@@ -21,8 +21,8 @@ configurations keep working.
   air-gapped signers
 * Mobile wallet connections, e.g. ZEUS via [Tor](services.md#use-zeus-mobile-lightning-wallet-via-tor)
   or [WireGuard](services.md#use-zeus-mobile-lightning-wallet-via-wireguard)
-* Helpers: [nodeinfo](services.md#nodeinfo), backups, and a non-root `operator` user for the
-  client tools
+* Helpers: [nodeinfo](services.md#nodeinfo), [backups](services.md#backups), and a non-root
+  `operator` user for the client tools
 
 The [README](https://github.com/bitcoinix/bitcoinix#features) lists all services and plugins, the
 [NixOS options search](https://search.nixos.org/flakes?channel=unstable&sort=relevance&type=options&query=bitcoin)

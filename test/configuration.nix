@@ -1235,6 +1235,102 @@ let
         none = [ true true false ];
       };
     };
+    # duplicity applies the first matching entry, so these exclusions also win over `extraFiles`
+    testBackupsExcludeChannelDatabasesFirst = let
+      # The first block of the filelist, before `extraFiles`
+      exclusions = module: lib.filter (line: line != "") (lib.splitString "\n" (lib.head
+        (lib.splitString "\n\n" (builtins.readFile (evaluate {
+          imports = [ module ];
+          services.backups = { enable = true; extraFiles = [ "/var/lib" ]; };
+        }).services.duplicity.includeFileList))));
+      cln = "/var/lib/clightning/bitcoin";
+      sqlite = db: [ "- ${db}" "- ${db}-*" ];
+      lndGraph = "- /var/lib/lnd/graph";
+    in {
+      expr = {
+        default = exclusions {};
+        # Relative paths start in the network dir. Like Core Lightning, split at the
+        # first `:` only, so the replica name ends with `:`.
+        customWallet = exclusions {
+          services.clightning.wallet = "sqlite3://./main.sqlite3:../replica//copy.sqlite3:";
+        };
+        # An empty path names no file
+        emptyReplica = exclusions { services.clightning.wallet = "sqlite3://main.sqlite3:"; };
+        emptyWallet = exclusions { services.clightning.wallet = "sqlite3://"; };
+        # duplicity reads each line as a glob
+        globWallet = exclusions { services.clightning.wallet = "sqlite3://channel[1].sqlite3"; };
+        encryptedReplica = exclusions {
+          services.clightning.replication = {
+            enable = true;
+            encrypt = true;
+            local.directory = "/var/lib/clightning/replica/";
+          };
+        };
+        sshfsReplica = exclusions {
+          services.clightning.replication = {
+            enable = true;
+            encrypt = true;
+            sshfs.destination = "user@host:dir";
+          };
+        };
+        # duplicity fails on a selection outside its root
+        backupRoot = exclusions {
+          services.duplicity.root = "/var/lib";
+          services.clightning.wallet = "sqlite3://${cln}/lightningd.sqlite3:/mnt/replica/lightningd.sqlite3";
+        };
+        # duplicity normalises its root
+        backupRootDot = exclusions { services.duplicity.root = "/var/lib/."; };
+      };
+      expected = {
+        default = sqlite "${cln}/lightningd.sqlite3" ++ [ lndGraph ];
+        customWallet = sqlite "${cln}/lightningd.sqlite3" ++ sqlite "${cln}/main.sqlite3"
+          ++ sqlite "/var/lib/clightning/replica/copy.sqlite3:" ++ [ lndGraph ];
+        emptyReplica = sqlite "${cln}/lightningd.sqlite3" ++ sqlite "${cln}/main.sqlite3" ++ [ lndGraph ];
+        emptyWallet = sqlite "${cln}/lightningd.sqlite3" ++ [ lndGraph ];
+        globWallet = sqlite "${cln}/lightningd.sqlite3" ++ sqlite "${cln}/channel[[]1].sqlite3" ++ [ lndGraph ];
+        encryptedReplica = sqlite "${cln}/lightningd.sqlite3"
+          ++ sqlite "/var/cache/clightning-replication/plaintext/lightningd.sqlite3"
+          ++ [ "- /var/lib/clightning/replica/lightningd-db" "- /var/cache/clightning-replication" lndGraph ];
+        sshfsReplica = sqlite "${cln}/lightningd.sqlite3"
+          ++ sqlite "/var/cache/clightning-replication/plaintext/lightningd.sqlite3"
+          ++ [ "- /var/cache/clightning-replication" lndGraph ];
+        backupRoot = sqlite "${cln}/lightningd.sqlite3" ++ [ lndGraph ];
+        backupRootDot = sqlite "${cln}/lightningd.sqlite3" ++ [ lndGraph ];
+      };
+    };
+    # The wallets of a remote bitcoind live on the other node
+    testBackupsCopyLocalWallets = let
+      copiesWallets = module: let
+        config = evaluate {
+          imports = [ module ];
+          services.backups.enable = true;
+          services.bitcoind.enable = true;
+        };
+      in {
+        unit = (config.systemd.services.bitcoind-wallet-backup or { enable = false; }).enable;
+        started = lib.hasInfix "bitcoind-wallet-backup.service" config.systemd.services.duplicity.preStart;
+      };
+    in {
+      expr = {
+        local = copiesWallets {};
+        remote = copiesWallets ../modules/presets/bitcoind-remote.nix;
+        noWallet = copiesWallets { services.bitcoind.disablewallet = true; };
+      };
+      expected = {
+        local = { unit = true; started = true; };
+        remote = { unit = false; started = false; };
+        noWallet = { unit = false; started = false; };
+      };
+    };
+    # Before 0.2.0, the backups included the Lightning channel databases and no
+    # consistent wallet copies
+    testVersioningBackupsContent = {
+      expr = map (hasNotice "no longer includes the Lightning channel databases") [
+        { services.backups.enable = true; }
+        { services.lnd.enable = true; }
+      ];
+      expected = [ true false ];
+    };
     testLndconnectWithoutOperator = {
       expr = {
         failed = failedAssertions lndconnectNoOperator;
