@@ -317,6 +317,7 @@ buildable=(
     lnconnectNoOperatorRole
     i2p
     i2pLocal
+    btcpayserverClightning
     wireguard-lndconnect
     wireguardIptablesLegacy
     trustedcoin

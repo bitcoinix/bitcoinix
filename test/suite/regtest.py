@@ -53,16 +53,7 @@ def test_regtest():
         # and the internal lnd REST API is one. The `btcpayserver` test curls lnd
         # itself, so only a Greenfield request exercises BTCPay's own HTTP client.
         api = f"http://{ip('btcpayserver')}:23000/api/v1"
-        user = "admin@example.com"
-        password = "Greenfield-Test-Password-1"
-        # The first user is created without authentication and becomes the admin.
-        # A rerun of this test finds the user in place and skips the request.
-        succeed(
-            f"curl -fsS -u {user}:{password} {api}/users/me >/dev/null || "
-            f"curl -fsS -X POST {api}/users -H 'Content-Type: application/json' "
-            f"""-d '{{"email": "{user}", "password": "{password}", "isAdministrator": true}}'"""
-        )
-        info = succeed_json(f"curl -fsS -u {user}:{password} {api}/server/lightning/BTC/info")
+        info = succeed_json(f'curl -fsS -u "{btcpayserver_admin()}" {api}/server/lightning/BTC/info')
         assert info["blockHeight"] == num_blocks, info
         machine.wait_until_succeeds(f"[[ $(curl -fsS {api}/health | jq -M .synchronized) == true ]]")
 

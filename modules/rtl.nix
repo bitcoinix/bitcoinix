@@ -360,25 +360,15 @@ in {
             installAsRtl '${runePath}'
 
             # Copy clnrest's cert for `pin-backend-certs.cjs`. Ask clightning for
-            # clnrest's cert dir, because its config can set `clnrest-certs` in
-            # an included or per-network file. Without it, the dir is clnrest's
-            # working dir, the network dir, which is also where a relative dir
-            # starts.
+            # clnrest's cert dir, which `clnrest-certs` can change.
             # The query fails when clnrest isn't running, for example because
             # another process took its port. `Restart=on-failure` tries again.
             if ! response=$(${runuser} -u ${clightning.user} -- \
                    ${clightning.cli}/bin/lightning-cli listconfigs clnrest-certs) ||
-               ! certsDir=$(${pkgs.jq}/bin/jq -er '.configs["clnrest-certs"].value_str // ""' \
-                   <<< "$response"); then
+               ! cert=$(${clightning.plugins.clnrest.serverCertPathFromConfigs} <<< "$response"); then
               echo "Error: Can't get clnrest's cert dir from clightning: $response" >&2
               exit 1
             fi
-            case $certsDir in
-              "") certsDir='${clightning.networkDir}' ;;
-              /*) ;;
-              *) certsDir='${clightning.networkDir}'/$certsDir ;;
-            esac
-            cert=$certsDir/server.pem
             # clnrest creates the cert before it listens, which clightning's start
             # waits for. When it's still missing, `Restart=on-failure` tries again.
             ${runuser} -u ${clightning.user} -- head -c 65536 "$cert" > "$tmpFile"

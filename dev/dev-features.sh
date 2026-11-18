@@ -176,12 +176,16 @@ c systemctl status nbxplorer
 c journalctl -u nbxplorer
 
 ## Access the API
+# As the admin that unit btcpayserver-admin creates. BTCPay accepts Basic auth for
+# the Greenfield API only in an account's first five minutes, unless the account's
+# user turns it on in BTCPay (Account > Manage Account).
+admin="admin@localhost:$(c cat /secrets/btcpayserver-admin-password)"
 request() {
     local type=$1
     local method=$2
     local body=$3
     shift; shift; shift
-    curl -sSL -H "Content-Type: application/json" -X $type --user "a@a.a:aaaaaa" \
+    curl -sSL -H "Content-Type: application/json" -X $type --user "$admin" \
          -d "$body" "$@" "$ip:23000/api/v1/$method" | jq
 }
 post() {
@@ -195,12 +199,9 @@ get() {
     request get "$method"
 }
 
-# Create new user
-post users '{"email": "a@a.a", "password": "aaaaaa", "isAdministrator": true}'
-
 # Login with:
-# user: a@a.a
-# password: aaaaaa
+# user: admin@localhost
+# password: the output of `c cat /secrets/btcpayserver-admin-password`
 runuser -u "$(logname)" -- xdg-open http://$ip:23000
 
 # create store

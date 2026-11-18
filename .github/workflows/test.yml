@@ -89,6 +89,7 @@ jobs:
           - unbeholden-wallet-electrs-netns
           - i2p
           - i2pLocal
+          - btcpayserverClightning
     needs: build_test_drivers
     if: needs.build_test_drivers.outputs.run_scenario_tests == 'true'
     steps:

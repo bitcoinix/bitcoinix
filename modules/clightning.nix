@@ -133,7 +133,7 @@ let
     bind-addr=${cfg.address}:${toString cfg.port}
     bitcoin-rpcconnect=${nbLib.address bitcoind.rpc.address}
     bitcoin-rpcport=${toString bitcoind.rpc.port}
-    bitcoin-rpcuser=${bitcoind.rpc.users.public.name}
+    bitcoin-rpcuser=${bitcoind.rpc.users.clightning.name}
     rpc-file-mode=0660
     log-timestamps=false
     ${optionalString (cfg.wallet != null) "wallet=${cfg.wallet}"}
@@ -160,15 +160,25 @@ in {
       # Increase rpc thread count due to reports that lightning implementations fail
       # under high bitcoind rpc load
       rpc.threads = 16;
-      # bcli falls back to fetching a block from peers when `getblock` fails,
-      # e.g. on a pruned node
-      rpc.users.public.rpcwhitelist = mkIf cfg.useBcliPlugin [ "getblockfrompeer" ];
+      # Its own user, see ./bitcoind-rpc-public-whitelist.nix
+      rpc.users.clightning = {
+        passwordHMACFromFile = true;
+        # An empty public whitelist disables whitelisting, so it stays empty here too.
+        # bcli falls back to fetching a block from peers when `getblock` fails,
+        # e.g. on a pruned node.
+        rpcwhitelist = let public = bitcoind.rpc.users.public.rpcwhitelist; in
+          optionals (public != []) (public ++ optional cfg.useBcliPlugin "getblockfrompeer");
+      };
     };
 
     environment.systemPackages = [ cfg.package (hiPrio cfg.cli) ];
 
+    # Group members need to pass through this dir to reach the RPC socket, but
+    # they must not write it. Write access lets them swap `config` between
+    # `preStart` and lightningd reading it, or replace the network dir. Then
+    # they can run code as the clightning user or plant their own `hsm_secret`.
     systemd.tmpfiles.rules = [
-      "d '${cfg.dataDir}' 0770 ${cfg.user} ${cfg.group} - -"
+      "d '${cfg.dataDir}' 0750 ${cfg.user} ${cfg.group} - -"
     ];
 
     systemd.services.clightning = {
@@ -190,11 +200,12 @@ in {
         rm -f '${cfg.networkDir}/lightning-rpc'
 
         # Build the whole config first, then replace the file in one step.
-        # The data dir is writable by the operator, so a redirect into `config`
-        # could follow a symlink or reuse a file owned by the operator.
+        # Older versions let group members write the data dir, so `config` can
+        # be a symlink or a file that one of them owns. A redirect into it would
+        # follow the symlink or reuse the file.
         conf=$(
           cat '${configFile}'
-          echo "bitcoin-rpcpassword=$(cat '${config.nix-bitcoin.secretsDir}/bitcoin-rpcpassword-public')"
+          echo "bitcoin-rpcpassword=$(cat '${config.nix-bitcoin.secretsDir}/bitcoin-rpcpassword-clightning')"
           ${optionalString (cfg.getPublicAddressCmd != "") ''
             echo "announce-addr=$(${cfg.getPublicAddressCmd}):${toString publicPort}"
           ''}
@@ -224,9 +235,19 @@ in {
     users.users.${cfg.user} = {
       isSystemUser = true;
       group = cfg.group;
-      extraGroups = [ "bitcoinrpc-public" ];
     };
     users.groups.${cfg.group} = {};
     nix-bitcoin.operator.groups = [ cfg.group ];
+
+    nix-bitcoin.secrets = {
+      bitcoin-rpcpassword-clightning = {
+        user = bitcoind.user;
+        inherit (cfg) group;
+      };
+      bitcoin-HMAC-clightning.user = bitcoind.user;
+    };
+    nix-bitcoin.generateSecretsCmds.clightning = ''
+      makeBitcoinRPCPassword clightning
+    '';
   };
 }
