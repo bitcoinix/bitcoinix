@@ -210,6 +210,230 @@ copy fails, or when bitcoind is starting or stopping. It still backs up all othe
 files first. If a backup fails, check `journalctl -u bitcoind-wallet-backup`. See
 [bitcoind wallets](services.md#bitcoind-wallets).
 
+#### Hardware wallet access requires group hardware-wallets
+
+With `services.hardware-wallets.ledger` or `trezor` enabled, the Ledger and Trezor
+devices that its udev rules match are now available only to members of group
+`hardware-wallets` (`services.hardware-wallets.group`). The operator user is in that
+group. Before, systemd's `70-uaccess.rules` also gave these devices to the user of
+the active local session, and the Trezor rules added the `uaccess` tag themselves.
+The rules now remove that tag. The Ledger rules now match every Ledger device that
+systemd lists: all of USB vendor `2c97`, and the HW.1 and early Nano IDs of vendor
+`2581`. Before, they matched only product `0001`, so the group didn't get other Ledger
+models and firmware versions. To give another user access,
+add it to the group:
+```nix
+users.users.<name>.extraGroups = [ "hardware-wallets" ];
+```
+A device that's plugged in while you deploy keeps the session user's access until
+you unplug it.
+
+#### Trezor Bridge runs only on request
+
+The Trezor Bridge (`trezord`) no longer runs. HWI and `trezorctl` open the device
+directly and don't need it. The bridge couldn't open the device before, since its
+user wasn't in group `hardware-wallets`. To run it for apps that use it, set:
+```nix
+services.hardware-wallets.trezorBridge = true;
+```
+The bridge serves an HTTP API without authentication on `127.0.0.1:21325`. Every
+local user and service can then use the Trezor through it. For example, they can
+read its public keys while it's unlocked, which reveals the addresses of its
+wallets. Signing still needs a confirmation on the device. If you set
+`services.trezord.enable = true` yourself instead and don't give trezord the group,
+evaluation warns that the bridge can't open the device.
+
+#### clightning requires the mount of its local replica
+
+`clightning` now requires the mounts for `services.clightning.replication.local.directory`.
+With `encrypt`, `clightning-replication-mounts` requires them too. This changes
+something only when a mount that systemd knows, like a `fileSystems` entry other
+than `/`, holds the directory. While that mount is missing, `clightning` doesn't
+start. Before, it started and wrote the replica to the filesystem below the mount
+point, usually the primary disk. Then a failure of that disk took both copies.
+Stopping or restarting the mount now also stops or restarts `clightning`.
+
+Evaluation can't check which mount holds the directory, so it reports this change
+for every local replica directory. If the directory is on the root filesystem, or
+the replica's disk or share isn't declared, for example because you mount it by
+hand, `clightning` starts as before. Declare the disk or share in `fileSystems`, as in
+[Local directory target](./services.md#local-directory-target), so that `clightning`
+waits for it. systemd doesn't follow symlinks here, so if `local.directory` is a
+symlink, set it to the target instead.
+
+Deploying this change restarts `clightning` once, because its unit changes.
+
+To check where the replica is, run `findmnt --target <local.directory>`. It names the
+filesystem that holds the directory.
+
+#### `nix-bitcoin-wg-connect` needs the node's address
+
+`nix-bitcoin-wg-connect`, from the WireGuard preset, now needs the address where your
+WireGuard client reaches the node. Before, it looked up the node's public IP when you
+didn't pass an address. The lookup queried public IP lookup services over clearnet,
+which revealed the IP to them, also on a node that otherwise uses only Tor. Without an
+address, the command now prints a usage message and fails. Pass your node's public IP
+or hostname, as described in [Set up WireGuard and ZEUS](./services.md#set-up-wireguard-and-zeus):
+```bash
+nix-bitcoin-wg-connect 93.184.216.34
+```
+Scripts that call it without an address need the same change. Existing WireGuard
+clients keep working.
+
+#### BTCPay Server admin account
+
+BTCPay Server makes the first account that registers the server admin, which can use
+the internal Lightning node. Before, any local user could register first and take that
+account until you registered yours. When BTCPay Server has no admin, bitcoinix now
+creates the admin account `admin@localhost` before BTCPay Server opens its port. Its
+password is in the new secret `$secretsDir/btcpayserver-admin-password`.
+
+- If your BTCPay Server already has an admin, bitcoinix keeps it and doesn't create
+  `admin@localhost`. Check that each admin is yours.
+  [Check the admin accounts](./services.md#check-the-admin-accounts) says how, and
+  what to do if one isn't. This matters most if BTCPay Server ran for a while before
+  you registered, or if you found registration closed.
+- If it has no admin yet, sign in as `admin@localhost` instead of registering. See
+  [Connect to BTCPay Server](./services.md#connect-to-btcpay-server).
+- If you supply your secrets yourself instead of with `nix-bitcoin.generateSecrets`,
+  put a password in `btcpayserver-admin-password` before you deploy. With krops, the
+  `deploy` and `krops-deploy` commands of the deployment shell run `generate-secrets`,
+  which creates it.
+
+#### Core Lightning data dir no longer writable by its group
+
+The Core Lightning data dir (`services.clightning.dataDir`, `/var/lib/clightning` by
+default) now has mode `0750` instead of `0770`. Before, every member of the clightning
+group (`services.clightning.group`, `clightning` by default) could create, rename and
+delete entries in it. A member could swap the `config` file after `clightning.service`
+wrote it and before lightningd read it, and make lightningd start a plugin of its
+choice. Or it could replace the network dir with one that holds its own `hsm_secret`.
+The group can hold the operator user (with `nix-bitcoin.operator.enable`), BTCPay
+Server's user (with `services.btcpayserver.lightningBackend = "clightning"`) and the
+users that you add to it.
+
+The deployment sets the new mode. Group members can still use the RPC socket, for
+example with `lightning-cli`, and read the files they could read before. The RPC socket
+gives full control over the node, so add only trusted users to this group. A script
+that writes to the data dir as a group member now fails. Run it as the clightning user
+(`services.clightning.user`, `clightning` by default) or as root.
+
+Every entry in the data dir belongs to the clightning user. To list the entries that
+don't, run this as root. Use your `services.clightning.dataDir` and
+`services.clightning.user` if you changed them:
+
+```shell
+find /var/lib/clightning ! -user clightning
+```
+
+If it lists an entry that you didn't create as root, a group member created it. Stop
+clightning and check the entry before you start clightning again. A network dir
+(`bitcoin` on mainnet) that a group member created can hold an `hsm_secret` that the
+member controls.
+
+#### Own RPC users for Core Lightning and mempool
+
+Core Lightning and mempool now connect to bitcoind as their own RPC users,
+`clightning` and `mempool`. Before, they connected as the `public` user and added
+the methods they need to its whitelist: `getblockfrompeer` for Core Lightning's
+bcli plugin and `gettxoutsetinfo` for mempool. All services of the `public` user
+share its whitelist, so electrs, Fulcrum, lnd and the others could call these
+methods too. `gettxoutsetinfo` can keep bitcoind busy for minutes. Now the
+`public` user has only the base whitelist, and each new user has the base
+whitelist plus the method of its service.
+
+Each new user has its own password and HMAC in the
+[secrets dir](./configuration.md#secrets-dir): `bitcoin-rpcpassword-clightning`
+and `bitcoin-HMAC-clightning`, and `bitcoin-rpcpassword-mempool` and
+`bitcoin-HMAC-mempool`. What you have to do depends on your setup:
+
+- With `nix-bitcoin.generateSecrets = true` or the krops deployment shell, and
+  bitcoind on the same node, bitcoinix creates these files, and there's nothing
+  else to do. No option marks a bitcoind on another node, so evaluation reports
+  this change for every config with Core Lightning or mempool.
+- If you supply secrets yourself, create these files for the services you use
+  before deploying. Write a new password to `bitcoin-rpcpassword-<user>`, and
+  its HMAC to `bitcoin-HMAC-<user>`: the `<salt>$<hmac>` part of the `rpcauth=`
+  line that Bitcoin Core's `share/rpcauth/rpcauth.py` prints. With
+  `nix-bitcoin.setupSecrets`, a missing file fails setup, and then no service
+  can read its secrets.
+- With the `bitcoind-remote.nix` preset, create the new users on the other node
+  as described in [Use bitcoind from another node](./configuration.md#use-bitcoind-from-another-node),
+  with the whitelists in `services.bitcoind.rpc.users.clightning.rpcwhitelist` and
+  `services.bitcoind.rpc.users.mempool.rpcwhitelist`. Set
+  `services.bitcoind.rpc.users.<user>.name` if a user has another name there.
+  Save their passwords to `bitcoin-rpcpassword-<user>` on this node. With
+  `nix-bitcoin.generateSecrets = true`, bitcoinix creates a password when the
+  file is missing, and `bitcoin-HMAC-<user>` then holds the part after
+  `rpcauth=<name>:` for the other node. Without it, write the HMAC as above, or
+  create an empty `bitcoin-HMAC-<user>` and set
+  `nix-bitcoin.secrets.bitcoin-HMAC-<user>.allowEmpty = true`, since this node
+  doesn't use it.
+
+With bitcoind on another node, its whitelists still have the methods that
+bitcoinix added before. Remove `getblockfrompeer` and `gettxoutsetinfo` from the
+whitelist of the public user there, if it has them, whatever your new config
+enables. If you use BTCPay Server, set the whitelist of its user there again
+from `services.bitcoind.rpc.users.btcpayserver.rpcwhitelist`. It builds on the
+public whitelist, so with mempool it had `gettxoutsetinfo` too.
+
+#### The secure-node preset turns off SSH password login
+
+The `secure-node.nix` preset publishes sshd as an onion service. It now also sets
+`services.openssh.settings.PasswordAuthentication` and
+`services.openssh.settings.KbdInteractiveAuthentication` to `false` by default, so
+sshd accepts only keys. Before, the NixOS defaults allowed passwords, and anyone who
+knew the onion address could try the passwords of your accounts over Tor. This
+includes the operator, whose groups control your node's funds. The change also
+applies to SSH over the node's IP address, since it's the same sshd.
+
+Evaluation reports this change for every configuration with the preset and
+`services.openssh.enable`. If yours already sets both options to `false`, like the
+flakes and Colmena examples, nothing changes.
+
+Otherwise, before deploying, check that each account that logs in over SSH has its
+key in `users.users.<name>.openssh.authorizedKeys.keys`. The preset gives the
+operator the keys of root. Keep a root session or console access until a new login
+with a key works.
+
+To keep password login, set `services.openssh.settings.PasswordAuthentication = true;`.
+
+If you log in with keyboard-interactive methods through PAM, for example one-time
+codes, set `KbdInteractiveAuthentication = true` and check sshd's PAM stack. NixOS
+sets `security.pam.services.sshd.unixAuth` from `PasswordAuthentication`, and PAM
+modules differ in how they depend on it:
+
+- With `googleAuthenticator`, NixOS adds the one-time code rule only when `unixAuth`
+  or `services.homed.enable` is on. Without systemd-homed, set both options to `true`.
+- With `otpwAuth`, `unixAuth` adds a password rule before the one-time password rule,
+  so a plain password would be enough. Keep `PasswordAuthentication = false`.
+
+For other modules, check the rules in `/etc/pam.d/sshd` after you build the system.
+Either way, test a new login before you close your current session.
+
+If your configuration sets one of these options to `true` with `lib.mkDefault`,
+evaluation fails with "conflicting definition values", because the preset uses the
+same priority. Then you don't see this notice. Set the option without `lib.mkDefault`
+instead.
+
+#### NBXplorer RPC password permissions
+
+NBXplorer's bitcoind RPC password (`bitcoin-rpcpassword-btcpayserver` in the
+[secrets dir](./configuration.md#secrets-dir)) is now readable only by NBXplorer's
+user (`services.nbxplorer.user`), with mode `0400`. Before, bitcoind's user and
+NBXplorer's group could read it too. BTCPay Server is in that group to read
+NBXplorer's API cookie, so it could read the password. BTCPay Server still reads
+the cookie.
+
+If a program reads the password as another user, give the program its own RPC user
+in `services.bitcoind.rpc.users`. If you manage the secret files outside bitcoinix,
+for example with `nix-bitcoin.secretsSetupMethod = "manual"`, make NBXplorer's user the
+owner of the file and set its mode to `0400`.
+
+If you think that BTCPay Server was compromised, replace the password. With a local
+bitcoind and `nix-bitcoin.generateSecrets = true`, delete the password file and run
+`systemctl restart setup-secrets`. Then run `systemctl restart bitcoind nbxplorer`.
+
 While 0.2.0 is still in development, keep `nix-bitcoin.configVersion = "0.1.6";`.
 Once the release is finalized, review all of its migrations, then set
 `nix-bitcoin.configVersion = "0.2.0";`.
@@ -486,10 +710,11 @@ configuration before deploying:
 
 mempool no longer accepts `services.mempool.settings.CORE_RPC.PASSWORD`. Its
 settings are copied to the world-readable Nix store, so evaluation now fails when
-this option is set. Remove it and save the password to `bitcoin-rpcpassword-public`
+this option is set. Remove it and save the password to `bitcoin-rpcpassword-mempool`
 in the [secrets dir](./configuration.md#secrets-dir). mempool reads it from there
 at startup, also when it uses
 [bitcoind from another node](./configuration.md#use-bitcoind-from-another-node).
+Releases before 0.2.0 read `bitcoin-rpcpassword-public` instead.
 The old value stays readable in the Nix store until it is garbage-collected, so
 change the password if untrusted users or services run on the node.
 

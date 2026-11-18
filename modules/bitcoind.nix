@@ -126,6 +126,11 @@ let
                 description = ''
                   Password HMAC-SHA-256 for JSON-RPC connections. Must be a string of the
                   format `<SALT-HEX>$<HMAC-HEX>`.
+
+                  This value is written to the world-readable Nix store. Any local user
+                  can read it and test password guesses offline. So use a long random
+                  password, like the one that Bitcoin Core's `share/rpcauth/rpcauth.py`
+                  generates when you don't pass a password.
                 '';
               };
               passwordHMACFromFile = mkOption {

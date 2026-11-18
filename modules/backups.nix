@@ -11,11 +11,18 @@ let
         This uses the NixOS duplicity service.
         To further configure the backup, you can set NixOS options `services.duplicity.*`.
         The `services.duplicity.cleanup.*` options are particularly useful.
+
         If a database dump or a bitcoind wallet copy fails, the `duplicity` unit
         still backs up all other files and then fails.
+
         The backup leaves out the Lightning channel databases, because restoring a
         copy of them can lose all funds in their channels. See the Backups section
         in docs/services.md.
+
+        With {option}`nix-bitcoin.generateSecrets`, the backups are encrypted with
+        the generated password `backup-encryption-password` in
+        {option}`nix-bitcoin.secretsDir`. The backups include it, but you need it
+        to decrypt them. Keep a copy off the node.
       '';
     };
     with-bulk-data = mkOption {
