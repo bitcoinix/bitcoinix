@@ -22,3 +22,8 @@ of the deployment shell don't change. Behavior changes for existing deployments:
 - krops reuses one SSH connection per deployment. bitcoinix patches krops to keep the
   connection's socket in `/tmp`, because the upstream path is too long for macOS or for
   an onion host, which made the deployment fail.
+
+Deploying from macOS failed on the symlinks in nixpkgs and bitcoinix
+([nixpkgs#180046](https://github.com/NixOS/nixpkgs/issues/180046)).
+`examples/krops/sources.nix` now excludes all of them. If you deploy from macOS, copy
+the `filters` of its `nixpkgs` and `nix-bitcoin` sources into your `krops/sources.nix`.
