@@ -78,7 +78,9 @@ systemctl show bitcoind
 ### Connect to bitcoinix node through the SSH onion service
 The `secure-node.nix` preset adds an onion service for SSH. It lets you reach and deploy
 to your node through Tor, e.g. when it's behind NAT. It uses the SSH keys that you
-already deploy with.
+already deploy with. By default, the preset turns off SSH password login
+(`services.openssh.settings.PasswordAuthentication` and `KbdInteractiveAuthentication`),
+so sshd accepts only keys, also over the node's IP address.
 
 1. Get the SSH onion address (excluding the port suffix)
 
@@ -219,6 +221,40 @@ lose the authenticator, delete `RTL-Config.json` in RTL's data dir
 (`/var/lib/rtl` by default) and restart RTL. bitcoinix then writes a new one
 without the 2FA secret.
 
+### BTCPay Server
+
+#### Lightning backend
+
+`services.btcpayserver.lightningBackend` connects BTCPay Server to the node's lnd or
+Core Lightning. The two backends give BTCPay Server different access.
+
+With `lnd`, BTCPay Server gets its own macaroon, `services.lnd.macaroons.btcpayserver`
+(see [Custom macaroons](#custom-macaroons)). It can read the node's state and create
+invoices and addresses. It can't send funds or open or close channels, so BTCPay
+Server can't make Lightning payouts.
+
+With `clightning`, BTCPay Server has full control of the Lightning node, including its
+funds. It joins the clightning group and uses lightningd's RPC socket `lightning-rpc`,
+which allows every method. So BTCPay Server can pay invoices (`pay`, `xpay`), send
+on-chain funds (`withdraw`), open and close channels (`fundchannel`, `close`) and start
+plugins (`plugin`), which run as the clightning user. With clnrest enabled, the group
+can also read clnrest's admin rune. A bug in BTCPay Server, a malicious BTCPay plugin or
+a stolen admin session can drain the node. The pinned BTCPay Server 2.4.7 uses
+BTCPayServer.Lightning 1.7.14, whose Core Lightning client connects only over this
+socket or TCP and can't use runes. So bitcoinix can't give it restricted access yet.
+
+The backend limits only what BTCPay Server can do with the Lightning node. A hot wallet
+that you create in BTCPay Server keeps its keys on the node, so BTCPay Server can spend it
+with either backend.
+
+Use `lnd` when you want BTCPay Server limited, for example when its web interface is
+reachable from the internet. bitcoinix turns on Core Lightning for BTCPay Server only
+while it's the backend. So if your Core Lightning has channels, set
+`services.clightning.enable = true` before you switch, or close the channels first.
+Otherwise the switch stops Core Lightning, and nothing watches its channels. Both
+daemons use port 9735 by default, so also give lnd another port, for example
+`services.lnd.port = 9736;`.
+
 ### Connect to Unbeholden Wallet
 [Unbeholden Wallet](https://github.com/unbeholdendev/unbeholden-wallet) is a watch-only
 wallet that runs in the browser and hands transactions to an air-gapped signer over QR
@@ -246,13 +282,26 @@ over https. To use the wallet from another device without a tunnel, put an https
 proxy in front of it that passes WebSocket upgrades and the `Host` header through, and add
 its name to `services.unbeholden-wallet.allowedHosts`.
 
+The service only accepts connections from localhost. For a proxy on another host, listen on
+all addresses, allow the proxy's address and open the port:
+
+```nix
+services.unbeholden-wallet = {
+  address = "0.0.0.0";
+  allowedClients = [ "192.0.2.10" ];
+  allowedHosts = [ "wallet.example.com" ];
+};
+networking.firewall.allowedTCPPorts = [ 60846 ];
+```
+
 The service has no authentication. Its `Host` and `Origin` checks stop websites, not other
 clients, so anyone who can reach the proxy can use the Electrum connection and write to the
 service's journal. Keep the proxy on a trusted network or give it its own authentication.
 
-With `netns-isolation`, nginx runs in its own namespace, which drops connections from your
-LAN, so an nginx proxy doesn't serve other devices. Run the proxy in the host network
-namespace instead, and point it at the wallet's `local_address`.
+With `netns-isolation`, nginx and the wallet run in their own namespaces, which drop
+connections from your LAN, so neither an nginx proxy nor `allowedClients` serves other
+devices. Run the proxy in the host network namespace instead, and point it at the wallet's
+`local_address`.
 
 ### Use ZEUS (mobile Lightning wallet) via Tor
 1. Install [ZEUS](https://zeusln.app)
@@ -385,6 +434,10 @@ lnconnect-clnrest --host 192.168.1.10
 ```
 Always pass `--host` here. Without it (and without `onion`), the commands detect your
 external IP by querying public IP lookup services over clearnet.
+`lnconnect-clnrest` puts clnrest's server certificate into this URL. It asks clightning
+for clnrest's cert dir (`clnrest-certs`). When clightning doesn't answer, it prints a
+warning and uses clightning's network dir. So with `clnrest-certs` set, run it while
+clightning runs, or pass `--tlscertpath`.
 
 ### Use ZEUS (mobile Lightning wallet) via WireGuard
 

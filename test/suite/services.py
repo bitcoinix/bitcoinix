@@ -266,6 +266,12 @@ def test_btcpayserver():
     assert_running("nbxplorer")
     machine.wait_until_succeeds(log_has_string("nbxplorer", "BTC: RPC connection successful"))
     wait_for_open_port(ip("nbxplorer"), 24444)
+    # btcpayserver is in NBXplorer's group to read the API cookie. That group
+    # must not give it NBXplorer's bitcoind RPC password.
+    rpc_password = "/secrets/bitcoin-rpcpassword-btcpayserver"
+    assert_file_metadata(rpc_password, owner="nbxplorer", mode="400")
+    machine.fail(f"runuser -u btcpayserver -- cat {rpc_password}")
+    succeed("runuser -u btcpayserver -- cat /var/lib/nbxplorer/*/.cookie")
     # Regression guard: NBXplorer's .NET host takes its content root from the
     # working directory and (by default) watches it recursively. With no
     # WorkingDirectory that was `/`, i.e. an inotify watch per directory of the
@@ -344,7 +350,7 @@ def test_mempool():
     machine.wait_until_succeeds(
         log_has_string("mempool", "Mempool Server is running on port 8999")
     )
-    # config.json holds the public RPC password
+    # config.json holds mempool's RPC password
     conf = "/var/cache/mempool/config.json"
     assert_file_metadata(conf, owner="mempool", mode="600")
     # A file with laxer permissions (created by earlier versions) is replaced
@@ -396,6 +402,13 @@ def test_unbeholden_wallet():
     assert_full_match(f"{status} -H 'Host: evil.example'", "403")
     for host in test_data["unbeholden-wallet"]["allowedHosts"]:
         assert_full_match(f"{status} -H 'Host: {host}'", "200")
+    probe = test_data.get("unbeholden-wallet-clients")
+    if probe:
+        allowed, denied = probe["allowed"], probe["denied"]
+        succeed(f"ip addr add {allowed}/32 dev lo", f"ip addr add {denied}/32 dev lo")
+        remote = f"curl -s -o /dev/null -w '%{{http_code}}' -m 5 {allowed}:60846 --interface"
+        assert_full_match(f"{remote} {allowed}", "200")
+        machine.fail(f"{remote} {denied}")
     # Mainnet fixtures never sync, so their Electrum backend may not listen.
     if "regtest" not in enabled_tests:
         return
