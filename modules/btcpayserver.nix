@@ -284,9 +284,12 @@ in {
     users.groups.${cfg.btcpayserver.group} = {};
 
     nix-bitcoin.secrets = {
+      # Only NBXplorer reads this password. btcpayserver is in NBXplorer's group
+      # to read the API cookie, so the group gets no access here.
       bitcoin-rpcpassword-btcpayserver = {
-        user = cfg.bitcoind.user;
+        user = cfg.nbxplorer.user;
         group = cfg.nbxplorer.group;
+        permissions = "400";
       };
       bitcoin-HMAC-btcpayserver.user = cfg.bitcoind.user;
     };
