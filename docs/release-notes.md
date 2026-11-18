@@ -5,6 +5,15 @@ For configuration migrations reported during evaluation, follow the
 
 ## 0.2.0
 
+#### Migration warnings on master
+
+Unreleased configuration migrations now warn without blocking deployment or
+requiring acknowledgement. Users following master must review them before
+deploying; warnings cannot be acknowledged individually and repeat while
+applicable. A `configVersion` newer than the latest finalized release is rejected.
+Finalizing the release makes its notices blocking errors until acknowledged. See
+the [upgrading guide](upgrading.md) for the version policy.
+
 #### Unstable NixOS base
 
 bitcoinix now uses a single `nixpkgs` input tracking `nixos-unstable` for its system
@@ -59,6 +68,14 @@ under a synthetic mainnet directory. Users selecting custom credentials with
 With `services.btcpayserver.lightningBackend = "clightning"`, BTCPay Server has full
 control of the Lightning node, including its funds. With `lnd`, it gets a restricted
 macaroon. See [Lightning backend](services.md#lightning-backend).
+
+#### Custom RPC users' password HMACs are in the Nix store
+
+The `passwordHMAC` of each custom RPC user in `services.bitcoind.rpc.users` is
+written to the world-readable Nix store. Any local user can read it and test password
+guesses offline. This isn't new, but it wasn't documented. If a custom RPC user has a
+weak password, replace it with a long random one. See
+[Allow bitcoind RPC connections from LAN](configuration.md#allow-bitcoind-rpc-connections-from-lan).
 
 ## 0.1.6
 
