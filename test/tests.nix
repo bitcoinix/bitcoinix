@@ -489,8 +489,14 @@ let
     };
 
     # netns and regtest, without secure-node.nix
-    netnsRegtest = {
+    netnsRegtest = let
+      # Unlike `regtest`, give clnrest's certs a dir of their own.
+      # A relative dir starts at the network dir.
+      clnrestCerts = "rest-certs";
+    in {
       imports = with scenarios; [ netnsBase regtest ];
+      services.clightning.extraConfig = "clnrest-certs=${clnrestCerts}";
+      test.data.clnrest-certs = clnrestCerts;
     };
 
     hardened = {

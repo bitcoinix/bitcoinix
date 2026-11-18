@@ -115,6 +115,23 @@ makeTestVM {
               f"-X POST https://{api.host}:{api.port}/v1/getinfo"
           )
 
+          # Only a URL with the cert asks clightning for clnrest's cert dir.
+          # So `--nocert` works while clightning is down.
+          server.succeed("systemctl stop clightning.service")
+          assert server.succeed("runuser -u operator -- lnconnect-clnrest-wg --url") == lndconnect_url
+          # Without an answer, the URL has the cert from the default dir, with a warning
+          direct = "runuser -u operator -- lnconnect-clnrest --host 10.10.0.1 --url"
+          stderr = "/tmp/lnconnect-clnrest-stderr"
+          url = server.succeed(f"{direct} 2>{stderr}")
+          assert "cert=" in url, url
+          warning = server.succeed(f"cat {stderr}")
+          assert "Warning: Can't ask clightning for clnrest's cert dir" in warning, warning
+          # The caller's own `--tlscertpath` skips the query
+          default_cert = "${nodes.server.services.clightning.networkDir}/server.pem"
+          assert server.succeed(f"{direct} --tlscertpath={default_cert} 2>{stderr}") == url
+          assert "Warning:" not in server.succeed(f"cat {stderr}")
+          server.succeed("systemctl start clightning.service")
+
       with subtest("REST accept rules only match traffic from wg-nb"):
           lnd_rest_port = parse_lndconnect_url(
               server.succeed("runuser -u operator -- lndconnect-wg --url")

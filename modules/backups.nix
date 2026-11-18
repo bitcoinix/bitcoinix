@@ -13,6 +13,10 @@ let
         The `services.duplicity.cleanup.*` options are particularly useful.
         If a database dump fails, the `duplicity` unit still backs up all other
         files and then fails.
+        With {option}`nix-bitcoin.generateSecrets`, the backups are encrypted with
+        the generated password `backup-encryption-password` in
+        {option}`nix-bitcoin.secretsDir`. The backups include it, but you need it
+        to decrypt them. Keep a copy off the node.
       '';
     };
     with-bulk-data = mkOption {
