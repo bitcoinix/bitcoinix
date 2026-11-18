@@ -370,6 +370,7 @@ let
   hasNotice = hasNoticeAt "0.1.5";
   hasOperatorAccessNotice = hasNotice "lnconnect-clnrest now gives the operator user";
   hasAccessUsersNotice = hasNotice "now accepts only users that are defined";
+  hasWgConnectNotice = hasNotice "`nix-bitcoin-wg-connect` from the WireGuard preset now needs";
   hasRpcUsersNotice = hasNotice "now connect to bitcoind as their own RPC users";
   # The services that call RPC methods outside the public whitelist
   rpcUsersServices = {
@@ -1305,6 +1306,21 @@ let
       expected = {
         clnrest = true; lndOnly = false; explicitAccess = false; externalOperator = true;
       };
+    };
+    # Before 0.2.0, nix-bitcoin-wg-connect looked up the public IP when it got no host
+    testVersioningWireguardConnectHost = {
+      expr = {
+        preset = hasWgConnectNotice wireguardLndconnect;
+        noPreset = hasWgConnectNotice { services.lnd = { enable = true; lndconnect.enable = true; }; };
+        before = hasNoticeAt "0.1.6" "`nix-bitcoin-wg-connect` from the WireGuard preset now needs"
+          wireguardLndconnect;
+        # Once 0.2.0 is released, a config at 0.2.0 doesn't get the notice
+        acknowledged = hasNoticeAt "0.2.0" "`nix-bitcoin-wg-connect` from the WireGuard preset now needs" {
+          imports = [ wireguardLndconnect ];
+          nix-bitcoin.versioning.releasedVersion = "0.2.0";
+        };
+      };
+      expected = { preset = true; noPreset = false; before = true; acknowledged = false; };
     };
     testOnionAccessRejectsUnknownUser = {
       expr = map (lib.hasInfix "no-such-user") (failedAssertions onionAccessUnknownUser);
