@@ -165,6 +165,10 @@
   # cryptocurrency payment processor.
   # services.btcpayserver.enable = true;
   #
+  # bitcoinix creates the admin account `admin@localhost` before BTCPay Server
+  # first opens its port. Its password is in `$secretsDir/btcpayserver-admin-password`.
+  # See `../docs/services.md` for how to connect.
+  #
   # Privacy Warning: BTCPay Server currently looks up price rates without
   # proxying them through Tor. This means an outside observer can correlate
   # your BTCPay Server usage, like invoice creation times, with your IP address.
@@ -188,8 +192,6 @@
   #
   # Set this to create an onion service to make the BTCPay Server web interface
   # accessible via Tor.
-  # Security WARNING: Create a BTCPay Server administrator account before allowing
-  # public access to the web interface.
   # nix-bitcoin.onionServices.btcpayserver.enable = true;
 
   ### Hardware wallets

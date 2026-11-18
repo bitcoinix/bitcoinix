@@ -124,7 +124,7 @@ let
 
           `CORE_RPC.PASSWORD` can't be set here because these settings are copied
           to the world-readable Nix store. mempool reads the password at startup from
-          `bitcoin-rpcpassword-public` in the secrets dir (`nix-bitcoin.secretsDir`).
+          `bitcoin-rpcpassword-mempool` in the secrets dir (`nix-bitcoin.secretsDir`).
         '';
       };
       database = {
@@ -252,7 +252,7 @@ in {
         message = ''
           `services.mempool.settings.CORE_RPC.PASSWORD` would be copied to the
           world-readable Nix store. Remove it. mempool reads the bitcoind RPC password
-          from `${secretsDir}/bitcoin-rpcpassword-public` at startup. To use another
+          from `${secretsDir}/bitcoin-rpcpassword-mempool` at startup. To use another
           password, e.g. for a remote bitcoind, save it to this file.
           See docs/configuration.md, "Secrets dir".
         '';
@@ -260,8 +260,15 @@ in {
     ];
 
     services.bitcoind.txindex = true;
-    # Called by mempool's block indexer when bitcoind has `coinstatsindex` enabled
-    services.bitcoind.rpc.users.public.rpcwhitelist = [ "gettxoutsetinfo" ];
+    # Its own user, see ./bitcoind-rpc-public-whitelist.nix
+    services.bitcoind.rpc.users.mempool = {
+      passwordHMACFromFile = true;
+      # An empty public whitelist disables whitelisting, so it stays empty here too.
+      # mempool's block indexer calls `gettxoutsetinfo` when bitcoind has
+      # `coinstatsindex` enabled.
+      rpcwhitelist = let public = bitcoind.rpc.users.public.rpcwhitelist; in
+        optionals (public != []) (public ++ [ "gettxoutsetinfo" ]);
+    };
     services.electrs.enable = mkIf (cfg.electrumServer == "electrs" ) true;
     services.fulcrum.enable = mkIf (cfg.electrumServer == "fulcrum" ) true;
     services.mysql = {
@@ -302,7 +309,7 @@ in {
       CORE_RPC = {
         HOST = bitcoind.rpc.address;
         PORT = bitcoind.rpc.port;
-        USERNAME = bitcoind.rpc.users.public.name;
+        USERNAME = bitcoind.rpc.users.mempool.name;
         # Set at service start from the secret file, see `preStart`
         PASSWORD = null;
       };
@@ -340,9 +347,9 @@ in {
         # jq reads the password from the file itself. A sed program would carry
         # the password in its argv, readable by every local user through
         # /proc/<pid>/cmdline while it runs. jq also escapes it as JSON.
-        conf=$(${pkgs.jq}/bin/jq --rawfile pw '${secretsDir}/bitcoin-rpcpassword-public' \
+        conf=$(${pkgs.jq}/bin/jq --rawfile pw '${secretsDir}/bitcoin-rpcpassword-mempool' \
           '.CORE_RPC.PASSWORD = ($pw | sub("\n+$"; ""))' ${configFile})
-        # config.json holds the public RPC password. Replace it in one step with mode 600,
+        # config.json holds mempool's RPC password. Replace it in one step with mode 600,
         # also when an earlier version left a file with laxer permissions.
         install -T -m 600 <(echo "$conf") '${cacheDir}/config.json'
       '';
@@ -384,8 +391,18 @@ in {
     users.users.${cfg.user} = {
       isSystemUser = true;
       group = cfg.group;
-      extraGroups = [ "bitcoinrpc-public" ];
     };
     users.groups.${cfg.group} = {};
+
+    nix-bitcoin.secrets = {
+      bitcoin-rpcpassword-mempool = {
+        user = bitcoind.user;
+        inherit (cfg) group;
+      };
+      bitcoin-HMAC-mempool.user = bitcoind.user;
+    };
+    nix-bitcoin.generateSecretsCmds.mempool = ''
+      makeBitcoinRPCPassword mempool
+    '';
   };
 }

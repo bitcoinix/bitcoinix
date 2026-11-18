@@ -294,16 +294,64 @@ let
     services.btcpayserver = { enable = true; lightningBackend = "clightning"; };
     services.clightning = { user = "cln-custom"; group = "cln-rpc"; };
   };
+  trezor = { services.hardware-wallets.trezor = true; };
+  trezorWithBridge = {
+    imports = [ trezor ];
+    services.hardware-wallets.trezorBridge = true;
+  };
+  # The rule lines of the Ledger and Trezor udev rules
+  hardwareWalletRules = let
+    config = evaluate { services.hardware-wallets = { ledger = true; trezor = true; }; };
+    packages = builtins.filter (pkg: lib.elem pkg.name [ "ledger-udev-rules" "trezord-udev-rules" ])
+      config.services.udev.packages;
+  in map (pkg: builtins.filter (line: line != "" && !lib.hasPrefix "#" line)
+    (lib.splitString "\n" pkg.text)) packages;
+  # A system with udev and the Trezor Bridge, whose rules the build below checks
+  hardwareWalletSystem = (pkgs.nixos {
+    imports = [ nixBitcoinModule ];
+    boot.loader.grub.enable = false;
+    fileSystems."/" = { device = "/dev/vda"; fsType = "ext4"; };
+    system.stateVersion = "26.05";
+    nix-bitcoin.secretsSetupMethod = "manual";
+    services.hardware-wallets = { ledger = true; trezor = true; trezorBridge = true; };
+  }).config;
+  trezorBridge = module: let config = evaluate module; in {
+    enable = config.services.trezord.enable;
+    groups = config.systemd.services.trezord.serviceConfig.SupplementaryGroups or null;
+    warnings = builtins.length
+      (builtins.filter (lib.hasInfix "trezord can't open the Trezor") config.warnings);
+  };
+  btcpayserverCustomUser = evaluate {
+    services.btcpayserver = { enable = true; user = "btcpay-custom"; group = "payments"; };
+  };
+  # The URL of the health check in the script of btcpayserver-admin
+  btcpayserverAdminHealthUrl = rootpath: let
+    script = (evaluate {
+      services.btcpayserver = { enable = true; inherit rootpath; };
+    }).systemd.services.btcpayserver-admin.script;
+    line = lib.findFirst (lib.hasInfix "curl -fs -o /dev/null") "" (lib.splitString "\n" script);
+  in lib.head (builtins.match ".*(http://[^' ;]*).*" line);
   lndMacaroon = name: macaroon: evaluate {
     services.lnd = { enable = true; macaroons.${name} = macaroon; };
   };
   lndMacaroonId = name: user: permissions:
     (lndMacaroon name { inherit user permissions; }).services.lnd.macaroons.${name}.rootKeyId;
+  clightningReplication = replication: {
+    services.clightning = { enable = true; replication = { enable = true; } // replication; };
+  };
   replicationHostKeyWarnings = replication: builtins.filter
     (lib.hasInfix "disables SSH host key checking")
-    (evaluate {
-      services.clightning = { enable = true; replication = { enable = true; } // replication; };
-    }).warnings;
+    (evaluate (clightningReplication replication)).warnings;
+  replicationUnits = replication: (evaluate (clightningReplication replication)).systemd.services;
+  replicationRequiredMounts = replication: let
+    services = replicationUnits replication;
+  in lib.genAttrs [ "clightning" "clightning-replication-mounts" ]
+    (unit: services.${unit}.unitConfig.RequiresMountsFor or null);
+  # A local replica directory, with disks declared at `mountPoints`
+  replicationToLocalMounts = directory: mountPoints: {
+    imports = [ (clightningReplication { local.directory = directory; }) ];
+    fileSystems = lib.genAttrs mountPoints (_: { device = "/dev/disk/by-label/replica"; fsType = "ext4"; });
+  };
   lndconnectOnion = {
     services.lnd = { enable = true; lndconnect = { enable = true; onion = true; }; };
   };
@@ -360,6 +408,16 @@ let
   hasNotice = hasNoticeAt "0.1.5";
   hasOperatorAccessNotice = hasNotice "lnconnect-clnrest now gives the operator user";
   hasAccessUsersNotice = hasNotice "now accepts only users that are defined";
+  hasReplicationMountNotice = hasNotice "clightning now requires the mounts for";
+  hasWgConnectNotice = hasNotice "`nix-bitcoin-wg-connect` from the WireGuard preset now needs";
+  hasRpcUsersNotice = hasNotice "now connect to bitcoind as their own RPC users";
+  # The services that call RPC methods outside the public whitelist
+  rpcUsersServices = {
+    services.clightning.enable = true;
+    services.mempool.enable = true;
+    services.btcpayserver.enable = true;
+  };
+  rpcUsers = evaluate rpcUsersServices;
   hasSshPasswordNotice = hasNotice "so sshd accepts only keys";
   # The preset publishes sshd as an onion service
   secureNodeSsh = settings: {
@@ -916,6 +974,14 @@ let
       expected = [ ":9736" ":9735" ":9736" "" ];
     };
     testNetnsRESTAllowed = { expr = failedAssertions netns; expected = []; };
+    testUnbeholdenWalletRejectsAllowedClientsWithNetns = {
+      expr = map (lib.hasInfix "allowedClients` is not supported with netns-isolation")
+        (failedAssertions (evaluate {
+          services.unbeholden-wallet = { enable = true; allowedClients = [ "192.0.2.1" ]; };
+          nix-bitcoin.netns-isolation.enable = true;
+        }));
+      expected = [ true ];
+    };
     testNetnsRejectsNftables = {
       expr = map (lib.hasInfix "uses the iptables backend") (failedAssertions netnsNftables);
       expected = [ true ];
@@ -1134,6 +1200,115 @@ let
       ];
       expected = [ false (!changes020Released) (!changes020Released) (!changes020Released) true true ];
     };
+    # The 0.1.5 notices by their message. Once 0.2.0 is released, later notices block
+    # every older config, so the version check tests above can't tell them apart.
+    testMigrationNotices015 = let
+      plugin = name: enable: { services.clightning = { enable = true; plugins.${name}.enable = enable; }; };
+      mempool = settings: { services.mempool = { enable = true; inherit settings; }; };
+      password.CORE_RPC.PASSWORD = lib.mkForce "literal-password";
+      notice = phrase: module: map (version: hasNoticeAt version phrase module)
+        [ "0.1.4" "0.1.5" releasedVersion ];
+      currencyrate = "currencyrate plugin has been replaced";
+      rebalance = "rebalance plugin now uses";
+    in {
+      expr = {
+        currencyrate = notice currencyrate (plugin "currencyrate" true);
+        currencyrateOff = notice currencyrate (plugin "currencyrate" false);
+        rebalance = notice rebalance (plugin "rebalance" true);
+        rebalanceOff = notice rebalance (plugin "rebalance" false);
+        # The notice names the password file that mempool reads now
+        mempool = notice "/bitcoin-rpcpassword-mempool`." (mempool password);
+        mempoolOff = notice "CORE_RPC.PASSWORD` is no longer accepted" (mempool {});
+      };
+      expected = {
+        currencyrate = [ true false false ]; currencyrateOff = [ false false false ];
+        rebalance = [ true false false ]; rebalanceOff = [ false false false ];
+        mempool = [ true false false ]; mempoolOff = [ false false false ];
+      };
+    };
+    # Each method outside the public whitelist reaches only the user of the service
+    # that calls it
+    testRpcUsersWhitelists = {
+      expr = lib.mapAttrs (_: user:
+        map (method: lib.elem method user.rpcwhitelist) [ "getblockfrompeer" "gettxoutsetinfo" ]
+      ) {
+        inherit (rpcUsers.services.bitcoind.rpc.users) public clightning mempool btcpayserver;
+        # trustedcoin replaces bcli, which calls `getblockfrompeer`
+        trustedcoin = (evaluate {
+          services.clightning = { enable = true; plugins.trustedcoin.enable = true; };
+        }).services.bitcoind.rpc.users.clightning;
+      };
+      expected = {
+        public = [ false false ];
+        clightning = [ true false ];
+        mempool = [ false true ];
+        btcpayserver = [ true false ];
+        trustedcoin = [ false false ];
+      };
+    };
+    # An empty whitelist disables whitelisting, also for the clightning and mempool users
+    testRpcUsersFollowEmptyPublicWhitelist = {
+      expr = lib.mapAttrs (_: user: user.rpcwhitelist) {
+        inherit ((evaluate {
+          imports = [ rpcUsersServices ];
+          services.bitcoind.rpc.users.public.rpcwhitelist = lib.mkForce [];
+        }).services.bitcoind.rpc.users) public clightning mempool;
+      };
+      expected = { public = []; clightning = []; mempool = []; };
+    };
+    testRpcUsersConnect = {
+      expr = with rpcUsers; {
+        clightning = lib.hasInfix "/bitcoin-rpcpassword-clightning'" systemd.services.clightning.preStart;
+        mempool = {
+          user = services.mempool.settings.CORE_RPC.USERNAME;
+          password = lib.hasInfix "/bitcoin-rpcpassword-mempool'" systemd.services.mempool.preStart;
+        };
+        # Neither service reads the password of `public`
+        publicGroup = map (user: lib.elem "bitcoinrpc-public" users.users.${user}.extraGroups)
+          [ "clightning" "mempool" ];
+      };
+      expected = {
+        clightning = true;
+        mempool = { user = "mempool"; password = true; };
+        publicGroup = [ false false ];
+      };
+    };
+    # Every config with one of the services gets the notice. Only generated secrets
+    # need nothing else.
+    testVersioningRpcUsers = {
+      expr = {
+        clightning = hasRpcUsersNotice { services.clightning.enable = true; };
+        mempool = hasRpcUsersNotice { services.mempool.enable = true; };
+        unaffected = hasRpcUsersNotice { services.electrs.enable = true; };
+        nothingElse = map (generateSecrets: hasNotice "there's nothing else to do" {
+          imports = [ rpcUsersServices ];
+          nix-bitcoin = { inherit generateSecrets; };
+        }) [ true false ];
+        # The old config may have added both methods to a remote public user,
+        # whatever the new one enables
+        removesBoth = map (hasNotice "Remove `getblockfrompeer` and `gettxoutsetinfo` from") [
+          { services.mempool.enable = true; }
+          { services.clightning = { enable = true; plugins.trustedcoin.enable = true; }; }
+        ];
+        # A remote BTCPay user got `gettxoutsetinfo` through the public whitelist
+        btcpayWhitelist = map (hasNotice "Set the whitelist of the BTCPay Server user") [
+          rpcUsersServices
+          { services.mempool.enable = true; }
+        ];
+        previous = hasNoticeAt "0.1.6" "now connect to bitcoind as their own RPC users"
+          rpcUsersServices;
+        # Once 0.2.0 is released, a config at 0.2.0 doesn't get the notice
+        acknowledged = hasNoticeAt "0.2.0" "now connect to bitcoind as their own RPC users" {
+          imports = [ rpcUsersServices ];
+          nix-bitcoin.versioning.releasedVersion = "0.2.0";
+        };
+      };
+      expected = {
+        clightning = true; mempool = true; unaffected = false; nothingElse = [ true false ];
+        removesBoth = [ true true ]; btcpayWhitelist = [ true false ]; previous = true;
+        acknowledged = false;
+      };
+    };
     testEmptySecretsMigration = {
       expr = map (case: !(hasNoticeAt case.version "setup-secrets now fails" {
         nix-bitcoin.setupSecrets = case.setupSecrets;
@@ -1160,6 +1335,102 @@ let
         zstd = [ true true false ];
         none = [ true true false ];
       };
+    };
+    # duplicity applies the first matching entry, so these exclusions also win over `extraFiles`
+    testBackupsExcludeChannelDatabasesFirst = let
+      # The first block of the filelist, before `extraFiles`
+      exclusions = module: lib.filter (line: line != "") (lib.splitString "\n" (lib.head
+        (lib.splitString "\n\n" (builtins.readFile (evaluate {
+          imports = [ module ];
+          services.backups = { enable = true; extraFiles = [ "/var/lib" ]; };
+        }).services.duplicity.includeFileList))));
+      cln = "/var/lib/clightning/bitcoin";
+      sqlite = db: [ "- ${db}" "- ${db}-*" ];
+      lndGraph = "- /var/lib/lnd/graph";
+    in {
+      expr = {
+        default = exclusions {};
+        # Relative paths start in the network dir. Like Core Lightning, split at the
+        # first `:` only, so the replica name ends with `:`.
+        customWallet = exclusions {
+          services.clightning.wallet = "sqlite3://./main.sqlite3:../replica//copy.sqlite3:";
+        };
+        # An empty path names no file
+        emptyReplica = exclusions { services.clightning.wallet = "sqlite3://main.sqlite3:"; };
+        emptyWallet = exclusions { services.clightning.wallet = "sqlite3://"; };
+        # duplicity reads each line as a glob
+        globWallet = exclusions { services.clightning.wallet = "sqlite3://channel[1].sqlite3"; };
+        encryptedReplica = exclusions {
+          services.clightning.replication = {
+            enable = true;
+            encrypt = true;
+            local.directory = "/var/lib/clightning/replica/";
+          };
+        };
+        sshfsReplica = exclusions {
+          services.clightning.replication = {
+            enable = true;
+            encrypt = true;
+            sshfs.destination = "user@host:dir";
+          };
+        };
+        # duplicity fails on a selection outside its root
+        backupRoot = exclusions {
+          services.duplicity.root = "/var/lib";
+          services.clightning.wallet = "sqlite3://${cln}/lightningd.sqlite3:/mnt/replica/lightningd.sqlite3";
+        };
+        # duplicity normalises its root
+        backupRootDot = exclusions { services.duplicity.root = "/var/lib/."; };
+      };
+      expected = {
+        default = sqlite "${cln}/lightningd.sqlite3" ++ [ lndGraph ];
+        customWallet = sqlite "${cln}/lightningd.sqlite3" ++ sqlite "${cln}/main.sqlite3"
+          ++ sqlite "/var/lib/clightning/replica/copy.sqlite3:" ++ [ lndGraph ];
+        emptyReplica = sqlite "${cln}/lightningd.sqlite3" ++ sqlite "${cln}/main.sqlite3" ++ [ lndGraph ];
+        emptyWallet = sqlite "${cln}/lightningd.sqlite3" ++ [ lndGraph ];
+        globWallet = sqlite "${cln}/lightningd.sqlite3" ++ sqlite "${cln}/channel[[]1].sqlite3" ++ [ lndGraph ];
+        encryptedReplica = sqlite "${cln}/lightningd.sqlite3"
+          ++ sqlite "/var/cache/clightning-replication/plaintext/lightningd.sqlite3"
+          ++ [ "- /var/lib/clightning/replica/lightningd-db" "- /var/cache/clightning-replication" lndGraph ];
+        sshfsReplica = sqlite "${cln}/lightningd.sqlite3"
+          ++ sqlite "/var/cache/clightning-replication/plaintext/lightningd.sqlite3"
+          ++ [ "- /var/cache/clightning-replication" lndGraph ];
+        backupRoot = sqlite "${cln}/lightningd.sqlite3" ++ [ lndGraph ];
+        backupRootDot = sqlite "${cln}/lightningd.sqlite3" ++ [ lndGraph ];
+      };
+    };
+    # The wallets of a remote bitcoind live on the other node
+    testBackupsCopyLocalWallets = let
+      copiesWallets = module: let
+        config = evaluate {
+          imports = [ module ];
+          services.backups.enable = true;
+          services.bitcoind.enable = true;
+        };
+      in {
+        unit = (config.systemd.services.bitcoind-wallet-backup or { enable = false; }).enable;
+        started = lib.hasInfix "bitcoind-wallet-backup.service" config.systemd.services.duplicity.preStart;
+      };
+    in {
+      expr = {
+        local = copiesWallets {};
+        remote = copiesWallets ../modules/presets/bitcoind-remote.nix;
+        noWallet = copiesWallets { services.bitcoind.disablewallet = true; };
+      };
+      expected = {
+        local = { unit = true; started = true; };
+        remote = { unit = false; started = false; };
+        noWallet = { unit = false; started = false; };
+      };
+    };
+    # Before 0.2.0, the backups included the Lightning channel databases and no
+    # consistent wallet copies
+    testVersioningBackupsContent = {
+      expr = map (hasNotice "no longer includes the Lightning channel databases") [
+        { services.backups.enable = true; }
+        { services.lnd.enable = true; }
+      ];
+      expected = [ true false ];
     };
     testLndconnectWithoutOperator = {
       expr = {
@@ -1271,6 +1542,21 @@ let
       expected = {
         clnrest = true; lndOnly = false; explicitAccess = false; externalOperator = true;
       };
+    };
+    # Before 0.2.0, nix-bitcoin-wg-connect looked up the public IP when it got no host
+    testVersioningWireguardConnectHost = {
+      expr = {
+        preset = hasWgConnectNotice wireguardLndconnect;
+        noPreset = hasWgConnectNotice { services.lnd = { enable = true; lndconnect.enable = true; }; };
+        before = hasNoticeAt "0.1.6" "`nix-bitcoin-wg-connect` from the WireGuard preset now needs"
+          wireguardLndconnect;
+        # Once 0.2.0 is released, a config at 0.2.0 doesn't get the notice
+        acknowledged = hasNoticeAt "0.2.0" "`nix-bitcoin-wg-connect` from the WireGuard preset now needs" {
+          imports = [ wireguardLndconnect ];
+          nix-bitcoin.versioning.releasedVersion = "0.2.0";
+        };
+      };
+      expected = { preset = true; noPreset = false; before = true; acknowledged = false; };
     };
     testOnionAccessRejectsUnknownUser = {
       expr = map (lib.hasInfix "no-such-user") (failedAssertions onionAccessUnknownUser);
@@ -1436,6 +1722,34 @@ let
       expr = lib.elem "cln-rpc" btcpayserverCustomClightningGroup.users.users.btcpayserver.extraGroups;
       expected = true;
     };
+    # setup-secrets fails for every secret when an owner doesn't exist
+    testBtcpayserverAdminPasswordOwner = {
+      expr = with btcpayserverCustomUser; {
+        inherit (nix-bitcoin.secrets.btcpayserver-admin-password) user group;
+        userExists = users.users ? btcpay-custom;
+        groupExists = users.groups ? payments;
+      };
+      expected = { user = "btcpay-custom"; group = "payments"; userExists = true; groupExists = true; };
+    };
+    testBtcpayserverAdminRootpath = {
+      expr = map btcpayserverAdminHealthUrl [ null "/" "btcpay" "/btcpay" "btcpay/" ];
+      expected = [
+        "http://127.0.0.1:23000/api/v1/health"
+        "http://127.0.0.1:23000/api/v1/health"
+        "http://127.0.0.1:23000/btcpay/api/v1/health"
+        "http://127.0.0.1:23000/btcpay/api/v1/health"
+        "http://127.0.0.1:23000/btcpay/api/v1/health"
+      ];
+    };
+    # Before 0.2.0, group clightning could write the clightning data dir
+    testVersioningClightningDataDir = {
+      expr = map (hasNotice "Core Lightning data dir (`services.clightning.dataDir`) is no longer") [
+        { services.clightning.enable = true; }
+        { services.btcpayserver = { enable = true; lightningBackend = "clightning"; }; }
+        { services.lnd.enable = true; }
+      ];
+      expected = [ true true false ];
+    };
     testLndMacaroonRootKeyIds = let
       info = ''{"entity":"info","action":"read"}'';
       onchain = ''{"entity":"onchain","action":"read"}'';
@@ -1496,6 +1810,112 @@ let
       ];
       expected = [ 0 1 1 0 ];
     };
+    # Each rule gives the device to the group and takes the `uaccess` tag away,
+    # which would give it to the active local session too
+    # The Ledger rules match every product of vendor 2c97 and the HW.1 IDs of
+    # vendor 2581, as systemd's hwdb does
+    testHardwareWalletRulesUseOnlyTheGroup = {
+      expr = map (lines: {
+        count = builtins.length lines;
+        groupOnly = lib.all (line: lib.hasInfix ''GROUP="hardware-wallets"'' line
+          && lib.hasInfix ''TAG-="uaccess"'' line && !lib.hasInfix ''TAG+="uaccess"'' line) lines;
+        ledgerVendorWide = lib.any (line: lib.hasInfix ''"2c97"'' line && !lib.hasInfix "idProduct" line) lines;
+        ledgerHw1 = lib.any (line: lib.hasInfix ''"2581"'' line && lib.hasInfix "1b7c|2b7c|3b7c|4b7c" line) lines;
+      }) hardwareWalletRules;
+      expected = [
+        { count = 2; groupOnly = true; ledgerVendorWide = true; ledgerHw1 = true; }
+        { count = 5; groupOnly = true; ledgerVendorWide = false; ledgerHw1 = false; }
+      ];
+    };
+    testTrezorBridgeIsOptIn = let
+      # The bridge enabled directly, which our rules keep from the device
+      # unless trezord gets the group some other way
+      trezord = module: { imports = [ trezor module ]; services.trezord.enable = true; };
+      group = "hardware-wallets";
+    in {
+      expr = map trezorBridge [
+        trezor
+        trezorWithBridge
+        { services.hardware-wallets.trezorBridge = true; }
+        (trezord {})
+        (trezord { users.users.trezord.extraGroups = [ group ]; })
+        (trezord { users.groups.${group}.members = [ "trezord" ]; })
+        (trezord { systemd.services.trezord.serviceConfig.Group = group; })
+        (trezord { systemd.services.trezord.serviceConfig.SupplementaryGroups = group; })
+        (trezord { systemd.services.trezord.serviceConfig.SupplementaryGroups = "audio ${group}"; })
+        (trezord { services.hardware-wallets.group = "trezord"; })
+        # The nixpkgs rules alone give the device to trezord
+        { services.trezord.enable = true; }
+      ];
+      expected = [
+        { enable = false; groups = null; warnings = 0; }
+        { enable = true; groups = [ group ]; warnings = 0; }
+        { enable = false; groups = null; warnings = 0; }
+        { enable = true; groups = null; warnings = 1; }
+        { enable = true; groups = null; warnings = 0; }
+        { enable = true; groups = null; warnings = 0; }
+        { enable = true; groups = null; warnings = 0; }
+        { enable = true; groups = group; warnings = 0; }
+        { enable = true; groups = "audio ${group}"; warnings = 0; }
+        { enable = true; groups = null; warnings = 0; }
+        { enable = true; groups = null; warnings = 0; }
+      ];
+    };
+    testVersioningHardwareWalletAccess = {
+      expr = map (module: map (phrase: hasNotice phrase module) [
+        "are now available only to members of group"
+        "The Trezor Bridge (trezord) no longer runs"
+      ]) [
+        trezor
+        trezorWithBridge
+        # The bridge enabled directly keeps running, and a warning covers it
+        { imports = [ trezor ]; services.trezord.enable = true; }
+        { services.hardware-wallets.ledger = true; }
+        { services.trezord.enable = true; }
+      ];
+      expected = [ [ true true ] [ true false ] [ true false ] [ true false ] [ false false ] ];
+    };
+    # Without its disk, a local replica would land on the disk below the mount point
+    testReplicationRequiresLocalMounts = {
+      expr = map replicationRequiredMounts [
+        { local.directory = "/mnt/replica"; }
+        { local.directory = "/mnt/replica"; encrypt = true; }
+        { sshfs.destination = "user@host:dir"; encrypt = true; }
+      ];
+      expected = [
+        { clightning = [ ''"/mnt/replica"'' ]; clightning-replication-mounts = null; }
+        { clightning = [ ''"/mnt/replica"'' ]; clightning-replication-mounts = [ ''"/mnt/replica"'' ]; }
+        { clightning = null; clightning-replication-mounts = null; }
+      ];
+    };
+    # systemd splits these paths at whitespace and expands `%` specifiers
+    testReplicationQuotesLocalDirectory = let
+      clightning = (replicationUnits { local.directory = ''/mnt/backup disk/"a" \b %c''; }).clightning;
+      quoted = ''"/mnt/backup disk/\"a\" \\b %%c"'';
+    in {
+      expr = {
+        requiresMountsFor = clightning.unitConfig.RequiresMountsFor;
+        readWritePaths = lib.elem quoted clightning.serviceConfig.ReadWritePaths;
+      };
+      expected = { requiresMountsFor = [ quoted ]; readWritePaths = true; };
+    };
+    # Before 0.2.0, clightning started without the mount of its local replica
+    testVersioningReplicationLocalMounts = let
+      onDisk = replicationToLocalMounts "/mnt/replica" [ "/mnt/replica" ];
+    in {
+      expr = {
+        onDisk = hasReplicationMountNotice onDisk;
+        onRoot = hasReplicationMountNotice (replicationToLocalMounts "/var/backup/clightning" [ ]);
+        sshfs = hasReplicationMountNotice (clightningReplication { sshfs.destination = "user@host:dir"; });
+        previous = hasNoticeAt "0.1.6" "clightning now requires the mounts for" onDisk;
+        # Once 0.2.0 is released, a config at 0.2.0 doesn't get the notice
+        acknowledged = hasNoticeAt "0.2.0" "clightning now requires the mounts for" {
+          imports = [ onDisk ];
+          nix-bitcoin.versioning.releasedVersion = "0.2.0";
+        };
+      };
+      expected = { onDisk = true; onRoot = true; sshfs = false; previous = true; acknowledged = false; };
+    };
   };
   failures = lib.debug.runTests tests;
 in
@@ -1548,6 +1968,26 @@ else
         ${replicationGenerator} || fail "the $identity identity failed"
         [[ $(< $key.pub) == kept ]] || fail "the .pub of the $identity identity was changed"
       done
+    )
+
+    # udevd sorts its rule files by name. On NixOS it reads them from
+    # /etc/udev/rules.d, which also holds copies of systemd's own rules. The
+    # hardware wallet rules must run after the nixpkgs Trezor rules and systemd's
+    # uaccess rules, and before the rules that apply the uaccess tag.
+    (
+      rules=${hardwareWalletSystem.environment.etc."udev/rules.d".source}
+      systemd=${hardwareWalletSystem.systemd.package}
+      fail() { echo "Hardware wallet udev rules: $*" >&2; exit 1; }
+      order=$(ls "$rules" | LC_ALL=C sort \
+        | grep -E '^(51-trezor|70-uaccess|71-hardware-wallets-[a-z]+|73-seat-late)\.rules$' | tr '\n' ' ')
+      expected="51-trezor.rules 70-uaccess.rules 71-hardware-wallets-ledger.rules 71-hardware-wallets-trezor.rules 73-seat-late.rules "
+      [[ $order == "$expected" ]] || fail "unexpected order: $order"
+      grep -qF 'ENV{ID_HARDWARE_WALLET}=="1", TAG+="uaccess"' "$rules/70-uaccess.rules" \
+        || fail "70-uaccess.rules no longer tags hardware wallets, recheck our rules"
+      grep -qF 'TAG=="uaccess' "$rules/73-seat-late.rules" \
+        || fail "73-seat-late.rules no longer applies the uaccess tag, recheck our rules"
+      $systemd/bin/udevadm verify --resolve-names=never "$rules"/71-hardware-wallets-*.rules \
+        || fail "udevadm verify failed"
     )
 
     echo '${toString (builtins.length (builtins.attrNames tests))} configuration tests passed' > "$out"

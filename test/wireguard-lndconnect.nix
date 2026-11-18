@@ -95,6 +95,12 @@ makeTestVM {
           # Ping server from client
           print(client.succeed("ping -c 1 -W 0.5 10.10.0.1"))
 
+      with subtest("nix-bitcoin-wg-connect requires a host"):
+          # Without a host, it must fail instead of looking up the public IP over clearnet
+          status, out = server.execute("runuser -u operator -- nix-bitcoin-wg-connect --text 2>&1")
+          assert status != 0 and "Usage: nix-bitcoin-wg-connect [--text] <host>" in out, out
+          assert "PrivateKey" not in out, out
+
       with subtest("lndconnect-wg"):
           server.wait_for_unit("lnd.service")
           lndconnect_url = server.succeed("runuser -u operator -- lndconnect-wg --url")

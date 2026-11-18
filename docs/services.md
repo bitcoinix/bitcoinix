@@ -128,6 +128,67 @@ Or let only your own Tor client reach the onion service with
 [client authorization](https://community.torproject.org/onion-services/advanced/client-auth/)
 (`services.tor.relay.onionServices.sshd.authorizedClients`).
 
+### Backups
+
+`services.backups` backs up node data with duplicity, to `/var/lib/localBackups` by
+default. See the Backups section in
+[`examples/configuration.nix`](https://github.com/bitcoinix/bitcoinix/blob/master/examples/configuration.nix)
+and the [module](https://github.com/bitcoinix/bitcoinix/blob/master/modules/backups.nix)
+for the options.
+
+The backup includes the data directories of bitcoind, lnd, Core Lightning, NBXplorer
+and BTCPay Server, dumps of the BTCPay Server databases, `/var/lib/tor`,
+`/var/lib/nixos` and, with `nix-bitcoin.generateSecrets`, the secrets directory.
+It leaves out the blockchain and its indexes, unless `with-bulk-data` is set.
+
+#### Lightning channel databases
+
+The backup never includes lnd's `graph` directory, which holds `channel.db`, or
+Core Lightning's `lightningd.sqlite3` and the SQLite files that
+`services.clightning.wallet` sets. The daemons write these files while the backup
+runs, so a copy can be torn. A copy is also outdated as soon as a channel changes.
+A node that runs from an outdated channel database can broadcast a revoked channel
+state, and the peer can then take all funds in that channel. Never restore a copied
+channel database. Backups made before bitcoinix 0.2.0 contain them.
+
+To recover Lightning funds, use these files from the backup instead. Both ways ask
+each peer to force close its channel, so they need the peer to be reachable. They
+get back settled funds, but not funds in pending payments.
+
+- lnd: the seed `/var/lib/lnd/lnd-seed-mnemonic` and the static channel backup
+  `/var/lib/lnd/chain/bitcoin/mainnet/channel.backup`.
+  Restore the seed on a node where lnd hasn't created a wallet yet, and bitcoinix
+  creates the wallet from it. Keep the restored `channel.backup` outside lnd's data
+  directory, because lnd replaces its own copy with the channels it knows. Then run
+  `lncli restorechanbackup --multi_file <path to channel.backup>`. See lnd's
+  [recovery guide](https://github.com/lightningnetwork/lnd/blob/master/docs/recovery.md),
+  also for recovering on-chain funds.
+- Core Lightning: `hsm_secret` and `emergency.recover` in `/var/lib/clightning/bitcoin/`.
+  Restore both to that directory, owned by the `clightning` user, before Core Lightning
+  first starts on the node. Then run `lightning-cli emergencyrecover`. See Core
+  Lightning's [recovery guide](https://docs.corelightning.org/docs/recovery).
+
+For a copy of the Core Lightning database that's always current, use
+[database replication](#core-lightning-database-replication). When Core Lightning
+stores its database in PostgreSQL, don't add it to
+`services.backups.postgresqlDatabases`. Its dump is an outdated copy of the channel
+state too.
+
+#### bitcoind wallets
+
+Before each backup, the `bitcoind-wallet-backup` unit asks bitcoind for a consistent
+copy of each loaded wallet. It writes them to `/var/lib/bitcoind/wallet-backups`
+as `wallet-<sha256 of the wallet name>.dat`, and `wallet-names.json` there maps each
+file to its wallet name. bitcoinix manages this directory and replaces the copies
+before each backup, so don't keep other files there. The backup also has the wallet
+files themselves, but a copy of a loaded wallet's file can be torn. Restore a loaded
+wallet from its copy, for example with `bitcoin-cli restorewallet <name> <copy>`.
+
+When bitcoind doesn't run during a backup, there are no copies, and the wallet files
+are consistent. If a copy fails, or bitcoind is starting or stopping, the `duplicity`
+unit fails after the backup. With the `bitcoind-remote.nix` preset, the wallets are
+on the other node, and the backup makes no copies.
+
 ## Wallets and apps
 
 ### Connect to electrs
@@ -220,6 +281,46 @@ Two-factor authentication that you set up in RTL stays on across restarts. If yo
 lose the authenticator, delete `RTL-Config.json` in RTL's data dir
 (`/var/lib/rtl` by default) and restart RTL. bitcoinix then writes a new one
 without the 2FA secret.
+
+### Connect to BTCPay Server
+
+BTCPay Server listens on localhost by default. Connect to it through an SSH tunnel, then
+open `http://localhost:23000` in your browser:
+
+```
+ssh -L 23000:127.0.0.1:23000 operator@bitcoin-node
+```
+
+With `netns-isolation`, BTCPay Server listens in its own network namespace. Use the address
+from `nodeinfo | jq -r .btcpayserver.local_address` instead, e.g. `169.254.1.24:23000`.
+
+BTCPay Server makes the first account that registers the server admin, which can use the
+internal Lightning node. So when BTCPay Server has no admin, the unit `btcpayserver-admin`
+creates the admin account `admin@localhost` before BTCPay Server opens its port. BTCPay
+Server then closes registration. Sign in with this account. The password is in
+`$secretsDir/btcpayserver-admin-password`.
+See: [Secrets dir](./configuration.md#secrets-dir)
+
+An installation that already had an admin before bitcoinix 0.2.0 keeps it and gets no
+`admin@localhost`. Sign in with your own account there.
+
+You can change the account's email address and password in BTCPay Server. The secret file
+keeps the first password.
+
+#### Check the admin accounts
+
+Before bitcoinix 0.2.0, any local user could register first and become the admin until
+you registered yours. So on an installation from before 0.2.0, check that each admin is
+yours. Sign in, open Server Settings > Users and look at the users with the admin role.
+
+If one isn't yours, or if you found registration closed before you registered, someone
+else had admin access. An admin can install plugins that run as the `btcpayserver` user
+and can use your Lightning node. So treat the node as compromised:
+
+1. Stop BTCPay Server with `systemctl stop btcpayserver`.
+2. Move the funds of the Lightning node and of the wallets on this node to a new wallet
+   that this node doesn't control.
+3. Set up the node again.
 
 ### BTCPay Server
 
@@ -331,13 +432,26 @@ over https. To use the wallet from another device without a tunnel, put an https
 proxy in front of it that passes WebSocket upgrades and the `Host` header through, and add
 its name to `services.unbeholden-wallet.allowedHosts`.
 
+The service only accepts connections from localhost. For a proxy on another host, listen on
+all addresses, allow the proxy's address and open the port:
+
+```nix
+services.unbeholden-wallet = {
+  address = "0.0.0.0";
+  allowedClients = [ "192.0.2.10" ];
+  allowedHosts = [ "wallet.example.com" ];
+};
+networking.firewall.allowedTCPPorts = [ 60846 ];
+```
+
 The service has no authentication. Its `Host` and `Origin` checks stop websites, not other
 clients, so anyone who can reach the proxy can use the Electrum connection and write to the
 service's journal. Keep the proxy on a trusted network or give it its own authentication.
 
-With `netns-isolation`, nginx runs in its own namespace, which drops connections from your
-LAN, so an nginx proxy doesn't serve other devices. Run the proxy in the host network
-namespace instead, and point it at the wallet's `local_address`.
+With `netns-isolation`, nginx and the wallet run in their own namespaces, which drop
+connections from your LAN, so neither an nginx proxy nor `allowedClients` serves other
+devices. Run the proxy in the host network namespace instead, and point it at the wallet's
+`local_address`.
 
 ### Use ZEUS (mobile Lightning wallet) via Tor
 1. Install [ZEUS](https://zeusln.app)
@@ -546,8 +660,10 @@ for the service whose connection helper you enable (see
    # For debugging: Show the WireGuard config as text
    nix-bitcoin-wg-connect --text mynode.example.com
    ```
-   Without an argument, `nix-bitcoin-wg-connect` detects your node's external IP by
-   querying public IP lookup services over clearnet.
+   The address is required. `nix-bitcoin-wg-connect` doesn't look up your node's public
+   IP, since that would reveal it to public IP lookup services over clearnet. Behind NAT,
+   your router shows the public IP. For a device that connects only from your local
+   network, you can pass the node's LAN IP instead.
 
    In the WireGuard app, add a tunnel by scanning the QR code.
 
@@ -603,7 +719,8 @@ deploying, since the first reload still runs the old deletions.
     services.hardware-wallets.trezor = true;
     ```
     This installs `hwi`, `trezorctl` and `lsusb`, and adds udev rules that give group
-    `hardware-wallets` access to the device. The `operator` user is in that group.
+    `hardware-wallets` access to the device. Only members of that group can use it,
+    unless you run the Trezor Bridge (see below). The `operator` user is in that group.
     Hardware wallets require the bitcoind wallet, so `services.bitcoind.disablewallet`
     must stay unset or `false`.
 
@@ -644,6 +761,11 @@ deploying, since the first reload still runs the old deletions.
     ```
 
 7. Follow HWI's guide on [using Bitcoin Core with hardware wallets](https://hwi.readthedocs.io/en/latest/examples/bitcoin-core-usage.html) to use your Trezor with `bitcoin-cli` on your node.
+
+The Trezor Bridge (`trezord`) doesn't run by default, since HWI and `trezorctl` don't
+need it. To run it for apps that use it, set `services.hardware-wallets.trezorBridge = true;`.
+The bridge serves an HTTP API without authentication on `127.0.0.1:21325`, so every
+local user and service can then use the Trezor through it.
 
 ## LND
 
@@ -837,7 +959,9 @@ See the [module](https://github.com/bitcoinix/bitcoinix/blob/master/modules/clig
 for all options.
 
 `clightning` requires the replication target: it doesn't start while the target is
-unavailable, e.g. when the SSHFS mount fails.
+unavailable, e.g. when the SSHFS mount fails. For a local directory, this works only
+when systemd knows the mount that holds the directory. See
+[Local directory target](#local-directory-target).
 
 Also back up:
 - the static file `hsm_secret` (`/var/lib/clightning/bitcoin/hsm_secret` by default).
@@ -937,10 +1061,27 @@ Core Lightning will now replicate database files to `local.directory`. This
 can be used to replicate to an external HDD by mounting it at path
 `local.directory`.
 
+`clightning` requires the mounts for `local.directory`. With `encrypt`,
+`clightning-replication-mounts` requires them too. While the disk isn't mounted,
+`clightning` doesn't start, so the replica can't land on the primary disk.
+systemd can only wait for the mounts it knows, so declare the disk in `fileSystems`:
+```nix
+fileSystems."/var/backup/clightning" = {
+  device = "/dev/disk/by-uuid/<uuid of the disk's filesystem>";
+  fsType = "ext4";
+  # Boot without the disk. clightning stays stopped then.
+  options = [ "nofail" ];
+};
+```
+systemd finds the mounts from the path as written and doesn't follow symlinks.
+So set `local.directory` to the mount point or a directory below it, not to a
+symlink. A directory on the root filesystem has no mount to wait for.
+
 #### Custom remote destination
 
 Follow the steps in section "Local directory target" above and mount a custom remote
-destination (e.g., an NFS or SMB share) to `local.directory`.\
+destination (e.g., an NFS or SMB share) to `local.directory`. Declare the share in
+`fileSystems`, so that `clightning` doesn't start without it.\
 You might want to disable `local.setupDirectory` in order to create the mount directory
 yourself with custom permissions.
 

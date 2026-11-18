@@ -56,9 +56,10 @@ let
       test.data.secrets-no-argv.generator = "${config.nix-bitcoin.generateSecretsScript}";
 
       tests.rpc-whitelist = cfg.bitcoind.enable;
-      # Which consumers are enabled decides which extra methods they may grant
+      # Which services are enabled decides which RPC users exist and what they may call
       test.data.rpc-whitelist = {
         btcpayserver = cfg.btcpayserver.enable;
+        clightning = cfg.clightning.enable;
         clightning-bcli = cfg.clightning.enable && cfg.clightning.useBcliPlugin;
         mempool = cfg.mempool.enable;
       };
@@ -76,6 +77,7 @@ let
       };
 
       tests.clightning = cfg.clightning.enable;
+      test.data.clightning = { inherit (cfg.clightning) dataDir networkDir user group; };
       test.data.clightning-replication = cfg.clightning.replication.enable;
       tests.clnrest-admin-rune = with cfg.clightning.plugins.clnrest; enable && createAdminRune;
       test.data.clnrest-admin-rune = {
@@ -145,6 +147,7 @@ let
         # The complete allow list of each restricted unit
         allow = [ "127.0.0.1/32" "::1/128" ]
           ++ optional netns.enable "169.254.${toString netns.addressblock}.0/24";
+        extraAllow.unbeholden-wallet = cfg.unbeholden-wallet.allowedClients;
       };
       # A custom unit with the restriction, which must start on every node,
       # also when no service enforces Tor
@@ -271,12 +274,14 @@ let
           inherit (cfg.bitcoind) user;
           planter = config.nix-bitcoin.operator.name;
         }
+        # Only clightning can write its data dir. Older versions let group
+        # members write it, so a symlink can be left from then.
         ++ optional cfg.clightning.enable {
           unit = "clightning";
           file = "${cfg.clightning.dataDir}/config";
           mode = "640";
           inherit (cfg.clightning) user;
-          planter = config.nix-bitcoin.operator.name;
+          planter = cfg.clightning.user;
         }
         # The operator can run as lnd, so lnd plants the file itself
         ++ optional cfg.lnd.enable {
@@ -317,6 +322,7 @@ let
 
       tests.btcpayserver = cfg.btcpayserver.enable;
       services.btcpayserver.lightningBackend = mkDefault "lnd";
+      test.data.btcpayserver = { inherit (cfg.btcpayserver) lightningBackend; };
 
       tests.nodeinfo = config.nix-bitcoin.nodeinfo.enable;
       # The version of the package each enabled service runs
@@ -635,23 +641,31 @@ let
       nix-bitcoin.onionServices.unbeholden-lnurl.enable = true;
     };
 
-    unbeholden-wallet-electrs = {
-      imports = [ scenarios.regtestBase ];
+    unbeholden-wallet-electrs-netns = {
+      imports = with scenarios; [ regtestBase netnsBase ];
       services.unbeholden-wallet.enable = true;
       services.unbeholden-wallet.allowedHosts = [ "wallet.test" ];
+    };
+
+    unbeholden-wallet-fulcrum-netns = {
+      imports = [ scenarios.unbeholden-wallet-electrs-netns ];
+      services.unbeholden-wallet.electrumServer = "fulcrum";
+    };
+
+    unbeholden-wallet-electrs = {
+      imports = [ scenarios.regtestBase ];
+      services.unbeholden-wallet = {
+        enable = true;
+        allowedHosts = [ "wallet.test" ];
+        address = "0.0.0.0";
+        allowedClients = [ "192.0.2.1" "192.0.2.0/24" ];
+      };
+      test.data.unbeholden-wallet-clients = { allowed = "192.0.2.1"; denied = "198.51.100.1"; };
     };
 
     unbeholden-wallet-fulcrum = {
       imports = [ scenarios.unbeholden-wallet-electrs ];
       services.unbeholden-wallet.electrumServer = "fulcrum";
-    };
-
-    unbeholden-wallet-electrs-netns = {
-      imports = with scenarios; [ unbeholden-wallet-electrs netnsBase ];
-    };
-
-    unbeholden-wallet-fulcrum-netns = {
-      imports = with scenarios; [ unbeholden-wallet-fulcrum netnsBase ];
     };
 
     # Unstable i2pd's build-time check cannot bind the namespace bridge address.
@@ -667,6 +681,15 @@ let
       services.bitcoind = { enable = true; i2p = true; };
       # The test only needs SAM; no reseed servers are reachable offline.
       services.i2pd.settings.reseed = { urls = ""; yggurls = ""; };
+    };
+
+    # BTCPay Server on Core Lightning joins group clightning to use the RPC socket
+    btcpayserverClightning = {
+      imports = [ scenarios.regtestBase ];
+      services.btcpayserver = {
+        enable = true;
+        lightningBackend = "clightning";
+      };
     };
 
     # Test the special bitcoin RPC setup that lnd uses when bitcoin is pruned
