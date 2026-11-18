@@ -370,6 +370,24 @@ let
   hasNotice = hasNoticeAt "0.1.5";
   hasOperatorAccessNotice = hasNotice "lnconnect-clnrest now gives the operator user";
   hasAccessUsersNotice = hasNotice "now accepts only users that are defined";
+  hasRpcUsersNotice = hasNotice "now connect to bitcoind as their own RPC users";
+  # The services that call RPC methods outside the public whitelist
+  rpcUsersServices = {
+    services.clightning.enable = true;
+    services.mempool.enable = true;
+    services.btcpayserver.enable = true;
+  };
+  rpcUsers = evaluate rpcUsersServices;
+  hasSshPasswordNotice = hasNotice "so sshd accepts only keys";
+  # The preset publishes sshd as an onion service
+  secureNodeSsh = settings: {
+    imports = [ ../modules/presets/secure-node.nix ];
+    services.openssh = { enable = true; inherit settings; };
+  };
+  sshPasswordOptions = [ "PasswordAuthentication" "KbdInteractiveAuthentication" ];
+  sshPasswordLogin = lib.genAttrs sshPasswordOptions (_: true);
+  getSshPasswordLogin = module:
+    lib.getAttrs sshPasswordOptions (evaluate module).services.openssh.settings;
   # A user that exists only outside `users.users`, for example via useradd or LDAP
   onionAccessExternalUser = {
     nix-bitcoin.onionAddresses.access.external-user = [ "bitcoind" ];
@@ -815,6 +833,14 @@ let
       expected = [ ":9736" ":9735" ":9736" "" ];
     };
     testNetnsRESTAllowed = { expr = failedAssertions netns; expected = []; };
+    testUnbeholdenWalletRejectsAllowedClientsWithNetns = {
+      expr = map (lib.hasInfix "allowedClients` is not supported with netns-isolation")
+        (failedAssertions (evaluate {
+          services.unbeholden-wallet = { enable = true; allowedClients = [ "192.0.2.1" ]; };
+          nix-bitcoin.netns-isolation.enable = true;
+        }));
+      expected = [ true ];
+    };
     testNetnsRejectsNftables = {
       expr = map (lib.hasInfix "uses the iptables backend") (failedAssertions netnsNftables);
       expected = [ true ];
@@ -1032,6 +1058,115 @@ let
         { version = null; settings = password; }
       ];
       expected = [ false (!changes020Released) (!changes020Released) (!changes020Released) true true ];
+    };
+    # The 0.1.5 notices by their message. Once 0.2.0 is released, later notices block
+    # every older config, so the version check tests above can't tell them apart.
+    testMigrationNotices015 = let
+      plugin = name: enable: { services.clightning = { enable = true; plugins.${name}.enable = enable; }; };
+      mempool = settings: { services.mempool = { enable = true; inherit settings; }; };
+      password.CORE_RPC.PASSWORD = lib.mkForce "literal-password";
+      notice = phrase: module: map (version: hasNoticeAt version phrase module)
+        [ "0.1.4" "0.1.5" releasedVersion ];
+      currencyrate = "currencyrate plugin has been replaced";
+      rebalance = "rebalance plugin now uses";
+    in {
+      expr = {
+        currencyrate = notice currencyrate (plugin "currencyrate" true);
+        currencyrateOff = notice currencyrate (plugin "currencyrate" false);
+        rebalance = notice rebalance (plugin "rebalance" true);
+        rebalanceOff = notice rebalance (plugin "rebalance" false);
+        # The notice names the password file that mempool reads now
+        mempool = notice "/bitcoin-rpcpassword-mempool`." (mempool password);
+        mempoolOff = notice "CORE_RPC.PASSWORD` is no longer accepted" (mempool {});
+      };
+      expected = {
+        currencyrate = [ true false false ]; currencyrateOff = [ false false false ];
+        rebalance = [ true false false ]; rebalanceOff = [ false false false ];
+        mempool = [ true false false ]; mempoolOff = [ false false false ];
+      };
+    };
+    # Each method outside the public whitelist reaches only the user of the service
+    # that calls it
+    testRpcUsersWhitelists = {
+      expr = lib.mapAttrs (_: user:
+        map (method: lib.elem method user.rpcwhitelist) [ "getblockfrompeer" "gettxoutsetinfo" ]
+      ) {
+        inherit (rpcUsers.services.bitcoind.rpc.users) public clightning mempool btcpayserver;
+        # trustedcoin replaces bcli, which calls `getblockfrompeer`
+        trustedcoin = (evaluate {
+          services.clightning = { enable = true; plugins.trustedcoin.enable = true; };
+        }).services.bitcoind.rpc.users.clightning;
+      };
+      expected = {
+        public = [ false false ];
+        clightning = [ true false ];
+        mempool = [ false true ];
+        btcpayserver = [ true false ];
+        trustedcoin = [ false false ];
+      };
+    };
+    # An empty whitelist disables whitelisting, also for the clightning and mempool users
+    testRpcUsersFollowEmptyPublicWhitelist = {
+      expr = lib.mapAttrs (_: user: user.rpcwhitelist) {
+        inherit ((evaluate {
+          imports = [ rpcUsersServices ];
+          services.bitcoind.rpc.users.public.rpcwhitelist = lib.mkForce [];
+        }).services.bitcoind.rpc.users) public clightning mempool;
+      };
+      expected = { public = []; clightning = []; mempool = []; };
+    };
+    testRpcUsersConnect = {
+      expr = with rpcUsers; {
+        clightning = lib.hasInfix "/bitcoin-rpcpassword-clightning'" systemd.services.clightning.preStart;
+        mempool = {
+          user = services.mempool.settings.CORE_RPC.USERNAME;
+          password = lib.hasInfix "/bitcoin-rpcpassword-mempool'" systemd.services.mempool.preStart;
+        };
+        # Neither service reads the password of `public`
+        publicGroup = map (user: lib.elem "bitcoinrpc-public" users.users.${user}.extraGroups)
+          [ "clightning" "mempool" ];
+      };
+      expected = {
+        clightning = true;
+        mempool = { user = "mempool"; password = true; };
+        publicGroup = [ false false ];
+      };
+    };
+    # Every config with one of the services gets the notice. Only generated secrets
+    # need nothing else.
+    testVersioningRpcUsers = {
+      expr = {
+        clightning = hasRpcUsersNotice { services.clightning.enable = true; };
+        mempool = hasRpcUsersNotice { services.mempool.enable = true; };
+        unaffected = hasRpcUsersNotice { services.electrs.enable = true; };
+        nothingElse = map (generateSecrets: hasNotice "there's nothing else to do" {
+          imports = [ rpcUsersServices ];
+          nix-bitcoin = { inherit generateSecrets; };
+        }) [ true false ];
+        # The old config may have added both methods to a remote public user,
+        # whatever the new one enables
+        removesBoth = map (hasNotice "Remove `getblockfrompeer` and `gettxoutsetinfo` from") [
+          { services.mempool.enable = true; }
+          { services.clightning = { enable = true; plugins.trustedcoin.enable = true; }; }
+        ];
+        # A remote BTCPay user got `gettxoutsetinfo` through the public whitelist
+        btcpayWhitelist = map (hasNotice "Set the whitelist of the BTCPay Server user") [
+          rpcUsersServices
+          { services.mempool.enable = true; }
+        ];
+        previous = hasNoticeAt "0.1.6" "now connect to bitcoind as their own RPC users"
+          rpcUsersServices;
+        # Once 0.2.0 is released, a config at 0.2.0 doesn't get the notice
+        acknowledged = hasNoticeAt "0.2.0" "now connect to bitcoind as their own RPC users" {
+          imports = [ rpcUsersServices ];
+          nix-bitcoin.versioning.releasedVersion = "0.2.0";
+        };
+      };
+      expected = {
+        clightning = true; mempool = true; unaffected = false; nothingElse = [ true false ];
+        removesBoth = [ true true ]; btcpayWhitelist = [ true false ]; previous = true;
+        acknowledged = false;
+      };
     };
     testEmptySecretsMigration = {
       expr = map (case: !(hasNoticeAt case.version "setup-secrets now fails" {
@@ -1283,6 +1418,35 @@ let
       ];
       expected = [ true false false false ];
     };
+    testSecureNodeSshKeysOnly = {
+      expr = {
+        preset = getSshPasswordLogin (secureNodeSsh {});
+        explicit = getSshPasswordLogin (secureNodeSsh sshPasswordLogin);
+        withoutPreset = getSshPasswordLogin { services.openssh.enable = true; };
+      };
+      expected = {
+        preset = lib.genAttrs sshPasswordOptions (_: false);
+        explicit = sshPasswordLogin;
+        withoutPreset = sshPasswordLogin;
+      };
+    };
+    # Before 0.2.0, the preset kept the NixOS defaults, which allow passwords
+    testVersioningSecureNodeSshPasswords = {
+      expr = {
+        presetAndSshd = hasSshPasswordNotice (secureNodeSsh {});
+        sshdDisabled = hasSshPasswordNotice {
+          imports = [ (secureNodeSsh {}) ];
+          services.openssh.enable = lib.mkForce false;
+        };
+        withoutPreset = hasSshPasswordNotice { services.openssh.enable = true; };
+        # Once 0.2.0 is released, a config at 0.2.0 doesn't get the notice
+        acknowledged = hasNoticeAt "0.2.0" "so sshd accepts only keys" {
+          imports = [ (secureNodeSsh {}) ];
+          nix-bitcoin.versioning.releasedVersion = "0.2.0";
+        };
+      };
+      expected = { presetAndSshd = true; sshdDisabled = false; withoutPreset = false; acknowledged = false; };
+    };
     testMempoolCustomUser = {
       expr = with customMempoolUser; {
         service = systemd.services.mempool.serviceConfig.User;
@@ -1324,6 +1488,15 @@ let
         "http://127.0.0.1:23000/btcpay/api/v1/health"
         "http://127.0.0.1:23000/btcpay/api/v1/health"
       ];
+    };
+    # Before 0.2.0, group clightning could write the clightning data dir
+    testVersioningClightningDataDir = {
+      expr = map (hasNotice "Core Lightning data dir (`services.clightning.dataDir`) is no longer") [
+        { services.clightning.enable = true; }
+        { services.btcpayserver = { enable = true; lightningBackend = "clightning"; }; }
+        { services.lnd.enable = true; }
+      ];
+      expected = [ true true false ];
     };
     testLndMacaroonRootKeyIds = let
       info = ''{"entity":"info","action":"read"}'';

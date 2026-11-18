@@ -50,7 +50,8 @@ service versions depend on your chosen revision; review the
 * Each service runs as its own user and is confined with systemd sandboxing. Network namespace
   isolation (`nix-bitcoin.netns-isolation`) can further restrict which services can reach each other.
 * The `secure-node.nix` preset sends outgoing connections through Tor, adds onion services for
-  incoming connections, enables the firewall and replaces sudo with doas.
+  incoming connections, enables the firewall, turns off SSH password login and replaces sudo
+  with doas.
 * Release tags are signed by the maintainers. `fetch-release` and `update-nix-bitcoin` in the
   deployment shell verify the signature before they use a release.
 
