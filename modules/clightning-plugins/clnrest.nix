@@ -41,6 +41,29 @@ let
         defaultText = "config.nix-bitcoin.pkgs.clightning-plugins.clnrest";
         description = "The package providing clnrest binaries.";
       };
+      # Used by `../rtl.nix` and `../lndconnect.nix`
+      serverCertPathFromConfigs = mkOption {
+        internal = true;
+        readOnly = true;
+        default = nbLib.script "clnrest-server-cert-path" ''
+          certsDir=$(${pkgs.jq}/bin/jq -er '.configs["clnrest-certs"].value_str // ""')
+          # Without `clnrest-certs`, the dir is clnrest's working dir, the network
+          # dir, which is also where a relative dir starts.
+          case $certsDir in
+            "") certsDir='${clightning.networkDir}' ;;
+            /*) ;;
+            *) certsDir='${clightning.networkDir}'/$certsDir ;;
+          esac
+          printf '%s\n' "$certsDir/server.pem"
+        '';
+        defaultText = "(See source)";
+        description = ''
+          A script that reads the output of `lightning-cli listconfigs clnrest-certs`
+          from stdin and prints the path of clnrest's server certificate.
+          The callers ask clightning instead of reading `extraConfig`, because
+          `clnrest-certs` can also be set in an included or per-network config file.
+        '';
+      };
     };
 
     # Internal read-only options used by `./nodeinfo.nix` and `./onion-services.nix`

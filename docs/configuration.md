@@ -203,6 +203,22 @@ services.bitcoind = {
 networking.firewall.interfaces.eth0.allowedTCPPorts = [ config.services.bitcoind.rpc.port ];
 ```
 
+To give a LAN client its own RPC user, add it to `services.bitcoind.rpc.users`:
+```nix
+services.bitcoind.rpc.users.alice = {
+  # The part after `rpcauth=alice:` in the output of
+  # Bitcoin Core's `share/rpcauth/rpcauth.py alice`
+  passwordHMAC = "<salt>$<hmac>";
+  # The RPC methods that alice may call. Without this, alice may call all methods.
+  rpcwhitelist = [ "getblockchaininfo" "getblock" ];
+};
+```
+`passwordHMAC` is written to the world-readable Nix store, like `rpcauth` lines in
+`services.bitcoind.extraConfig`. Any local user can read it and test password
+guesses offline. So use a long random password, like the one that `rpcauth.py`
+generates when you don't pass a password. If an RPC user has a weak password,
+change it. The old HMAC stays readable in the Nix store until it is garbage-collected.
+
 ## Allow connections to electrs
 
 ```nix
@@ -287,6 +303,24 @@ Some services require extra steps:
 
   Copy your wallet password to `$secretsDir/lnd-wallet-password` (See: [Secrets dir](#secrets-dir)).
 
+  When lnd on the bitcoinix node starts without a wallet, as after the first deploy, it
+  creates a new wallet and writes its seed to `lnd-seed-mnemonic` in its data dir
+  (`/var/lib/lnd` by default). This seed can't recover your migrated wallet. `rsync -a`
+  keeps files that the old data dir doesn't have, so the file would stay. Before you copy
+  the data, copy the file off the node and remove it from the node. Keep that copy if you
+  sent funds to the new wallet, because the migration replaces that wallet:
+  ```shell
+  scp root@nix-bitcoin-node:/var/lib/lnd/lnd-seed-mnemonic ./new-wallet-seed
+  ssh root@nix-bitcoin-node 'rm /var/lib/lnd/lnd-seed-mnemonic'
+  ```
+  The seed of your migrated wallet is the seed of your old node. If the old data dir has
+  an `lnd-seed-mnemonic`, the copy brings it over.
+
+  If you migrated lnd before, the `lnd-seed-mnemonic` on the node holds your old node's
+  seed only if the old data dir had that file. Otherwise it holds the seed of the wallet
+  that bitcoinix created before the copy, and it can't recover your migrated wallet. Keep
+  your old node's seed as the backup of your wallet.
+
 - BTCPay Server
 
   Copy the PostgreSQL database:
@@ -336,7 +370,10 @@ services.bitcoind = {
     privileged.name = "myrpcuser";
     # A restricted RPC user on the other node (see the whitelist setup below)
     public.name = "mypublicrpcuser";
-    ## Set this if you use BTCPay Server. It needs its own restricted RPC user.
+    ## Core Lightning, mempool and BTCPay Server each need their own restricted
+    ## RPC user. Set the ones for the services you use.
+    # clightning.name = "myclightningrpcuser";
+    # mempool.name = "mymempoolrpcuser";
     # btcpayserver.name = "mybtcpayrpcuser";
   };
 };
@@ -364,7 +401,9 @@ list limited to the hosts that need it.
 
 Services that only need the public RPC methods connect as `public`. Do not
 use the privileged user for `public.name`: that gives every such service full
-RPC access to the other node.
+RPC access to the other node. Core Lightning, mempool and BTCPay Server connect
+as their own users, so that the methods only they need don't reach the other
+services.
 
 Create the RPC users on the other node with separate passwords, for example
 using Bitcoin Core's `rpcauth`. For each restricted user, set
@@ -372,15 +411,18 @@ using Bitcoin Core's `rpcauth`. For each restricted user, set
 whitelist from your bitcoinix configuration:
 
 - `mypublicrpcuser`: `services.bitcoind.rpc.users.public.rpcwhitelist`
+- `myclightningrpcuser`, if used: `services.bitcoind.rpc.users.clightning.rpcwhitelist`
+- `mymempoolrpcuser`, if used: `services.bitcoind.rpc.users.mempool.rpcwhitelist`
 - `mybtcpayrpcuser`, if used: `services.bitcoind.rpc.users.btcpayserver.rpcwhitelist`
 
 Use [Debug your configuration](#debug-your-configuration) to inspect these options.
-`modules/bitcoind-rpc-public-whitelist.nix` is only the base list: enabled services
-extend it. For example, Core Lightning's bcli plugin adds `getblockfrompeer` and
-mempool adds `gettxoutsetinfo`. BTCPay Server's whitelist also includes
-`getblockfrompeer` and any permissions you explicitly grant it, such as
-`scantxoutset` for wallet UTXO scanning. Update the remote whitelists when these
-permissions change. The local settings do not configure the remote node.
+`modules/bitcoind-rpc-public-whitelist.nix` is the base list of the public user.
+The other restricted users add the methods that their service needs:
+`getblockfrompeer` for Core Lightning's bcli plugin and for BTCPay Server, and
+`gettxoutsetinfo` for mempool. BTCPay Server's whitelist also includes any
+permissions you explicitly grant it, such as `scantxoutset` for wallet UTXO
+scanning. Update the remote whitelists when these permissions change. The local
+settings do not configure the remote node.
 
 When you add an `rpcwhitelist` for the public user on the other node, also set
 `rpcwhitelistdefault=0` there. Otherwise Bitcoin Core gives every user without
@@ -393,9 +435,17 @@ $secretsDir/bitcoin-rpcpassword-privileged
 # Password of the restricted user (`mypublicrpcuser`)
 $secretsDir/bitcoin-rpcpassword-public
 
-## Password of `mybtcpayrpcuser`, only needed when set in the above config snippet
+## Passwords of the users for Core Lightning, mempool and BTCPay Server,
+## only needed for the services you use
+# $secretsDir/bitcoin-rpcpassword-clightning
+# $secretsDir/bitcoin-rpcpassword-mempool
 # $secretsDir/bitcoin-rpcpassword-btcpayserver
 ```
+Without `nix-bitcoin.generateSecrets`, `nix-bitcoin.setupSecrets` also checks a
+`bitcoin-HMAC-<user>` file for each of these users. This node doesn't use them, so
+create them empty and set `nix-bitcoin.secrets.bitcoin-HMAC-<user>.allowEmpty = true`,
+or write the HMAC of each password: the part after `rpcauth=<username>:` in the
+line that Bitcoin Core's `share/rpcauth/rpcauth.py` prints.
 See: [Secrets dir](#secrets-dir)
 
 Afterwards, restart `bitcoind`: `systemctl restart bitcoind`.
