@@ -273,3 +273,5 @@ in their `description`, not in that page.
 ## Nixpkgs updates
 
 `./helper/update-flake.sh`, then treewide re-check `TODO-EXTERNAL` comments.
+krops is pinned outside the flake inputs: `update-flake.sh` reports newer releases;
+review the upstream changelog, then run `./pkgs/krops/update.sh`.

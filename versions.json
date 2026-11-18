@@ -59,6 +59,10 @@
     "channel": "local",
     "version": "3.2.0"
   },
+  "krops": {
+    "channel": "local",
+    "version": "1.31.1"
+  },
   "lnd": {
     "channel": "unstable",
     "version": "0.21.8-beta"

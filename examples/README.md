@@ -37,7 +37,7 @@ By default, [`./configuration.nix`](configuration.nix) enables Bitcoin Core and 
   Requires: [Nix](https://nixos.org/nix/), Linux
 
 - [`./deploy-krops.sh`](deploy-krops.sh) creates a QEMU VM and deploys a
-  bitcoinix configuration to it using [krops](https://github.com/krebs/krops).\
+  bitcoinix configuration to it using [krops](https://cgit.krebsco.de/krops).\
   Requires: [Nix](https://nixos.org/nix/), Linux
 
 - [`./deploy-container-minimal.sh`](deploy-container-minimal.sh) creates a
