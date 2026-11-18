@@ -123,8 +123,9 @@ sudo ./test/run-tests.sh container          # fast container; needs systemd + ro
 `examples/flakes` (`nixos-rebuild --flake`) and `examples/colmena` are the supported
 deployment examples; krops (`examples/krops`) is legacy. The CI job `deployment_examples`
 builds each of them with its own tool against the checkout on PRs with code changes, via
-`test/ci/deployment-examples.sh` (locally: `./test/run-tests.sh deploymentExamples`).
-The other examples (`examples/deploy-*.sh`, `examples/container`) run only with
+`test/ci/deployment-examples.sh` (locally: `./test/run-tests.sh deploymentExamples`), and
+deploys the krops example to a QEMU VM with `examples/deploy-krops.sh`.
+The other examples (the remaining `examples/deploy-*.sh`, `examples/container`) run only with
 `./test/run-tests.sh examples`, not in CI.
 A new deployment example must be added to that script, the version checks in
 `helper/make-release.sh`, and the `deployment_examples` job, so CI tests it from the start.

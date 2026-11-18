@@ -27,3 +27,5 @@ Deploying from macOS failed on the symlinks in nixpkgs and bitcoinix
 ([nixpkgs#180046](https://github.com/NixOS/nixpkgs/issues/180046)).
 `examples/krops/sources.nix` now excludes all of them. If you deploy from macOS, copy
 the `filters` of its `nixpkgs` and `nix-bitcoin` sources into your `krops/sources.nix`.
+
+CI now deploys the krops example to a VM.

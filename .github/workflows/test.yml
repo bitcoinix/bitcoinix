@@ -184,8 +184,9 @@ jobs:
 
   # Deployment examples
   # Builds every deployment example in examples/ with its deployment tool, against this
-  # checkout, one step per example. A new deployment example must be added to
-  # test/ci/deployment-examples.sh and get a step here.
+  # checkout, one step per example. The krops example is also deployed to a VM.
+  # A new deployment example must be added to test/ci/deployment-examples.sh and
+  # get a step here.
   deployment_examples:
     needs: changes
     if: needs.changes.outputs.docs_only == 'false'
@@ -201,6 +202,9 @@ jobs:
       - name: Build examples/colmena (Colmena)
         if: ${{ !cancelled() }}
         run: ./test/ci/deployment-examples.sh colmena
+      - name: Deploy examples/krops to a VM (krops)
+        if: ${{ !cancelled() }}
+        run: ./test/ci/deployment-examples.sh krops
 
   # Required CI gate
   # Job `ci_gate` is the status check that the rulesets on master and on release tags
