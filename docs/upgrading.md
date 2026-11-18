@@ -2,16 +2,28 @@
 
 Some releases contain changes that need manual action, such as a removed service, a
 changed default or a required reindex. bitcoinix reports them when it evaluates your
-configuration: if a change is newer than `nix-bitcoin.configVersion` and affects your
-configuration, evaluation fails with a short description of the change. Options of
-removed services fail evaluation regardless of the config version.
+configuration: if a released change is newer than `nix-bitcoin.configVersion` and
+affects your configuration, evaluation fails with a short description of the change.
+Options of removed services and other service assertions can fail evaluation
+regardless of the config version.
 
-Keep `nix-bitcoin.configVersion` set in your configuration. If it is unset, these
-changes are not reported.
+Keep `nix-bitcoin.configVersion` set to the released version whose migrations you
+have completed. Values newer than the latest finalized release in `version.nix`
+are rejected; use the released version named in the error until release finalization.
+If the option is unset, migration errors and warnings are disabled.
+Keep this value explicit: importing the project's `version.nix` would automatically
+acknowledge migrations on each release.
 
 When evaluation fails after an update, follow the sections below for each version
 newer than your config version, starting with the oldest. Then set
 `nix-bitcoin.configVersion` to the version named in the error message.
+
+On `master`, review unreleased migration warnings before deploying and keep
+`configVersion` at the latest release. These warnings do not block deployment or
+require acknowledgement: deployment can proceed even before a required migration
+is completed. They cannot be acknowledged individually and can repeat after
+migration while their conditions still apply. Once the release is finalized, its
+notices become errors until you acknowledge them by updating `configVersion` after migrating.
 
 ## Updating bitcoinix
 Review the [release notes](./release-notes.md) for changes to packages and flake attributes.
@@ -177,7 +189,66 @@ both paths, and default configurations, need no changes.
 The old `/var/lib/charge-lnd/lnddir-proxy` tree is left behind on existing hosts.
 It is no longer used and can be removed after upgrading.
 
-After migrating your configuration, set `nix-bitcoin.configVersion = "0.2.0";`.
+#### The secure-node preset turns off SSH password login
+
+The `secure-node.nix` preset publishes sshd as an onion service. It now also sets
+`services.openssh.settings.PasswordAuthentication` and
+`services.openssh.settings.KbdInteractiveAuthentication` to `false` by default, so
+sshd accepts only keys. Before, the NixOS defaults allowed passwords, and anyone who
+knew the onion address could try the passwords of your accounts over Tor. This
+includes the operator, whose groups control your node's funds. The change also
+applies to SSH over the node's IP address, since it's the same sshd.
+
+Evaluation reports this change for every configuration with the preset and
+`services.openssh.enable`. If yours already sets both options to `false`, like the
+flakes and Colmena examples, nothing changes.
+
+Otherwise, before deploying, check that each account that logs in over SSH has its
+key in `users.users.<name>.openssh.authorizedKeys.keys`. The preset gives the
+operator the keys of root. Keep a root session or console access until a new login
+with a key works.
+
+To keep password login, set `services.openssh.settings.PasswordAuthentication = true;`.
+
+If you log in with keyboard-interactive methods through PAM, for example one-time
+codes, set `KbdInteractiveAuthentication = true` and check sshd's PAM stack. NixOS
+sets `security.pam.services.sshd.unixAuth` from `PasswordAuthentication`, and PAM
+modules differ in how they depend on it:
+
+- With `googleAuthenticator`, NixOS adds the one-time code rule only when `unixAuth`
+  or `services.homed.enable` is on. Without systemd-homed, set both options to `true`.
+- With `otpwAuth`, `unixAuth` adds a password rule before the one-time password rule,
+  so a plain password would be enough. Keep `PasswordAuthentication = false`.
+
+For other modules, check the rules in `/etc/pam.d/sshd` after you build the system.
+Either way, test a new login before you close your current session.
+
+If your configuration sets one of these options to `true` with `lib.mkDefault`,
+evaluation fails with "conflicting definition values", because the preset uses the
+same priority. Then you don't see this notice. Set the option without `lib.mkDefault`
+instead.
+
+#### NBXplorer RPC password permissions
+
+NBXplorer's bitcoind RPC password (`bitcoin-rpcpassword-btcpayserver` in the
+[secrets dir](./configuration.md#secrets-dir)) is now readable only by NBXplorer's
+user (`services.nbxplorer.user`), with mode `0400`. Before, bitcoind's user and
+NBXplorer's group could read it too. BTCPay Server is in that group to read
+NBXplorer's API cookie, so it could read the password. BTCPay Server still reads
+the cookie.
+
+If a program reads the password as another user, give the program its own RPC user
+in `services.bitcoind.rpc.users`. If you manage the secret files outside bitcoinix,
+for example with `nix-bitcoin.secretsSetupMethod = "manual"`, make NBXplorer's user the
+owner of the file and set its mode to `0400`.
+
+If you think that BTCPay Server was compromised, replace the password. With a local
+bitcoind and `nix-bitcoin.generateSecrets = true`, delete the password file and run
+`systemctl restart setup-secrets`. Then run `systemctl restart bitcoind nbxplorer`.
+
+While 0.2.0 is still in development, keep `nix-bitcoin.configVersion = "0.1.6";`.
+Once the release is finalized, review all of its migrations, then set
+`nix-bitcoin.configVersion = "0.2.0";`.
 
 ## Upgrading to config version 0.1.6
 

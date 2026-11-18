@@ -208,6 +208,28 @@ Breaking module or service changes also need an entry in
 Each change entry in the release notes and upgrading guide starts with a descriptive
 fourth-level heading (`#### <title>`) within its version section.
 
+Root [`version.nix`](../version.nix) records the latest finalized release. **Do not
+change it during development, including when adding migration notices.** Once the
+migration list is final, merge a release-preparation commit that updates:
+
+- `version.nix` to `<version>`.
+- `configVersion` in `examples/configuration.nix` and
+  `examples/{flakes,colmena,container}/flake.nix` to `<version>`.
+- The bitcoinix input pins in those three flakes to `v<version>`.
+- The upgrading guide's final `configVersion` instruction.
+
+The release helper requires `HEAD` to equal `origin/master`, so this preparation
+commit must be on master before tagging. Until the tag is pushed, the example
+flakes on master reference a tag that cannot yet be fetched. The example tests
+override these pins with the checkout and can still run during this interval.
+
+Advancing `version.nix` turns that release's migration warnings into
+blocking errors. Keep each example's value as an explicit one-line assignment;
+importing `version.nix` would acknowledge migrations automatically in user
+configurations. Run
+`nix flake check --all-systems` and the [release-helper tests](../test/README.md#checks-without-a-vm),
+then tag the prepared commit. Later migrations must go in the next release's directory.
+
 ```bash
 helper/make-release.sh <version>    # e.g. 0.1.0, without the leading "v"
 git push origin v<version>          # manual, the script never pushes
@@ -224,10 +246,13 @@ and your key must be listed in
 [`helper/release-keys/ssh-allowed-signers`](../helper/release-keys/ssh-allowed-signers).
 
 Before signing, the script checks that:
+
 - you are on `master`, with no uncommitted changes to tracked files, and `HEAD` equals
   `origin/master`
 - tag `v<version>` exists neither locally nor on `origin`
 - `<version>` is a stable `X.Y.Z` that is greater than every existing release tag
+- `version.nix` and all four examples' `configVersion` values equal `<version>`,
+  and the three example flakes pin `v<version>`
 - `gpg.format` is `ssh`, `user.signingkey` is set and the allowed signers file exists
 
 It then creates the signed tag and verifies it with `helper/fetch-release.sh`, the same
@@ -239,10 +264,6 @@ After pushing, `checkDownload=1 releaseVersion=<version> helper/fetch-release.sh
 clone verifies the pushed tag and then downloads the archive that Nix users will get, into a
 throwaway store and cache so that nothing local can satisfy it. It fails unless the archive
 is exactly the signed tree. For a fork, also set `repoUrl=https://github.com/<owner>/<repo>`.
-
-After the release, open a PR that sets the `bitcoinix` pin and `nix-bitcoin.configVersion`
-of the deployment examples (`examples/flakes/flake.nix`, `examples/colmena/flake.nix`) to
-the new release.
 
 Tag names must match `^v[0-9]+\.[0-9]+\.[0-9]+$`; `helper/fetch-release.sh` ignores anything else.
 Pre-releases such as `0.1.0-rc1` are not supported.

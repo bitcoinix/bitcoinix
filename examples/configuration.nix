@@ -101,6 +101,9 @@
   # following commands after the LND service starts:
   #   mkdir -p ./backups/lnd/
   #   scp bitcoin-node:/var/lib/lnd/lnd-seed-mnemonic ./backups/lnd/
+  # bitcoinix creates this file only with a new wallet. If you migrated your
+  # wallet from another node, your seed is the seed of that node. See
+  # "Migrate existing services to bitcoinix" in ../docs/configuration.md.
   #
   # You should also back up your channel state after opening new channels.
   # This will allow you to recover off-chain funds, by force-closing channels.
@@ -167,6 +170,8 @@
   # your BTCPay Server usage, like invoice creation times, with your IP address.
   #
   # Enable this option to connect BTCPay Server to Core Lightning.
+  # BTCPay Server then has full control of the node, including its funds.
+  # See "BTCPay Server" in ../docs/services.md.
   # services.btcpayserver.lightningBackend = "clightning";
   #
   # Enable this option to connect BTCPay Server to LND.
@@ -222,6 +227,12 @@
   # Set a frequency for automatic backups, for example:
   # services.backups.frequency = "daily";
   # services.backups.enable = true;
+  #
+  # With nix-bitcoin.generateSecrets, bitcoinix encrypts the backups with a
+  # generated password. The backups include it, but you need it to decrypt them.
+  # So keep a copy off the node. With the default `nix-bitcoin.secretsDir`:
+  #   mkdir -p ./backups/
+  #   scp bitcoin-node:/etc/nix-bitcoin-secrets/backup-encryption-password ./backups/
   #
   # You can pull the localBackups folder with
   # `scp -r bitcoin-node:/var/lib/localBackups /my-backup-path/`
@@ -284,5 +295,7 @@
   # The bitcoinix release version that your config is compatible with.
   # When upgrading to a backwards-incompatible release, bitcoinix will display an
   # error and provide instructions for migrating your config to the new release.
-  nix-bitcoin.configVersion = "0.2.0";
+  # On master, unreleased migrations warn; keep this at the latest released version.
+  # Keep this explicit: importing version.nix would automatically acknowledge migrations.
+  nix-bitcoin.configVersion = "0.1.6";
 }

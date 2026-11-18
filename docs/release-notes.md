@@ -5,6 +5,15 @@ For configuration migrations reported during evaluation, follow the
 
 ## 0.2.0
 
+#### Migration warnings on master
+
+Unreleased configuration migrations now warn without blocking deployment or
+requiring acknowledgement. Users following master must review them before
+deploying; warnings cannot be acknowledged individually and repeat while
+applicable. A `configVersion` newer than the latest finalized release is rejected.
+Finalizing the release makes its notices blocking errors until acknowledged. See
+the [upgrading guide](upgrading.md) for the version policy.
+
 #### Unstable NixOS base
 
 bitcoinix now uses a single `nixpkgs` input tracking `nixos-unstable` for its system
@@ -53,6 +62,49 @@ for existing regtest deployments and custom frontend settings.
 Charge-LND reads its certificate and macaroon directly, without staging them
 under a synthetic mainnet directory. Users selecting custom credentials with
 `--lnddir` should follow the [0.2.0 upgrade notes](upgrading.md#upgrading-to-config-version-020).
+
+#### lnconnect-clnrest finds clnrest's certificate in a custom dir
+
+`lnconnect-clnrest` now asks clightning for clnrest's cert dir, like RTL does. Before,
+it always read `server.pem` from clightning's network dir. So with `clnrest-certs` set,
+it failed or put the wrong certificate into direct connection URLs. Regenerate such URLs.
+When clightning doesn't answer, for example because it's stopped, `lnconnect-clnrest`
+prints a warning and uses the network dir, as before.
+
+#### Backup password and migrated lnd seed
+
+With `nix-bitcoin.generateSecrets`, the backups include the password that decrypts them,
+`backup-encryption-password` in the secrets dir. Keep a copy of it off the node. If you
+migrated lnd from another node, the `lnd-seed-mnemonic` on the node may not hold the
+seed of your wallet. See
+[Migrate existing services to bitcoinix](configuration.md#migrate-existing-services-to-bitcoinix).
+
+#### The secure-node preset turns off SSH password login
+
+The `secure-node.nix` preset now turns off SSH password and keyboard-interactive login
+by default, so its sshd onion service accepts only keys. See
+[Upgrading to config version 0.2.0](upgrading.md#upgrading-to-config-version-020).
+
+#### NBXplorer RPC password permissions
+
+BTCPay Server can no longer read NBXplorer's bitcoind RPC password. Only NBXplorer's
+user can read it now. Before, BTCPay Server could read it through the group that
+gives it NBXplorer's API cookie. See
+[Upgrading to config version 0.2.0](upgrading.md#upgrading-to-config-version-020).
+
+#### BTCPay Server's access to the Lightning node
+
+With `services.btcpayserver.lightningBackend = "clightning"`, BTCPay Server has full
+control of the Lightning node, including its funds. With `lnd`, it gets a restricted
+macaroon. See [Lightning backend](services.md#lightning-backend).
+
+#### Custom RPC users' password HMACs are in the Nix store
+
+The `passwordHMAC` of each custom RPC user in `services.bitcoind.rpc.users` is
+written to the world-readable Nix store. Any local user can read it and test password
+guesses offline. This isn't new, but it wasn't documented. If a custom RPC user has a
+weak password, replace it with a long random one. See
+[Allow bitcoind RPC connections from LAN](configuration.md#allow-bitcoind-rpc-connections-from-lan).
 
 #### Unbeholden Wallet behind a remote proxy
 
