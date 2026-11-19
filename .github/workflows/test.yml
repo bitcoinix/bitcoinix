@@ -103,9 +103,20 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # Compare the merged checkout with the target branch before the PR or push.
+          fetch-depth: 0
       - uses: cachix/install-nix-action@448cde739abec1eaf0646249e3d25bb8d9bc7702 # v31.11.2
       - name: Check pinned package versions
         run: ./test/ci/check-versions.sh
+      - name: Check release notes and migration notices
+        env:
+          # The test merge can include target-branch commits newer than the PR event.
+          BASE_COMMIT: ${{ github.event_name == 'pull_request' && 'HEAD^1' || github.event.before }}
+        run: |
+          finalized=$(nix eval --raw --file version.nix)
+          nix shell --inputs-from . nixpkgs#{cmark,mdbook,python3} -c \
+            bash helper/check-release-notes.sh "$finalized" "$BASE_COMMIT"
       - name: Check flake and run fast tests
         run: nix flake check --all-systems
       - name: Evaluate the CVE scan target and scanner
@@ -165,7 +176,9 @@ jobs:
       - name: Test fetch-release
         run: nix shell --inputs-from . nixpkgs#{git,openssh,gnutar} -c ./test/fetch-release-test.sh
       - name: Test make-release
-        run: nix shell --inputs-from . nixpkgs#{git,openssh,gnutar} -c ./test/make-release-test.sh
+        run: |
+          nix shell --inputs-from . nixpkgs#{bash,cmark,coreutils,git,gnugrep,gnused,gnutar,mdbook,openssh,python3} \
+            -c ./test/make-release-test.sh
 
   # Deployment examples
   # Builds every deployment example in examples/ with its deployment tool, against this

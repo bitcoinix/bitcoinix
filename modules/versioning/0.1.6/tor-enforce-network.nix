@@ -5,7 +5,7 @@
   # always, the others when they enforce Tor. The nbxplorer unit is created
   # by `btcpayserver.enable`, not by the internal `nbxplorer.enable`.
   # Custom units with the restriction aren't detected: this check can't read
-  # `systemd.services` without infinite recursion. docs/upgrading.md covers them.
+  # `systemd.services` without infinite recursion. docs/upgrading/0.1.6.md covers them.
   condition = with config.services;
     charge-lnd.enable
     || (btcpayserver.enable && nbxplorer.tor.enforce)

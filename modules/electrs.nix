@@ -108,7 +108,7 @@ in {
             echo "  systemctl stop electrs"
             echo "  rm -r '${dbPath}'"
             echo "  systemctl start electrs"
-            echo 'See docs/upgrading.md, "Upgrading to config version 0.1.3".'
+            echo 'See docs/upgrading/0.1.3.md.'
             exit ${toString oldIndexStatus}
           fi
           exec ${config.nix-bitcoin.pkgs.electrs}/bin/electrs \

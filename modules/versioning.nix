@@ -5,8 +5,7 @@
 # Let V be the upcoming release.
 # 1. Add ./versioning/<V>/<identifier>.nix, a function taking config, options and/or
 #    lib and returning { condition = ...; message = ...; }. The directory sets the version.
-#    The collector appends a reference to the version's section in docs/upgrading.md
-#    for versions 0.1.0 and newer.
+#    Starting at 0.1.0, refer to the drafts during development and the page after consolidation.
 # 2. Keep ../version.nix and the example configVersion at the last release during
 #    development. Advance both only in the release-preparation commit before
 #    tagging (see ../dev/README.md).
@@ -52,6 +51,11 @@ let
   # Version directories sort numerically; notices within a version sort by filename.
   changes = concatMap (version: let
     dir = ./versioning + "/${version}";
+    upgradeNotes = if builtins.pathExists (../docs/upgrading + "/${version}")
+      then "docs/upgrading/${version}/"
+      else if builtins.pathExists (../docs/upgrading + "/${version}.md")
+      then "docs/upgrading/${version}.md"
+      else "docs/upgrading.md";
     files = attrNames (filterAttrs (name: type:
       type == "regular" && hasSuffix ".nix" name
     ) (builtins.readDir dir));
@@ -62,7 +66,7 @@ let
     message = change.message
       + optionalString (versionAtLeast version "0.1.0") ''
 
-        See docs/upgrading.md, "Upgrading to config version ${version}".
+        See ${upgradeNotes}.
       '';
   }) files) (sort lib.versionOlder (attrNames (filterAttrs (_: type:
     type == "directory"
