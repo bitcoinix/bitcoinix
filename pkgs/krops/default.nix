@@ -23,7 +23,7 @@ let
     patches = [ ./populate-control-socket.patch ];
   };
 in {
-  inherit version;
+  inherit version src;
   lib = import "${src}/lib";
   pkgs = rec {
     krops = let
