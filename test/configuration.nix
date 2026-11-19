@@ -594,13 +594,12 @@ let
         cln = config.services.clightning.enable;
         assertions = failedAssertions config;
       };
-      expected = { lnd = backend == "lnd"; cln = backend == "cln"; assertions = []; };
+      expected = { lnd = backend == "lnd"; cln = backend == "clightning"; assertions = []; };
     })
     (lib.nameValuePair "testLnurl-${backend}-unit" {
       expr = {
         user = unit.serviceConfig.User;
-        startsWithBackend = builtins.elem
-          (if backend == "lnd" then "lnd.service" else "clightning.service") unit.after;
+        startsWithBackend = builtins.elem "${backend}.service" unit.after;
         privateTmp = unit.serviceConfig.PrivateTmp;
         noNewPrivileges = unit.serviceConfig.NoNewPrivileges;
       };
@@ -625,10 +624,10 @@ let
       };
       expected = {
         address = "169.254.1.34";
-        connections = [ (if backend == "lnd" then "lnd" else "clightning") "nginx" ];
+        connections = [ backend "nginx" ];
       };
     })
-  ]) [ "lnd" "cln" ]) // {
+  ]) [ "lnd" "clightning" ]) // {
     testLnurlLndReceivePermissions = {
       expr = builtins.fromJSON ("["
         + (lnurlConfig "lnd" {}).services.lnd.macaroons.unbeholden-lnurl.permissions + "]");
@@ -642,14 +641,14 @@ let
     testLnurlRevokesUnusedRune = {
       expr = lib.mapAttrs (_: config: lib.hasInfix "unbeholden-lnurl-rune-id"
         config.systemd.services.clightning.postStart) {
-        cln = lnurlConfig "cln" {};
+        cln = lnurlConfig "clightning" {};
         lnd = lnurlConfig "lnd" { services.clightning.enable = true; };
         disabled = evaluate { services.clightning.enable = true; };
       };
       expected = { cln = false; lnd = true; disabled = true; };
     };
     testLnurlTorProxy = {
-      expr = let config = lnurlConfig "cln" {
+      expr = let config = lnurlConfig "clightning" {
         imports = [ ../modules/presets/enable-tor.nix ];
       }; in {
         enforce = config.services.unbeholden-lnurl.tor.enforce;

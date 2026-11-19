@@ -314,7 +314,7 @@ in {
       };
       unbeholden-lnurl = {
         id = 34;
-        connections = [ (if config.services.unbeholden-lnurl.backend == "lnd" then "lnd" else "clightning") "nginx" ];
+        connections = [ config.services.unbeholden-lnurl.backend "nginx" ];
       };
       unbeholden-wallet = {
         id = 33;

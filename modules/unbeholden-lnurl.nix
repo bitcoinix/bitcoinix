@@ -5,7 +5,7 @@ let
   options.services.unbeholden-lnurl = {
     enable = mkEnableOption "Unbeholden LNURL, a Lightning Address server";
     backend = mkOption {
-      type = types.enum [ "lnd" "cln" ];
+      type = types.enum [ "lnd" "clightning" ];
       default = "lnd";
       description = "The local Lightning node that creates invoices and pays vouchers.";
     };
@@ -133,7 +133,6 @@ let
   yaml = pkgs.formats.yaml {};
 
   isLnd = cfg.backend == "lnd";
-  backendUnit = if isLnd then "lnd" else "clightning";
   receiving = cfg.settings.addresses != {};
   withdraw = cfg.settings.withdraw != [];
   subscribing = cfg.settings.notifications.ntfy != null || cfg.settings.nostr != null;
@@ -281,8 +280,8 @@ in {
       wantedBy = [ "multi-user.target" ];
       # `requires` stops this with the backend, but doesn't start it again when
       # the backend comes back. The backend starts it, see below.
-      requires = [ "${backendUnit}.service" ];
-      after = [ "${backendUnit}.service" "nix-bitcoin-secrets.target" ];
+      requires = [ "${cfg.backend}.service" ];
+      after = [ "${cfg.backend}.service" "nix-bitcoin-secrets.target" ];
       # A public Go listener, like lnd's ports. See ./lnd.nix
       environment.GODEBUG = "multipathtcp=0";
       serviceConfig = nbLib.defaultHardening // {
@@ -303,7 +302,7 @@ in {
 
     # Like `startRtl` in ./rtl.nix: `wantedBy` on the backend would make lnd,
     # which sends STOPPING=1 as it shuts down, restart at once.
-    systemd.services.${backendUnit}.serviceConfig.ExecStartPost = [
+    systemd.services.${cfg.backend}.serviceConfig.ExecStartPost = [
       "-+${config.systemd.package}/bin/systemctl start --no-block unbeholden-lnurl.service"
     ];
 

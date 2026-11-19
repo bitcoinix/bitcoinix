@@ -373,7 +373,7 @@ services.unbeholden-lnurl = {
 };
 ```
 
-Use `backend = "cln";` for Core Lightning. The module enables the selected node and
+Use `backend = "clightning";` for Core Lightning. The module enables the selected node and
 creates credentials limited to the RPCs needed by the configured features. Core
 Lightning revokes the service's rune when you disable the service or switch it to LND.
 

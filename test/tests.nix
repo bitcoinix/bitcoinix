@@ -621,7 +621,7 @@ let
 
     unbeholden-lnurl-cln = {
       imports = [ scenarios.unbeholden-lnurl-lnd ];
-      services.unbeholden-lnurl.backend = lib.mkForce "cln";
+      services.unbeholden-lnurl.backend = lib.mkForce "clightning";
     };
 
     unbeholden-lnurl-lnd-netns = {

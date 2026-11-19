@@ -489,7 +489,7 @@ def test_unbeholden_lnurl():
     assert verified == {
         "status": "OK", "settled": False, "preimage": None, "pr": invoice["pr"]
     }, verified
-    if data["backend"] == "cln":
+    if data["backend"] == "clightning":
         rune_file = f"{data['dataDir']}/cln-rune"
         id_file = f"{data['clnDataDir']}/unbeholden-lnurl-rune-id"
 
@@ -514,7 +514,7 @@ def test_unbeholden_lnurl():
         assert succeed(f"cat {rune_file}").strip() == before[rune_id]["rune"]
     succeed("systemctl restart unbeholden-lnurl")
     machine.wait_for_unit("unbeholden-lnurl")
-    if data["backend"] == "cln":
+    if data["backend"] == "clightning":
         assert runes().keys() == before.keys(), "A restart created another rune"
         assert recorded() == rune_id
         # A changed rune file revokes only the recorded rune. Its content is
