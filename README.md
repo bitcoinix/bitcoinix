@@ -16,10 +16,6 @@
 </p>
 <br/>
 
-> [!NOTE]
-> This project and its documentation are a **work in progress**. Parts of the project
-> and the documentation may change and may be outdated.
-
 **bitcoinix** is a collection of Nix packages and NixOS modules for easily installing
 **full-featured Bitcoin nodes** with an emphasis on **security**.
 
@@ -36,8 +32,7 @@ Overview
 ---
 bitcoinix can be used for personal or merchant wallets, public infrastructure or
 for Bitcoin application backends. In all cases, the aim is to provide security and
-privacy by default. However, while bitcoinix is used in production today, it is
-still considered experimental.
+privacy by default. bitcoinix is used in production today.
 
 bitcoinix nodes can be deployed on dedicated hardware, virtual machines or containers.
 The Nix packages and NixOS modules can be used independently and combined freely.

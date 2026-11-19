@@ -1,13 +1,5 @@
 # Managing your deployment
 
-> [!NOTE]
-> This document is inherited from nix-bitcoin, the predecessor project. It is a work in progress and may be outdated.
-
-> [!WARNING]
-> This documentation may be outdated or contain installation steps that do not work with
-> bitcoinix yet.
-> Please report problems at <https://github.com/bitcoinix/bitcoinix/issues>.
-
 With a flake-based deployment, you deploy with `nixos-rebuild` or `colmena` as described in the
 [installation guide](./install.md#4-deploy-with-a-flake).
 
