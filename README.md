@@ -8,19 +8,11 @@
 </p>
 <br/>
 <p align="center">
-    <a href="https://github.com/bitcoinix/bitcoinix/actions" target="_blank">
-        <img src="https://github.com/bitcoinix/bitcoinix/actions/workflows/test.yml/badge.svg?branch=master"
-             alt="GitHub Actions status">
-    </a>
-    <a href="https://github.com/bitcoinix/bitcoinix/tags" target="_blank">
-        <img src="https://img.shields.io/github/v/tag/bitcoinix/bitcoinix?filter=v*&amp;sort=semver" alt="GitHub tag (latest SemVer)">
-    </a>
-    <a href="https://github.com/bitcoinix/bitcoinix/commits/master" target="_blank">
-        <img src="https://img.shields.io/github/commit-activity/y/bitcoinix/bitcoinix" alt="GitHub commit activity">
-    </a>
-    <a href="https://github.com/bitcoinix/bitcoinix/graphs/contributors" target="_blank">
-        <img src="https://img.shields.io/github/contributors-anon/bitcoinix/bitcoinix" alt="GitHub contributors">
-    </a>
+  <a href="https://github.com/bitcoinix/bitcoinix/actions/workflows/test.yml?query=branch%3Amaster+event%3Apush"><img src="https://img.shields.io/github/actions/workflow/status/bitcoinix/bitcoinix/test.yml?branch=master&amp;event=push&amp;label=tests" alt="Tests on master"></a>
+  <a href="https://github.com/bitcoinix/bitcoinix/tags"><img src="https://img.shields.io/github/v/tag/bitcoinix/bitcoinix?filter=v*&amp;sort=semver&amp;label=release" alt="Latest release"></a>
+  <a href="https://docs.bitcoinix.net"><img src="https://img.shields.io/badge/docs-docs.bitcoinix.net-blue" alt="Documentation"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/bitcoinix/bitcoinix" alt="License: MIT"></a>
+  <img src="https://img.shields.io/badge/platform-x86__64--linux%20%7C%20aarch64--linux-lightgrey" alt="Platforms: x86_64-linux, aarch64-linux">
 </p>
 <br/>
 
