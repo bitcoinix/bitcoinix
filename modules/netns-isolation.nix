@@ -309,7 +309,7 @@ in {
         connections = [
           "bitcoind"
           "nginx"
-          (if (config.services.mempool.electrumServer == "electrs") then "electrs" else "fulcrum")
+          config.services.mempool.electrumServer
         ];
       };
       unbeholden-wallet = {
