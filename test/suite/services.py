@@ -491,7 +491,7 @@ def test_unbeholden_lnurl():
     }, verified
     if data["backend"] == "clightning":
         rune_file = f"{data['dataDir']}/cln-rune"
-        id_file = f"{data['clnDataDir']}/unbeholden-lnurl-rune-id"
+        record_file = f"{data['clnDataDir']}/unbeholden-lnurl-rune"
 
         def runes():
             return {r["unique_id"]: r for r in succeed_json("lightning-cli showrunes")["runes"]}
@@ -500,7 +500,8 @@ def test_unbeholden_lnurl():
             return {id for id, r in runes().items() if r.get("blacklisted")}
 
         def recorded():
-            return succeed(f"cat {id_file}").strip()
+            rune = succeed(f"cat {record_file}").strip()
+            return next(id for id, r in runes().items() if r["rune"] == rune)
 
         def restart_with_rune_file(content):
             succeed(
@@ -539,5 +540,16 @@ def test_unbeholden_lnurl():
         assert_full_match(f"stat -c '%U %a' {target} && cat {target}", "root 600\noriginal\n")
         assert_full_match(f"stat -c %F {rune_file}", "regular file\n")
         succeed(f"rm {target}")
+        # After clightning starts on a new or restored database, the recorded
+        # rune is missing, and its ID can belong to another rune. Revoke nothing.
+        revoked = blacklisted()
+        succeed(
+            f"runuser -u clightning -- tee {record_file} <<< missing-rune",
+            "systemctl reset-failed unbeholden-lnurl",
+            "systemctl restart unbeholden-lnurl",
+        )
+        machine.wait_for_unit("unbeholden-lnurl")
+        assert blacklisted() == revoked, (blacklisted(), revoked)
+        assert succeed(f"cat {rune_file}").strip() == runes()[recorded()]["rune"]
     machine.wait_until_succeeds(f"curl -fsS {url}/health")
     assert succeed_json(f"curl -fsS {url}{shlex.quote(verify_path)}") == verified

@@ -639,7 +639,7 @@ let
       ];
     };
     testLnurlRevokesUnusedRune = {
-      expr = lib.mapAttrs (_: config: lib.hasInfix "unbeholden-lnurl-rune-id"
+      expr = lib.mapAttrs (_: config: lib.hasInfix "unbeholden-lnurl-rune"
         config.systemd.services.clightning.postStart) {
         cln = lnurlConfig "clightning" {};
         lnd = lnurlConfig "lnd" { services.clightning.enable = true; };

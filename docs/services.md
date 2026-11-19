@@ -376,6 +376,9 @@ services.unbeholden-lnurl = {
 Use `backend = "clightning";` for Core Lightning. The module enables the selected node and
 creates credentials limited to the RPCs needed by the configured features. Core
 Lightning revokes the service's rune when you disable the service or switch it to LND.
+When Core Lightning starts with a new or older database, for example after a recovery,
+the service gets a new rune, and the old one stays valid: its ID can now belong to
+another rune, so bitcoinix doesn't revoke it.
 
 The HTTP listener defaults to `127.0.0.1:8081`. Put an HTTPS reverse proxy in front
 for a public Lightning Address. Set `settings.trusted_proxies` to the proxy's IP

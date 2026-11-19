@@ -180,29 +180,35 @@ let
     ++ optionals withdraw [ "pay" "listpays" "getinfo" ];
   runeRestrictions = builtins.toJSON [ (map (method: "method=${method}") clnMethods) ];
 
-  # clightning has no IDs of our own for runes. So it records the ID of the
-  # rune it created for this service in its data dir, where the service can't
-  # write, and revokes that rune when the service no longer uses it.
-  runeIdFile = "${cln.dataDir}/unbeholden-lnurl-rune-id";
+  # clightning has no IDs of our own for runes. So it records the rune it
+  # created for this service in its data dir, where the service can't write,
+  # and revokes that rune when the service no longer uses it. It records the
+  # rune, not its ID, because on a new or restored database the ID can belong
+  # to another rune.
+  recordedRuneFile = "${cln.dataDir}/unbeholden-lnurl-rune";
+  recordedRuneId = pkgs.writeText "unbeholden-lnurl-rune-id.jq" ''
+    .runes[] | select(.rune == $recorded and (.blacklisted | not)) | .unique_id
+  '';
   revokeRecordedRune = ''
-    if [[ -e ${runeIdFile} ]]; then
-      id=$(<${runeIdFile})
+    if [[ -e ${recordedRuneFile} ]]; then
+      cli=${cln.cli}/bin/lightning-cli
+      id=$($cli showrunes | ${pkgs.jq}/bin/jq -r --arg recorded "$(<${recordedRuneFile})" -f ${recordedRuneId})
       if [[ $id =~ ^[0-9]+$ ]]; then
-        ${cln.cli}/bin/lightning-cli blacklistrune "$id" "$id" > /dev/null
+        $cli blacklistrune "$id" "$id" > /dev/null
       fi
-      rm ${runeIdFile}
+      rm ${recordedRuneFile}
     fi
   '';
 
   # Keep the recorded rune while the service has it and its restrictions match.
   # Otherwise revoke it, so that no rune with old permissions remains valid.
   runeAction = pkgs.writeText "unbeholden-lnurl-rune-action.jq" ''
-    [.runes[] | select(.unique_id == $id)][0] as $rune
+    [.runes[] | select(.rune == $recorded)][0] as $rune
     | if $rune == null or $rune.blacklisted then "create"
-      elif $rune.rune == $ENV.rune and
+      elif $ENV.rune == $recorded and
         [$rune.restrictions[] | [.alternatives[] | .fieldname + .condition + .value]] == $want
       then "keep"
-      else "revoke" end
+      else "revoke \($rune.unique_id)" end
   '';
   # `cfg.dataDir` is writable by the service user, and the clightning data dir
   # by the clightning user. So access them only as these users, never as root.
@@ -222,21 +228,22 @@ let
     umask 077
 
     action=create
-    id=$(asCln cat ${runeIdFile} 2>/dev/null) || id=
-    if [[ $id =~ ^[0-9]+$ ]]; then
+    recorded=$(asCln cat ${recordedRuneFile} 2>/dev/null) || recorded=
+    if [[ $recorded ]]; then
       rune=$(asUser head -c 4096 ${runeFile} 2>/dev/null) || rune=
-      action=$(cli showrunes | rune=$rune $jq -r --arg id "$id" --argjson want "$restrictions" -f ${runeAction})
+      result=$(cli showrunes \
+        | rune=$rune $jq -r --arg recorded "$recorded" --argjson want "$restrictions" -f ${runeAction})
+      read -r action id <<< "$result"
     fi
     if [[ $action == revoke ]]; then
       cli blacklistrune "$id" "$id" > /dev/null
     fi
     if [[ $action != keep ]]; then
-      created=$(cli createrune restrictions="$restrictions")
-      id=$($jq -er .unique_id <<< "$created")
-      asCln tee ${runeIdFile}.tmp <<< "$id" > /dev/null
-      asCln mv -T ${runeIdFile}.tmp ${runeIdFile}
+      rune=$(cli createrune restrictions="$restrictions" | $jq -er .rune)
+      asCln tee ${recordedRuneFile}.tmp <<< "$rune" > /dev/null
+      asCln mv -T ${recordedRuneFile}.tmp ${recordedRuneFile}
       tmp=$(asUser mktemp ${runeFile}.XXXXXX)
-      $jq -er .rune <<< "$created" | asUser tee "$tmp" > /dev/null
+      asUser tee "$tmp" <<< "$rune" > /dev/null
       asUser mv -T "$tmp" ${runeFile}
     fi
 
