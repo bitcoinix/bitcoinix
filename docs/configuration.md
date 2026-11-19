@@ -34,6 +34,9 @@ You now have access to deployment commands:
 - `update-nix-bitcoin`\
   Fetch and verify the latest signed bitcoinix release and pin it in
   `nix-bitcoin-release.nix`. See [Upgrading](./upgrading.md).
+- `fetch-release`\
+  Fetch and verify the latest signed bitcoinix release and print its pin without
+  writing it. `update-nix-bitcoin` uses it.
 - `h`, `help`\
   Show help
 
@@ -271,18 +274,18 @@ and services without `tor.enforce` can reach your LAN. With it enabled:
 
 ```shell
 # 1. Stop bitcoind on your node
-ssh root@nix-bitcoin-node 'systemctl stop bitcoind'
+ssh root@<node> 'systemctl stop bitcoind'
 # Also stop bitcoind on the node that you'll be copying data from
 
 # 2. Copy the data to the bitcoinix node
 # Important: Add a trailing slash to the source path
-rsync -a /path/to/existing/bitcoind-datadir/ root@nix-bitcoin-node:/var/lib/bitcoind
+rsync -a /path/to/existing/bitcoind-datadir/ root@<node>:/var/lib/bitcoind
 
 # 3. Fix data dir permissions on the bitcoinix node
-ssh root@nix-bitcoin-node 'chown -R bitcoin: /var/lib/bitcoind'
+ssh root@<node> 'chown -R bitcoin: /var/lib/bitcoind'
 
 # 4. Start bitcoind
-ssh root@nix-bitcoin-node 'systemctl start bitcoind'
+ssh root@<node> 'systemctl start bitcoind'
 ```
 
 You can use the same workflow for other services.\
@@ -302,8 +305,8 @@ Some services require extra steps:
   the data, copy the file off the node and remove it from the node. Keep that copy if you
   sent funds to the new wallet, because the migration replaces that wallet:
   ```shell
-  scp root@nix-bitcoin-node:/var/lib/lnd/lnd-seed-mnemonic ./new-wallet-seed
-  ssh root@nix-bitcoin-node 'rm /var/lib/lnd/lnd-seed-mnemonic'
+  scp root@<node>:/var/lib/lnd/lnd-seed-mnemonic ./new-wallet-seed
+  ssh root@<node> 'rm /var/lib/lnd/lnd-seed-mnemonic'
   ```
   The seed of your migrated wallet is the seed of your old node. If the old data dir has
   an `lnd-seed-mnemonic`, the copy brings it over.
