@@ -23,6 +23,13 @@ def test_restart_bitcoind():
     def wait_for_bitcoind():
         machine.wait_until_succeeds("runuser -u operator -- bitcoin-cli getnetworkinfo")
 
+    def wait_for_lnd():
+        # A stop of bitcoind also stops lnd. Step 0 doesn't start lnd when
+        # test `lnd` is off, so start it here.
+        if test_data["restart-bitcoind"]["lnd"]:
+            succeed("systemctl start lnd")
+            wait_for_lnd_server()
+
     # 0. 'backups' and 'stop-electrs' may have left units down. Start each one
     # explicitly so that only the steps below rely on `wantedBy`.
     succeed("systemctl start bitcoind")
@@ -37,6 +44,7 @@ def test_restart_bitcoind():
     stopped = "inactive|failed"
 
     # 1. An explicit stop propagates and sticks.
+    wait_for_lnd()
     succeed("systemctl stop bitcoind")
     for unit in dependents:
         machine.wait_until_succeeds(f"[[ $(systemctl show -P ActiveState {unit}) =~ ^({stopped})$ ]]")
@@ -62,6 +70,7 @@ def test_restart_bitcoind():
         machine.wait_for_unit(unit)
 
     # 3. A plain restart propagates and everything is up afterwards.
+    wait_for_lnd()
     succeed("systemctl restart bitcoind")
     wait_for_bitcoind()
     for unit in dependents:
@@ -75,8 +84,11 @@ def test_config_replace():
     # the operator (bitcoind) or the service user.
     # Test that symlinks to files and directories are replaced by regular files
     # with the expected owner and mode, without changing the symlink targets.
+    units = [data["unit"] for data in test_data["config-replace"]]
     for data in test_data["config-replace"]:
         unit, file, user, planter = data["unit"], data["file"], data["user"], data["planter"]
+        # lnd requires bitcoind, so a stop of bitcoind also stops lnd
+        stops_lnd = unit == "lnd" or (unit == "bitcoind" and "lnd" in units)
         with machine.nested(f"config file: {file}"):
             # The unit might still be restarting after the preceding 'restart-bitcoind' test
             succeed(f"systemctl start {unit}")
@@ -86,6 +98,11 @@ def test_config_replace():
             target = f"{os.path.dirname(file)}/config-replace-target"
             for target_type in ("file", "directory"):
                 with machine.nested(f"symlink to {target_type}"):
+                    if stops_lnd:
+                        # The wait needs a running lnd, which may be down or
+                        # still starting here
+                        succeed("systemctl start lnd")
+                        wait_for_lnd_server()
                     # A started unit may still be reading its config. Stop it
                     # before planting the symlink for the next start.
                     succeed(f"systemctl stop {unit}")
@@ -185,7 +202,7 @@ def test_lnd_wallet_init():
 
     def start_lnd():
         succeed("systemctl start lnd")
-        machine.wait_until_succeeds("runuser -u operator -- lncli getinfo")
+        wait_for_lnd_server()
 
     # lnd might still be restarting after the preceding tests
     start_lnd()
@@ -270,6 +287,8 @@ def test_rtl_stops_with_backend():
         succeed(f"systemctl stop {unit}")
     # The preceding tests may have left units down
     succeed(f"systemctl start {' '.join(backends)} rtl")
+    if "lnd" in backends:
+        wait_for_lnd_server()
 
     for backend in backends:
         with machine.nested(f"backend: {backend}"):
@@ -291,6 +310,8 @@ def test_rtl_stops_with_backend():
             # can fail, see below. No later test checks clightning for failures.
             backend_before = show(backend, "InvocationID")
             rtl_before = show("rtl", "InvocationID")
+            if backend == "lnd":
+                wait_for_lnd_server()
             succeed(f"systemctl kill -s TERM {backend}")
             if backend == "lnd":
                 # `Restart = "always"` brings lnd back, and lnd starts RTL once it's ready
@@ -331,6 +352,7 @@ def test_rtl_stops_with_backend():
         # start RTL while a backend that it's bound to is down.
         since = succeed("date +%s").strip()
         succeed("systemctl stop clightning")
+        wait_for_lnd_server()
         succeed("systemctl restart lnd")
         # lnd's start queued a start of RTL, which systemd refused
         machine.wait_until_succeeds(
