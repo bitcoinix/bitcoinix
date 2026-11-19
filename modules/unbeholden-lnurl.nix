@@ -168,31 +168,52 @@ let
     };
   }));
 
-  lndPermissions = optional receiving "invoices:write"
-    ++ optional (receiving || subscribing) "invoices:read"
-    ++ optionals withdraw [ "offchain:write" "info:read" ];
+  lndMethods = optional receiving "/lnrpc.Lightning/AddInvoice"
+    ++ optionals (receiving || subscribing) [
+      "/lnrpc.Lightning/LookupInvoice"
+      "/lnrpc.Lightning/ListInvoices"
+      "/lnrpc.Lightning/SubscribeInvoices"
+    ]
+    ++ optionals withdraw [ "/routerrpc.Router/SendPaymentV2" "/lnrpc.Lightning/GetInfo" ];
   clnMethods = optional receiving "invoice"
     ++ optional (receiving || subscribing) "listinvoices"
     ++ optional subscribing "waitanyinvoice"
     ++ optionals withdraw [ "pay" "listpays" "getinfo" ];
   runeRestrictions = builtins.toJSON [ (map (method: "method=${method}") clnMethods) ];
 
-  # `cfg.dataDir` is writable by the service user, and the clnrest certs dir by
-  # the clightning user. So access them only as these users, never as root.
-  # Keep the rune while clightning stored it with these restrictions. Otherwise
-  # revoke it, so that no rune with the old permissions remains valid.
-  # Revoke only a rune that clightning stored, so that a forged rune can't
-  # make this revoke another rune.
-  runeAction = pkgs.writeText "unbeholden-lnurl-rune-action.jq" ''
-    .runes[0] |
-    if .stored == false or .our_rune == false or .blacklisted then "create"
-    elif [.restrictions[] | [.alternatives[] | .fieldname + .condition + .value]] == $want
-    then "keep"
-    else "revoke \(.unique_id)" end
+  # clightning has no IDs of our own for runes. So it records the ID of the
+  # rune it created for this service in its data dir, where the service can't
+  # write, and revokes that rune when the service no longer uses it.
+  runeIdFile = "${cln.dataDir}/unbeholden-lnurl-rune-id";
+  revokeRecordedRune = ''
+    if [[ -e ${runeIdFile} ]]; then
+      id=$(<${runeIdFile})
+      if [[ $id =~ ^[0-9]+$ ]]; then
+        ${cln.cli}/bin/lightning-cli blacklistrune "$id" "$id" > /dev/null
+      fi
+      rm ${runeIdFile}
+    fi
   '';
+
+  # Keep the recorded rune while the service has it and its restrictions match.
+  # Otherwise revoke it, so that no rune with old permissions remains valid.
+  runeAction = pkgs.writeText "unbeholden-lnurl-rune-action.jq" ''
+    [.runes[] | select(.unique_id == $id)][0] as $rune
+    | if $rune == null or $rune.blacklisted then "create"
+      elif $rune.rune == $ENV.rune and
+        [$rune.restrictions[] | [.alternatives[] | .fieldname + .condition + .value]] == $want
+      then "keep"
+      else "revoke" end
+  '';
+  # `cfg.dataDir` is writable by the service user, and the clightning data dir
+  # by the clightning user. So access them only as these users, never as root.
+  # The service's rune file only gets compared, never passed to lightning-cli.
   setupCln = nbLib.rootScript "unbeholden-lnurl-setup-cln" ''
+    asCln() {
+      ${runuser} -u ${cln.user} -- "$@"
+    }
     cli() {
-      ${runuser} -u ${cln.user} -- ${cln.cli}/bin/lightning-cli "$@"
+      asCln ${cln.cli}/bin/lightning-cli "$@"
     }
     asUser() {
       ${runuser} -u ${cfg.user} -- "$@"
@@ -202,27 +223,33 @@ let
     umask 077
 
     action=create
-    if rune=$(asUser cat ${runeFile} 2>/dev/null) && [[ $rune ]] &&
-       response=$(cli -k showrunes rune="$rune"); then
-      action=$($jq -r --argjson want "$restrictions" -f ${runeAction} <<< "$response")
+    id=$(asCln cat ${runeIdFile} 2>/dev/null) || id=
+    if [[ $id =~ ^[0-9]+$ ]]; then
+      rune=$(asUser head -c 4096 ${runeFile} 2>/dev/null) || rune=
+      action=$(cli showrunes | rune=$rune $jq -r --arg id "$id" --argjson want "$restrictions" -f ${runeAction})
     fi
-    if [[ $action == revoke* ]]; then
-      id=''${action#revoke }
+    if [[ $action == revoke ]]; then
       cli blacklistrune "$id" "$id" > /dev/null
     fi
     if [[ $action != keep ]]; then
+      created=$(cli createrune restrictions="$restrictions")
+      id=$($jq -er .unique_id <<< "$created")
+      asCln tee ${runeIdFile}.tmp <<< "$id" > /dev/null
+      asCln mv -T ${runeIdFile}.tmp ${runeIdFile}
       tmp=$(asUser mktemp ${runeFile}.XXXXXX)
-      cli createrune restrictions="$restrictions" | $jq -er .rune | asUser tee "$tmp" > /dev/null
+      $jq -er .rune <<< "$created" | asUser tee "$tmp" > /dev/null
       asUser mv -T "$tmp" ${runeFile}
     fi
 
     cert=$(cli listconfigs clnrest-certs | ${clnrest.serverCertPathFromConfigs})
-    ${runuser} -u ${cln.user} -- cat "''${cert%/*}/ca.pem" | asUser tee /run/unbeholden-lnurl/ca.pem > /dev/null
+    asCln cat "''${cert%/*}/ca.pem" | asUser tee /run/unbeholden-lnurl/ca.pem > /dev/null
   '';
 in {
   inherit options;
 
-  config = mkIf cfg.enable {
+  config = mkMerge [ (mkIf (cln.enable && !(cfg.enable && !isLnd)) {
+    systemd.services.clightning.postStart = mkAfter revokeRecordedRune;
+  }) (mkIf cfg.enable {
     assertions = [ {
       assertion = receiving || withdraw || subscribing;
       message = "services.unbeholden-lnurl requires addresses, withdraw vouchers, notifications or nostr in its settings.";
@@ -232,10 +259,8 @@ in {
       enable = true;
       macaroons.unbeholden-lnurl = {
         inherit (cfg) user;
-        permissions = concatMapStringsSep "," (permission:
-          let parts = splitString ":" permission;
-          in builtins.toJSON { entity = head parts; action = last parts; }
-        ) lndPermissions;
+        permissions = concatMapStringsSep ","
+          (method: builtins.toJSON { entity = "uri"; action = method; }) lndMethods;
       };
     };
     services.clightning = mkIf (!isLnd) {
@@ -258,6 +283,8 @@ in {
       # the backend comes back. The backend starts it, see below.
       requires = [ "${backendUnit}.service" ];
       after = [ "${backendUnit}.service" "nix-bitcoin-secrets.target" ];
+      # A public Go listener, like lnd's ports. See ./lnd.nix
+      environment.GODEBUG = "multipathtcp=0";
       serviceConfig = nbLib.defaultHardening // {
         ExecStartPre = optional (!isLnd) setupCln;
         ExecStart = "${getExe cfg.package} -config ${configFile}";
@@ -300,5 +327,5 @@ in {
     '') ([ "unbeholden-lnurl-verify" ]
       ++ optional generateWithdrawSecret "unbeholden-lnurl-withdraw"
       ++ optional (cfg.settings.nostr != null) "unbeholden-lnurl-nostr");
-  };
+  }) ];
 }

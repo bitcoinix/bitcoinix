@@ -632,10 +632,21 @@ let
     testLnurlLndReceivePermissions = {
       expr = builtins.fromJSON ("["
         + (lnurlConfig "lnd" {}).services.lnd.macaroons.unbeholden-lnurl.permissions + "]");
-      expected = [
-        { entity = "invoices"; action = "write"; }
-        { entity = "invoices"; action = "read"; }
+      expected = map (action: { entity = "uri"; inherit action; }) [
+        "/lnrpc.Lightning/AddInvoice"
+        "/lnrpc.Lightning/LookupInvoice"
+        "/lnrpc.Lightning/ListInvoices"
+        "/lnrpc.Lightning/SubscribeInvoices"
       ];
+    };
+    testLnurlRevokesUnusedRune = {
+      expr = lib.mapAttrs (_: config: lib.hasInfix "unbeholden-lnurl-rune-id"
+        config.systemd.services.clightning.postStart) {
+        cln = lnurlConfig "cln" {};
+        lnd = lnurlConfig "lnd" { services.clightning.enable = true; };
+        disabled = evaluate { services.clightning.enable = true; };
+      };
+      expected = { cln = false; lnd = true; disabled = true; };
     };
     testLnurlTorProxy = {
       expr = let config = lnurlConfig "cln" {

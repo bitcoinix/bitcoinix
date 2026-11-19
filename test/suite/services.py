@@ -489,24 +489,44 @@ def test_unbeholden_lnurl():
     assert verified == {
         "status": "OK", "settled": False, "preimage": None, "pr": invoice["pr"]
     }, verified
-    count_runes = "lightning-cli showrunes | jq '.runes | length'"
     if data["backend"] == "cln":
-        runes = succeed(count_runes)
+        rune_file = f"{data['dataDir']}/cln-rune"
+        id_file = f"{data['clnDataDir']}/unbeholden-lnurl-rune-id"
+
+        def runes():
+            return {r["unique_id"]: r for r in succeed_json("lightning-cli showrunes")["runes"]}
+
+        def blacklisted():
+            return {id for id, r in runes().items() if r.get("blacklisted")}
+
+        def recorded():
+            return succeed(f"cat {id_file}").strip()
+
+        def restart_with_rune_file(content):
+            succeed(
+                f"runuser -u unbeholden-lnurl -- tee {rune_file} <<< {shlex.quote(content)}",
+                "systemctl restart unbeholden-lnurl",
+            )
+            machine.wait_for_unit("unbeholden-lnurl")
+
+        before = runes()
+        rune_id = recorded()
+        assert succeed(f"cat {rune_file}").strip() == before[rune_id]["rune"]
     succeed("systemctl restart unbeholden-lnurl")
     machine.wait_for_unit("unbeholden-lnurl")
     if data["backend"] == "cln":
-        assert succeed(count_runes) == runes, "A restart created another rune"
-        rune_file = f"{data['dataDir']}/cln-rune"
-        # A rune with other permissions is revoked
-        other = succeed_json("lightning-cli createrune restrictions='[[\"method=getinfo\"]]'")["rune"]
-        succeed(
-            f"runuser -u unbeholden-lnurl -- tee {rune_file} <<< {other}",
-            "systemctl restart unbeholden-lnurl",
-        )
-        machine.wait_for_unit("unbeholden-lnurl")
-        assert succeed(f"cat {rune_file}").strip() != other, "The rune was not replaced"
-        revoked = succeed_json(f"lightning-cli -k showrunes rune={other}")
-        assert revoked["runes"][0].get("blacklisted"), revoked
+        assert runes().keys() == before.keys(), "A restart created another rune"
+        assert recorded() == rune_id
+        # A changed rune file revokes only the recorded rune. Its content is
+        # never passed to lightning-cli, so a forged rune can't pick a rune to revoke.
+        other = succeed_json("lightning-cli createrune restrictions='[[\"method=getinfo\"]]'")
+        for content in [other["rune"], '"{\\"filter\\":{}}"']:
+            revoked = blacklisted() | {rune_id}
+            restart_with_rune_file(content)
+            assert blacklisted() == revoked, (blacklisted(), revoked)
+            assert recorded() != rune_id
+            rune_id = recorded()
+            assert succeed(f"cat {rune_file}").strip() == runes()[rune_id]["rune"]
         # The setup accesses the data dir only as the service user, so a
         # planted symlink can't redirect a read or write to a file of another user
         target = "/etc/unbeholden-lnurl-target"

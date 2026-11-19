@@ -374,7 +374,8 @@ services.unbeholden-lnurl = {
 ```
 
 Use `backend = "cln";` for Core Lightning. The module enables the selected node and
-creates credentials limited to the RPCs needed by the configured features.
+creates credentials limited to the RPCs needed by the configured features. Core
+Lightning revokes the service's rune when you disable the service or switch it to LND.
 
 The HTTP listener defaults to `127.0.0.1:8081`. Put an HTTPS reverse proxy in front
 for a public Lightning Address. Set `settings.trusted_proxies` to the proxy's IP
@@ -400,10 +401,20 @@ To print the unclaimed vouchers with their URLs, run `sudo unbeholden-lnurl-vouc
 Keep `/var/lib/unbeholden-lnurl` and the generated secrets across upgrades. This
 preserves voucher claims, settlement cursors and zap receipts. Changing a voucher
 secret changes its URLs; changing the verification key invalidates old verify URLs.
-Treat voucher URLs as bearer secrets.
+Treat voucher URLs as bearer secrets. A restored backup restores the voucher secret
+but not the claims made since the backup, so those vouchers can be claimed again.
+
+With vouchers, the service can pay any invoice from the node's Lightning balance
+(LND `SendPaymentV2`, Core Lightning `pay`). Only the service itself enforces the
+voucher amounts.
+
+Rate limits apply per client address. Behind the onion service every client comes
+from Tor's address, so they all share one limit, and one client can use it up.
 
 Set `services.unbeholden-lnurl.tor.proxy = true;` to send notifications and Nostr
-publishing through Tor. The local node connection stays direct.
+publishing through Tor. The local node connection stays direct. Zap receipts go to
+relays that the payer chooses, so without the proxy anyone who pays a zap learns the
+node's IP address, even when the Lightning Address is published only as an onion.
 
 ### Connect to Unbeholden Wallet
 [Unbeholden Wallet](https://github.com/unbeholdendev/unbeholden-wallet) is a watch-only
