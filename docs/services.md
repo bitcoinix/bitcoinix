@@ -1149,7 +1149,7 @@ Things to know:
   off, along with the projected blocks and fee recommendations.
 - **Other settings.** `services.rbitcoin-space.settings` takes the explorer's environment
   variables, documented in
-  [CONFIG.md](https://github.com/smolcars/rbitcoin-space/blob/v0.2.0/docs/CONFIG.md). They
+  [CONFIG.md](https://github.com/smolcars/rbitcoin-space/blob/v0.3.0/docs/CONFIG.md). They
   are copied to the world-readable Nix store. Lightning gossip and the Ark pages connect to
   the internet, so they fail with `services.rbitcoin-space.tor.enforce`, which
   `secure-node.nix` sets.

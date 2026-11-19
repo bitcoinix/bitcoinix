@@ -10,13 +10,13 @@
 , writableTmpDirAsHomeHook
 }:
 let
-  version = "0.2.0";
+  version = "0.3.0";
 
   src = fetchFromGitHub {
     owner = "smolcars";
     repo = "rbitcoin-space";
     tag = "v${version}";
-    hash = "sha256-8hANYKK9eXkJK5m58xWeyaqzZcNpoa6U/EaklaXwx38=";
+    hash = "sha256-OXTUmGxWLqT52ksEOG8x468T+13oeHONYwzTIzmpqHA=";
   };
 
   # The frontend is built separately from the server, as upstream's Dockerfile does.
@@ -75,13 +75,13 @@ rustPlatform.buildRustPackage {
   pname = "rbitcoin-space";
   inherit version src;
 
-  cargoHash = "sha256-88GsFebOBGXmSH+1wxmTLha0PTrv0UvhlWA3N1+Rt4o=";
+  cargoHash = "sha256-RgdVROqiPFOY2u+sOETp/mh2eugVvPMJG88WyvR+HzA=";
 
   cargoBuildFlags = [ "-p" "rbitcoin-space" ];
 
   # The commit of tag v${version}, reported at /healthz. The source archive has no .git,
   # and build.rs only accepts a full commit hash.
-  SOURCE_REVISION = "c7eb73555e6944b65eee03d24ead23aeddb26033";
+  SOURCE_REVISION = "bfb15998c3911fc950f236c349005009598c6e3c";
 
   # Upstream CI runs the suite on every merge; several tests need a regtest rbitcoin
   # node or a browser, so the package only builds the server.
