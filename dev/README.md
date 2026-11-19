@@ -200,13 +200,62 @@ they control state compatibility, not the package channel.
 A release is a signed, annotated git tag and nothing else. There are no release archives
 and no GitHub release assets. Signing needs the maintainer's key, so this cannot run in CI.
 
-Before tagging, review the version's section in [the release notes](../docs/release-notes.md)
-and make sure it covers notable changes, including package and flake-attribute changes.
+Before tagging, review the draft files under `docs/release-notes/<version>/`
+and make sure they cover notable changes, including package and flake-attribute changes.
 Breaking module or service changes also need an entry in
 `modules/versioning/<version>/<identifier>.nix`, with non-trivial migrations documented in
 [the upgrading guide](../docs/upgrading.md).
-Each change entry in the release notes and upgrading guide starts with a descriptive
-fourth-level heading (`#### <title>`) within its version section.
+During development, put each change in its own file under
+`docs/release-notes/<version>/` or `docs/upgrading/<version>/`, using a descriptive,
+lowercase, hyphen-separated filename and a fourth-level heading (`#### <title>`).
+The **first draft PR for a milestone** also opens its version pages. After writing
+the draft, run the helper with the version chosen for the milestone and commit
+its output in the same PR.
+
+```bash
+nix shell --inputs-from . nixpkgs#python3 -c helper/open-release-notes.py <version>
+```
+
+The helper creates `# Release notes <version>` and `# Upgrading to config version <version>`
+pages. Each starts with a `TBD.` paragraph and links to the drafts on GitHub.
+The upgrade page tells readers to keep the latest released `configVersion` during
+development. The helper adds both pages to their indexes and to `docs/SUMMARY.md`.
+It can be rerun to restore missing entries. Subsequent draft PRs add only their
+own files. Earlier releases keep their consolidated pages at
+`docs/release-notes/<version>.md` and `docs/upgrading/<version>.md`. Edit those
+pages only to fix errors.
+
+At release time, consolidate the Markdown files in the release-preparation commit:
+
+1. Replace the TBD contents of the two version pages. Concatenate
+   `docs/release-notes/<version>/*.md` into
+   `docs/release-notes/<version>.md`, headed `# Release notes <version>`, and
+   `docs/upgrading/<version>/*.md` into `docs/upgrading/<version>.md`, headed
+   `# Upgrading to config version <version>`. Keep a blank line between entries.
+   Group related changes and put prerequisite migrations first. Preserve each
+   draft's text under its heading on the corresponding page.
+2. Adjust relative links for the new parent directory. Replace all links to
+   individual change files with links to their headings in the consolidated pages,
+   including links from release notes to upgrade notes. Check references in
+   `README.md`, `docs/`, `examples/`, `modules/` and `helper/`.
+3. End the upgrade page with the instruction to set
+   `nix-bitcoin.configVersion = "<version>";` after completing the migrations.
+   Remove the development-only instruction to keep the previous config version.
+4. Remove the `(upcoming)` labels from the version links in `docs/release-notes.md`
+   and `docs/upgrading.md`.
+5. Remove the consolidated Markdown fragments and their now-empty version
+   directories. Leave `modules/versioning/<version>/*.nix` separate.
+
+CI checks that every draft is a `.md` file directly inside its version directory
+and starts with a fourth-level heading. CI and the signing helper compare the text
+under each heading, allowing rebased links and rewrapped prose. Migration steps
+and command lines must survive consolidation. Both checks build the book to verify
+link targets and anchors on the consolidated pages and in links from other chapters.
+If a PR misses its release, move its Markdown drafts
+and any new Nix migration notices to the next open milestone before merging it.
+CI checks new notice paths against the finalized version on the target branch.
+To run the same documentation check locally after committing release preparation, use
+`nix shell --inputs-from . nixpkgs#{cmark,mdbook,python3} -c bash helper/check-release-notes.sh <version>`.
 
 Root [`version.nix`](../version.nix) records the latest finalized release. **Do not
 change it during development, including when adding migration notices.** Once the
@@ -216,7 +265,8 @@ migration list is final, merge a release-preparation commit that updates:
 - `configVersion` in `examples/configuration.nix` and
   `examples/{flakes,colmena,container}/flake.nix` to `<version>`.
 - The bitcoinix input pins in those three flakes to `v<version>`.
-- The upgrading guide's final `configVersion` instruction.
+- The consolidated release and upgrade pages, their links and navigation, and the
+  upgrade page's final `configVersion` instruction, as described above.
 
 The release helper requires `HEAD` to equal `origin/master`, so this preparation
 commit must be on master before tagging. Until the tag is pushed, the example
@@ -253,6 +303,11 @@ Before signing, the script checks that:
 - `<version>` is a stable `X.Y.Z` that is greater than every existing release tag
 - `version.nix` and all four examples' `configVersion` values equal `<version>`,
   and the three example flakes pin `v<version>`
+- each draft's heading and text appear on the corresponding version page, including when
+  consolidation and the version bump are separate commits
+- the pages have their release titles, working book links and navigation entries,
+  the upgrade page ends with the new `configVersion` instruction, and the
+  finalized version has no draft files, TBD paragraphs or upcoming labels
 - `gpg.format` is `ssh`, `user.signingkey` is set and the allowed signers file exists
 
 It then creates the signed tag and verifies it with `helper/fetch-release.sh`, the same
@@ -293,8 +348,8 @@ Add a compromised key to `helper/release-keys/ssh-revoked-keys` instead (and kee
 `ssh-allowed-signers`); every tag it signed is then rejected. See SECURITY.md.
 
 `.github/CODEOWNERS` assigns the release-signing files (the key files, `fetch-release.sh`,
-`make-release.sh`, `release.yml` and `SECURITY.md`) to the maintainers. It
-only has an effect if a branch protection rule (or ruleset) on `master` requires review from
-code owners, which is a repository setting made in GitHub. Code owners need write access to
-the repository, otherwise GitHub ignores them. With two maintainers listed, a change by one
-of them needs the other's approval.
+`make-release.sh`, both `check-release-notes` files, `release.yml` and `SECURITY.md`) to the
+maintainers. It only has an effect if a branch protection rule (or ruleset) on `master`
+requires review from code owners, which is a repository setting made in GitHub. Code
+owners need write access to the repository, otherwise GitHub ignores them. With two
+maintainers listed, a change by one of them needs the other's approval.

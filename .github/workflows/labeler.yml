@@ -79,8 +79,11 @@ jobs:
                   'helper/release-keys/'
                 ],
                 files: [
+                  'helper/check-release-notes.py',
+                  'helper/check-release-notes.sh',
                   'helper/fetch-release.sh',
                   'helper/make-release.sh',
+                  'helper/open-release-notes.py',
                   'test/fetch-release-test.sh',
                   'test/make-release-test.sh',
                   'test/release-keys-test.sh',

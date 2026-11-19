@@ -68,8 +68,9 @@ nix build --no-link .#checks.x86_64-linux.cve-tools
 # Run the same fixtures on any host with Nix, including macOS.
 nix shell --inputs-from . nixpkgs#python3 -c python3 test/ci/cve-tests.py test/ci
 
-# Check all example versions/pins and tag signing in temporary local repositories.
-nix shell --inputs-from . nixpkgs#{git,openssh,gnutar} -c ./test/make-release-test.sh
+# Check example pins, release notes, migration notices and tag signing in local repositories.
+nix shell --inputs-from . nixpkgs#{bash,cmark,coreutils,git,gnugrep,gnused,gnutar,mdbook,openssh,python3} \
+  -c ./test/make-release-test.sh
 
 # Evaluate the flake and run checks for the current supported system.
 nix flake check --all-systems

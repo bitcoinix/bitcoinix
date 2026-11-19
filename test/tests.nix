@@ -584,7 +584,7 @@ let
       '';
     };
 
-    # An operator account without the operator role, set up as docs/upgrading.md
+    # An operator account without the operator role, set up as docs/upgrading/0.1.6.md
     # describes: explicit clnrest onion access and the clightning group
     lnconnectNoOperatorRole = {
       nix-bitcoin.operator.enable = mkForce false;

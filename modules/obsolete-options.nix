@@ -22,7 +22,7 @@ in {
     (mkRemovedOptionModule [ "services" "bitcoind" "makeNetworkName" ] ''
       Use `config.nix-bitcoin.lib.networkName { mainnet = "bitcoin"; }` instead
       to override mainnet's name while passing other network names through unchanged.
-      See docs/upgrading.md, "Upgrading to config version 0.2.0".
+      See docs/upgrading/0.2.0.md.
     '')
 
     # Preserve the old network while evaluating upgrade notices and paths.
@@ -136,8 +136,7 @@ in {
     (mkRemovedOptionModule [ "services" "liquidd" ] ''
       Liquid support has been removed from bitcoinix. Remove services.liquidd and any
       Liquid-specific onion service or network namespace settings from your configuration.
-      Your Liquid wallets are not deleted; see docs/upgrading.md,
-      "Upgrading to config version 0.1.1".
+      Your Liquid wallets are not deleted; see docs/upgrading/0.1.1.md.
     '')
     (mkRemovedOptionModule [ "services" "btcpayserver" "lbtc" ] ''
       Liquid support has been removed from bitcoinix. Remove services.btcpayserver.lbtc
@@ -152,13 +151,13 @@ in {
       Lightning Pool support has been removed from bitcoinix to reduce maintenance scope.
       Remove services.lightning-pool and any Pool-specific onion service or network
       namespace settings from your configuration. Manage Pool separately if needed;
-      see docs/upgrading.md, "Upgrading to config version 0.1.1".
+      see docs/upgrading/0.1.1.md.
     '')
     (mkRemovedOptionModule [ "services" "lightning-loop" ] ''
       Lightning Loop support has been removed from bitcoinix to reduce maintenance scope.
       Remove services.lightning-loop and any Loop-specific onion service or network
       namespace settings from your configuration. Manage Loop separately if needed;
-      see docs/upgrading.md, "Upgrading to config version 0.1.1".
+      see docs/upgrading/0.1.1.md.
     '')
     (mkRemovedOptionModule [ "services" "rtl" "nodes" "lnd" "loop" ] ''
       RTL's Lightning Loop integration has been removed along with Lightning Loop support.
@@ -167,12 +166,12 @@ in {
     (mkRemovedOptionModule [ "services" "clightning-rest" ] ''
       c-lightning-REST is no longer maintained and has been removed from bitcoinix.
       Remove services.clightning-rest and enable services.clightning.plugins.clnrest instead.
-      See docs/upgrading.md, "Upgrading to config version 0.1.1", for migration steps.
+      See docs/upgrading/0.1.1.md for migration steps.
     '')
     (mkRemovedOptionModule [ "services" "rtl" "cl-rest" ] ''
       c-lightning-REST is no longer maintained and has been removed from bitcoinix.
       Remove services.rtl.cl-rest. RTL uses services.clightning.plugins.clnrest instead.
-      See docs/upgrading.md, "Upgrading to config version 0.1.1", for migration steps.
+      See docs/upgrading/0.1.1.md for migration steps.
     '')
   ]
   ++
@@ -182,7 +181,7 @@ in {
       Bitcoin Knots support and bitcoind package selection have been removed from bitcoinix.
       Remove services.bitcoind.package from your configuration. The service now uses
       nix-bitcoin.pkgs.bitcoind (Bitcoin Core) directly.
-      See docs/upgrading.md, "Upgrading to config version 0.1.3".
+      See docs/upgrading/0.1.3.md.
     '')
   ];
 }

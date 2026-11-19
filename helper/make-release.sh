@@ -1,5 +1,5 @@
 #!/usr/bin/env nix-shell
-#!nix-shell -i bash -p bash coreutils git gnugrep gnused gnutar openssh
+#!nix-shell -i bash -p bash coreutils git gnugrep gnused gnutar openssh cmark mdbook python3
 set -euo pipefail
 
 # Create and sign a bitcoinix release tag, then verify it exactly as users will.
@@ -182,6 +182,7 @@ check_up_to_date
 check_tag_absent
 check_version_is_newest
 check_migrations_finalized
+bash "$scriptDir/check-release-notes.sh" "$version"
 check_signing_config
 
 commit=$(git rev-parse HEAD)

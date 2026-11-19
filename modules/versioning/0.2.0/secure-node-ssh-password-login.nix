@@ -16,7 +16,7 @@
     To keep password login, set `PasswordAuthentication = true`. If you log in with
     keyboard-interactive methods through PAM, for example one-time codes, check
     your PAM stack: NixOS sets `security.pam.services.sshd.unixAuth` from
-    `PasswordAuthentication`, and some PAM modules depend on it. See
-    docs/upgrading.md. Test a new login before you close your current session.
+    `PasswordAuthentication`, and some PAM modules depend on it. Test a new login
+    before you close your current session.
   '';
 }

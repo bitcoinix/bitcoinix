@@ -5,6 +5,8 @@
 # that requires review from code owners. See "Cutting a release" in dev/README.md.
 
 /helper/release-keys/           @seberm @prusnak
+/helper/check-release-notes.py  @seberm @prusnak
+/helper/check-release-notes.sh  @seberm @prusnak
 /helper/fetch-release.sh        @seberm @prusnak
 /helper/make-release.sh         @seberm @prusnak
 /.github/workflows/release.yml  @seberm @prusnak

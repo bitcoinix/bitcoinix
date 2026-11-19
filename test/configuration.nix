@@ -388,7 +388,7 @@ let
       inherit (operatorAccountOnion.services.clightning) enable port plugins;
     };
   };
-  # The migration that docs/upgrading.md describes for a disabled role
+  # The migration that docs/upgrading/0.1.6.md describes for a disabled role
   operatorAccountGrant = {
     imports = [ operatorAccountOnion ];
     nix-bitcoin.onionAddresses.access.alice = [ "clnrest" ];
@@ -723,6 +723,7 @@ let
       in lib.all (phrase: lib.any (lib.hasInfix phrase) warnings) [
         "bitcoinix now uses only unstable nixpkgs"
         "checkReversePath from true"
+        (if changes020Released then "See docs/upgrading/0.2.0.md." else "See docs/upgrading/0.2.0/.")
       ]) [ "0.1.6" "0.2.0" null ]) [ "0.1.6" "0.2.0" ];
       expected = [ [ true true false ] [ false false false ] ];
     };
@@ -737,7 +738,9 @@ let
           };
         });
       in {
-        released = lib.any (lib.hasInfix "setup-secrets now fails") messages;
+        released = lib.any (message:
+          lib.hasInfix "setup-secrets now fails" message && lib.hasInfix "See docs/upgrading/0.1.6.md." message
+        ) messages;
         upcoming = lib.any (lib.hasInfix "bitcoinix now uses only unstable nixpkgs") messages;
         target = lib.any (lib.hasInfix ''set nix-bitcoin.configVersion = "${release}";'') messages;
       }) [ "0.1.6" "0.2.0" ];

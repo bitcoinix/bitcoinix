@@ -505,7 +505,7 @@ same sandbox. Custom `nix-bitcoin.generateSecretsCmds` have no IP network access
 and can write only to the secrets directory and private temporary directories.
 Store final secrets inside the secrets directory, including secrets supplied by
 another tool, rather than linking to external files. See the
-[0.1.3 upgrade instructions](./upgrading.md#upgrading-to-config-version-013)
+[0.1.3 upgrade instructions](./upgrading/0.1.3.md)
 for migration and recovery steps.
 
 Tools like agenix install secrets as symlinks to files outside the secrets directory

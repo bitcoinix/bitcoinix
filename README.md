@@ -72,8 +72,9 @@ Project direction
   *bitcoinix unstable*. All tests pass before a change is merged, but not every issue may be caught.
   Please report bugs, patches are always welcome.
 * **Package base:** The single `nixpkgs` input tracks `nixos-unstable`. Flake deployments use
-  bitcoinix's locked unstable packages by default; see the
-  [migration guide](docs/upgrading.md#upgrading-to-config-version-020) for caller-controlled pins.
+  bitcoinix's locked unstable packages by default. See
+  [Unstable NixOS base](docs/upgrading/0.2.0/unstable-nixos-base.md) for the system input and
+  [Service package selection](docs/upgrading/0.2.0/service-package-selection.md) for caller-controlled pins.
 * **Deployment examples:** [`examples/flakes`](examples/flakes/flake.nix) (`nixos-rebuild`) and
   [`examples/colmena`](examples/colmena/README.md) show how to deploy a node. CI builds them on code-changing
   pull requests and pushes to `master`; documentation-only PRs skip these builds.

@@ -942,7 +942,7 @@ The plugin follows CLN's configured proxy and shares its service sandbox and
 network namespace.
 
 If you used the former Python plugin, follow the
-[currencyrate migration instructions](./upgrading.md#upgrading-to-config-version-015).
+[currencyrate migration instructions](./upgrading/0.1.5.md).
 
 #### Trustedcoin
 When `services.clightning.tor.proxy` is enabled, [trustedcoin](https://github.com/nbd-wtf/trustedcoin)
