@@ -51,8 +51,7 @@ let
         inherit (def) file;
         isMatching = lib.hasPrefix sourcePrefix file;
       in
-        # Nix has no boolean XOR, so use `if`
-        lib.optionals (if shouldMatch then isMatching else !isMatching) (
+        lib.optionals (shouldMatch == isMatching) (
           (map (service: { name = service; value = true; }) (builtins.attrNames services))
         )
     ) systemdServices.definitionsWithLocations));
@@ -81,10 +80,7 @@ let
     in
       builtins.concatMap (attr:
         lib.optionals (serviceCfg ? ${attr}) (
-          let
-            cmd = serviceCfg.${attr};
-          in
-            if builtins.typeOf cmd == "list" then cmd else [ cmd ]
+          lib.toList serviceCfg.${attr}
         )
       ) scriptAttrs
     ) servicesToCheck;
