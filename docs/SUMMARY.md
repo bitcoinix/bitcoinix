@@ -18,4 +18,5 @@
   - [Version 0.1.6](release-notes/0.1.6.md)
   - [Version 0.1.5](release-notes/0.1.5.md)
 - [Using services](services.md)
+- [Module options](options.md)
 - [FAQ](faq.md)

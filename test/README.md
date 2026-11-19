@@ -63,6 +63,9 @@ nix eval .#checks.x86_64-linux.module-config.testCount
 nix build --no-link .#checks.x86_64-linux.module-config .#checks.x86_64-linux.test-runner \
   .#checks.x86_64-linux.lnd-macaroon-filters
 
+# Check the docs site builder and build the module option list of docs/options.md.
+nix build --no-link .#checks.x86_64-linux.docs-tools .#checks.x86_64-linux.docs-options
+
 # Check CVE scan/report behavior without network access or GitHub writes.
 nix build --no-link .#checks.x86_64-linux.cve-tools
 # Run the same fixtures on any host with Nix, including macOS.
@@ -226,9 +229,9 @@ including both sides of renames, without checking out the repository. Empty list
 and lists reaching the API's 3000-file limit conservatively run the full checks.
 
 New commits cancel older test and docs runs for the same PR. Master test runs and
-docs deployments are preserved. Docs PRs build their own documentation; the latest
-release's documentation is built for deployment and, without uploading or deploying,
-on PRs that change `.github/workflows/docs.yml`.
+docs deployments are preserved. Docs PRs build their own documentation; the site of
+all releases is built for deployment and, with the PR's tooling and without uploading
+or deploying, on PRs that change `.github/workflows/docs.yml` or `helper/docs/`.
 
 The VM preparation job evaluates scenarios and checks Cachix for successful test
 results. It builds and uploads shared drivers only when a Cachix signing key is

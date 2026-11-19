@@ -25,8 +25,7 @@ configurations keep working.
   `operator` user for the client tools
 
 The [README](https://github.com/bitcoinix/bitcoinix#features) lists all services and plugins, the
-[NixOS options search](https://search.nixos.org/flakes?channel=unstable&sort=relevance&type=options&query=bitcoin)
-lists their options.
+[module options](options.md) list their options.
 
 ## Software versions
 

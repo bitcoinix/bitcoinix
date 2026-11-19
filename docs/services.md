@@ -842,9 +842,8 @@ options, `clightning` systemd service, and `lightning-cli` command in bitcoinix.
 
 ### Plugins
 There are a number of [plugins](https://github.com/lightningd/plugins) available for Core Lightning.
-See [`README: Features → Core Lightning`](https://github.com/bitcoinix/bitcoinix/blob/master/README.md) or [search.nixos.org][1] for a complete list.
-
-[1]: https://search.nixos.org/flakes?channel=unstable&from=0&size=30&sort=relevance&type=options&query=services.clightning.plugins
+See [`README: Features → Core Lightning`](https://github.com/bitcoinix/bitcoinix/blob/master/README.md) or the
+`services.clightning.plugins` [module options](options.md) for a complete list.
 
 You can activate and configure these plugins like so:
 

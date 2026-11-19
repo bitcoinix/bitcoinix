@@ -1,0 +1,19 @@
+/* Option list of options.md, see options.js */
+#nb-option-filter {
+    box-sizing: border-box;
+    width: 100%;
+    padding: 8px 12px;
+    font-size: inherit;
+    color: var(--searchbar-fg);
+    background-color: var(--searchbar-bg);
+    border: 1px solid var(--searchbar-border-color);
+    border-radius: 4px;
+}
+
+#nb-option-count {
+    color: var(--icons);
+}
+
+.nb-option {
+    border-top: 1px solid var(--table-border-color);
+}

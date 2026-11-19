@@ -10,7 +10,8 @@ build-dir = "book"
 create-missing = false
 
 [output.html]
-additional-js = ["theme/legacy-note-links.js"]
+additional-css = ["theme/options.css"]
+additional-js = ["theme/legacy-note-links.js", "theme/options.js"]
 git-repository-url = "https://github.com/bitcoinix/bitcoinix"
 # The published docs come from the latest release tag, but fixes go to master
 edit-url-template = "https://github.com/bitcoinix/bitcoinix/edit/master/{path}"

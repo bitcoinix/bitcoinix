@@ -43,6 +43,8 @@
       in removeAttrs nbPkgs [ "pinned" "krops" ];
 
       nixosModules.default = { config, pkgs, lib, ... }: {
+        # The declaration file of the options below, otherwise it's the importing file
+        _file = ./flake.nix;
         imports = [ ./modules/modules.nix ];
 
         options = with lib; {
@@ -115,6 +117,13 @@
             python ${./test/lnd-macaroon-filters-tests.py} ${./modules/lnd-macaroons}
             touch "$out"
           '';
+          docs-tools = pkgs.runCommand "nix-bitcoin-docs-tools" {
+            nativeBuildInputs = [ pkgs.python3 pkgs.git pkgs.mdbook ];
+          } ''
+            HOME=$TMPDIR python ${./test/docs-site-tests.py} ${./helper/docs}
+            touch "$out"
+          '';
+          docs-options = legacyPackages.docsOptions;
           cve-tools = pkgs.runCommand "nix-bitcoin-cve-tools" {
             nativeBuildInputs = [ pkgs.python3 ];
           } ''
@@ -147,6 +156,13 @@
             extra-container = self.inputs.extra-container.packages.${system}.default;
 
             ciTestInfo = import ./test/ci/test-info.nix pkgs legacyPackages.instantiateTests;
+
+            # The option list of docs/options.md, inserted by helper/docs/build.py
+            docsOptions = import ./helper/docs/options.nix {
+              inherit pkgs;
+              nixosModule = self.nixosModules.default;
+              rev = self.rev or null;
+            };
           };
 
         apps = rec {
