@@ -1296,13 +1296,15 @@ Things to know:
 - **Data.** `services.rbitcoin-space.dataDir` (default `/var/lib/rbitcoin-space`) holds a
   SQLite store of data derived from the node. A backfill fills its block table and keeps
   the node about half busy while it runs (`BACKFILL_BUSY_PERCENT`, default 50). The store
-  is rebuilt if lost, so it needs no backup.
+  is rebuilt if lost, so it needs no backup. Its migrations are one-way: an older
+  rbitcoin.space refuses a store that a newer one migrated (`store_open_failed`), so to
+  downgrade, stop `rbitcoin-space`, empty `dataDir` and let it rebuild.
 - **Load on the node.** The live mempool polls the node about once a second, about 150 MB
   a minute of RPC traffic on mainnet. `services.rbitcoin-space.mempool = false` turns it
   off, along with the projected blocks and fee recommendations.
 - **Other settings.** `services.rbitcoin-space.settings` takes the explorer's environment
   variables, documented in
-  [CONFIG.md](https://github.com/smolcars/rbitcoin-space/blob/v0.3.0/docs/CONFIG.md). They
+  [CONFIG.md](https://github.com/smolcars/rbitcoin-space/blob/v0.4.0/docs/CONFIG.md). They
   are copied to the world-readable Nix store. Lightning gossip and the Ark pages connect to
   the internet, so they fail with `services.rbitcoin-space.tor.enforce`, which
   `secure-node.nix` sets.
