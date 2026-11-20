@@ -106,7 +106,7 @@ finish_indexes() {
 footer() {
     cat <<EOF
 
-After migrating your configuration, set \`nix-bitcoin.configVersion = "$1";\`.
+After migrating your configuration, set \`bitcoinix.configVersion = "$1";\`.
 EOF
 }
 
@@ -511,7 +511,7 @@ sed -i '/^After migrating/d' "$page"
 reject_notes_change "missing final configVersion instruction" 'end with an instruction to set'
 sed -i 's/configVersion = "0.2.0"/configVersion = "0.1.0"/' "$page"
 reject_notes_change "wrong final configVersion" 'end with an instruction to set'
-sed -i '/^After migrating/i While in development, keep nix-bitcoin.configVersion = "0.1.0";\n' "$page"
+sed -i '/^After migrating/i While in development, keep bitcoinix.configVersion = "0.1.0";\n' "$page"
 reject_notes_change "development instruction alongside the correct footer" 'remove the development instruction'
 sed -i -e '/^Verify the backup before restarting\./d' \
     -e '/^#### Another migration/a Verify the backup before restarting.' "$page"

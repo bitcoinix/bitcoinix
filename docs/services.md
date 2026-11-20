@@ -17,11 +17,11 @@ nodeinfo | jq -r .bitcoinix.revision
 The `bitcoinix` entry is not a service: its `revision` is the bitcoinix git commit the
 system is built from, with a `-dirty` suffix for a checkout with uncommitted changes.
 It is `null` when the modules are imported without the bitcoinix flake; set
-`nix-bitcoin.revision` yourself in that case.
+`bitcoinix.revision` yourself in that case.
 
 The revision is baked into the `nodeinfo` script, so every bitcoinix update produces a
 new system generation and boot entry, even when no package changed; no service restarts.
-Set `nix-bitcoin.revision = null;` to opt out.
+Set `bitcoinix.revision = null;` to opt out.
 
 The entries of bitcoind, clightning, lnd, electrs, fulcrum, btcpayserver, rtl and mempool
 include the `version` of the package the service runs.
@@ -34,7 +34,7 @@ nodeinfo bitcoind lnd        # print only these entries
 See `nodeinfo --help`.
 
 `nodeinfo` and `jq` are included in the `secure-node.nix` preset. Without the preset,
-set `nix-bitcoin.nodeinfo.enable = true` and install `jq` for the example above.
+set `bitcoinix.nodeinfo.enable = true` and install `jq` for the example above.
 
 #### Troubleshoot onion addresses
 
@@ -138,7 +138,7 @@ for the options.
 
 The backup includes the data directories of bitcoind, lnd, Core Lightning, NBXplorer
 and BTCPay Server, dumps of the BTCPay Server databases, `/var/lib/tor`,
-`/var/lib/nixos` and, with `nix-bitcoin.generateSecrets`, the secrets directory.
+`/var/lib/nixos` and, with `bitcoinix.generateSecrets`, the secrets directory.
 It leaves out the blockchain and its indexes, unless `with-bulk-data` is set.
 
 #### Lightning channel databases
@@ -448,10 +448,10 @@ devices. Run the proxy in the host network namespace instead, and point it at th
    ```
    `lnconnect-clnrest` reads the onion address from the operator user's directory.
    The operator user gets access to it when the operator role is enabled
-   (`nix-bitcoin.operator.enable = true;`, which the secure-node preset sets).
+   (`bitcoinix.operator.enable = true;`, which the secure-node preset sets).
    With the role disabled, grant the access explicitly:
    ```nix
-   nix-bitcoin.onionAddresses.access.<operator name> = [ "clnrest" ];
+   bitcoinix.onionAddresses.access.<operator name> = [ "clnrest" ];
    ```
    `lnconnect-clnrest` also reads the admin rune, which only the `clightning` group can
    read. The operator role adds the operator user to this group. With the role disabled,
@@ -918,7 +918,7 @@ Also back up:
   The `services.backups` module includes it.
 - with `encrypt`, the password `$secretsDir/clightning-replication-password`. Without it,
   the copy can't be decrypted. `services.backups` includes the secrets dir only
-  with `nix-bitcoin.generateSecrets`.
+  with `bitcoinix.generateSecrets`.
 
 #### Remote target via SSHFS
 
@@ -947,7 +947,7 @@ Also back up:
    on the network path to impersonate the target and receive the database,
    in plaintext without `encrypt`.
 
-2. Deploy. With `nix-bitcoin.generateSecrets`, this creates the SSH key
+2. Deploy. With `bitcoinix.generateSecrets`, this creates the SSH key
    `$secretsDir/clightning-replication-ssh-key`.
    `clightning` starts only once the target accepts this key (step 3).
 

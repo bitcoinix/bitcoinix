@@ -165,7 +165,7 @@ c systemctl status bitcoind
 # Define a custom scenario
 ./run-tests.sh --scenario '{
   services.clightning.enable = true;
-  nix-bitcoin.nodeinfo.enable = true;
+  bitcoinix.nodeinfo.enable = true;
 }' container --run c nodeinfo
 ```
 

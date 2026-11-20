@@ -46,7 +46,7 @@ let
     };
     tor-socks = mkOption {
       type = types.nullOr types.str;
-      default = if cfg.tor.proxy then config.nix-bitcoin.torClientAddressWithPort else null;
+      default = if cfg.tor.proxy then config.bitcoinix.torClientAddressWithPort else null;
       description = "Socks proxy for connecting to Tor nodes";
     };
     certificate = {
@@ -86,8 +86,8 @@ let
     };
     package = mkOption {
       type = types.package;
-      default = config.nix-bitcoin.pkgs.lnd;
-      defaultText = "config.nix-bitcoin.pkgs.lnd";
+      default = config.bitcoinix.pkgs.lnd;
+      defaultText = "config.bitcoinix.pkgs.lnd";
       description = "The package providing lnd binaries.";
     };
     cli = mkOption {
@@ -129,10 +129,10 @@ let
   };
 
   cfg = config.services.lnd;
-  nbLib = config.nix-bitcoin.lib;
-  secretsDir = config.nix-bitcoin.secretsDir;
-  runAsUser = config.nix-bitcoin.runAsUserCmd;
-  lndinit = "${config.nix-bitcoin.pkgs.lndinit}/bin/lndinit";
+  nbLib = config.bitcoinix.lib;
+  secretsDir = config.bitcoinix.secretsDir;
+  runAsUser = config.bitcoinix.runAsUserCmd;
+  lndinit = "${config.bitcoinix.pkgs.lndinit}/bin/lndinit";
 
   bitcoind = config.services.bitcoind;
 
@@ -173,8 +173,8 @@ let
   # onion service forwards its own port. Custom addresses stay as they are,
   # because they may carry a port of their own.
   onionPortSuffix = optionalString
-    ((config.nix-bitcoin.onionServices.lnd.enable or false)
-      && config.nix-bitcoin.onionServices.lnd.public
+    ((config.bitcoinix.onionServices.lnd.enable or false)
+      && config.bitcoinix.onionServices.lnd.public
       && onionPeerMapping != null)
     ":${toString onionPeerMapping.port}";
   # The onion mapping to lnd's peer port. Other mappings may come first.
@@ -325,12 +325,12 @@ in {
       home = cfg.dataDir; # lnd creates .lnd dir in HOME
     };
     users.groups.${cfg.group} = {};
-    nix-bitcoin.operator = {
+    bitcoinix.operator = {
       groups = [ cfg.group ];
       allowRunAsUsers = [ cfg.user ];
     };
 
-    nix-bitcoin.secrets = {
+    bitcoinix.secrets = {
       lnd-wallet-password.user = cfg.user;
       lnd-key.user = cfg.user;
       lnd-cert.user = cfg.user;
@@ -339,7 +339,7 @@ in {
     # Advantages of manually pre-generating certs:
     # - Reduces dynamic state
     # - Enables deployment of a mesh of server plus client nodes with predefined certs
-    nix-bitcoin.generateSecretsCmds.lnd = ''
+    bitcoinix.generateSecretsCmds.lnd = ''
       makePasswordSecret lnd-wallet-password
       makeCert lnd '${nbLib.mkCertExtraAltNames cfg.certificate}'
     '';

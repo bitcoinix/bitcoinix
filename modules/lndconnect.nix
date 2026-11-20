@@ -72,7 +72,7 @@ let
       };
     };
 
-    nix-bitcoin.mkLndconnect = mkOption {
+    bitcoinix.mkLndconnect = mkOption {
       readOnly = true;
       default = mkLndconnect;
       description = ''
@@ -82,8 +82,8 @@ let
     };
   };
 
-  nbLib = config.nix-bitcoin.lib;
-  runAsUser = config.nix-bitcoin.runAsUserCmd;
+  nbLib = config.bitcoinix.lib;
+  runAsUser = config.bitcoinix.runAsUserCmd;
 
   inherit (config.services)
     lnd
@@ -132,8 +132,8 @@ let
       fi
     ''}
     url=$(
-      ${getExe config.nix-bitcoin.pkgs.lndconnect} --url \
-        ${optionalString enableOnion "--host=\"$(cat '${config.nix-bitcoin.onionAddresses.dataDir}/${onionService}')\""} \
+      ${getExe config.bitcoinix.pkgs.lndconnect} --url \
+        ${optionalString enableOnion "--host=\"$(cat '${config.bitcoinix.onionAddresses.dataDir}/${onionService}')\""} \
         --port=${toString port} \
         ${certArg} \
         --adminmacaroonpath='${authSecretPath}' \
@@ -163,11 +163,11 @@ let
 
   # Like onion-services.nix, give the operator onion access only when the
   # operator role is enabled, so that access stays an explicit choice
-  operator = config.nix-bitcoin.operator;
+  operator = config.bitcoinix.operator;
   operatorName = operator.name;
   # This is also true when a config grants the access explicitly
   operatorHasClnrestAccess =
-    elem "clnrest" (config.nix-bitcoin.onionAddresses.access.${operatorName} or []);
+    elem "clnrest" (config.bitcoinix.onionAddresses.access.${operatorName} or []);
   # The `users.users` attribute that defines the operator's login, which can
   # differ from the login name. null if no enabled account has that name.
   operatorAccount = findFirst (key:
@@ -207,7 +207,7 @@ in {
             };
           };
           # Two definitions, so that `operatorName == lnd.user` is not a duplicate key
-          nix-bitcoin.onionAddresses.access = mkMerge [
+          bitcoinix.onionAddresses.access = mkMerge [
             { ${lnd.user} = [ "lnd-rest" ]; }
             (mkIf operator.enable { ${operatorName} = [ "lnd-rest" ]; })
           ];
@@ -255,9 +255,9 @@ in {
                 `services.clightning.plugins.clnrest.lnconnect.onion` requires that the
                 operator user `${operatorName}` can read the clnrest onion address, because
                 `lnconnect-clnrest` reads it from that user's directory.
-                Set `nix-bitcoin.operator.enable = true`.
+                Set `bitcoinix.operator.enable = true`.
               '' + (if operatorExists then ''
-                Or add "clnrest" to `nix-bitcoin.onionAddresses.access.${operatorName}`.
+                Or add "clnrest" to `bitcoinix.onionAddresses.access.${operatorName}`.
                 To run `lnconnect-clnrest` as `${operatorName}` instead of root, also add
                 "${clightning.group}" to `users.users.${operatorAccount}.extraGroups`. That group
                 can read the admin rune and use the clightning RPC socket.
@@ -276,7 +276,7 @@ in {
             };
           };
           # This also allows nodeinfo to show the clnrest onion address
-          nix-bitcoin.onionAddresses.access = mkIf operator.enable { ${operatorName} = [ "clnrest" ]; };
+          bitcoinix.onionAddresses.access = mkIf operator.enable { ${operatorName} = [ "clnrest" ]; };
         })
       ])
     )

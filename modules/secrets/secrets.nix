@@ -2,7 +2,7 @@
 
 with lib;
 let
-  options.nix-bitcoin = {
+  options.bitcoinix = {
     secretsDir = mkOption {
       type = types.path;
       default = "/etc/nix-bitcoin-secrets";
@@ -13,7 +13,7 @@ let
       type = types.bool;
       default = false;
       description = ''
-        Set permissions for existing secrets in {option}`nix-bitcoin.secretsDir`
+        Set permissions for existing secrets in {option}`bitcoinix.secretsDir`
         before services are started.
 
         The directory is accessible only to root while permissions are set. A
@@ -38,14 +38,14 @@ let
       default = {};
       description = ''
         Bash expressions for generating secrets, run in
-        {option}`nix-bitcoin.secretsDir` by the sandboxed setup-secrets service.
+        {option}`bitcoinix.secretsDir` by the sandboxed setup-secrets service.
         Commands have no IP network access and can write only to the secrets
         directory and private temporary directories. Temporary files are not
         shared with other services. Commands requiring writable executable
         memory (such as JIT compilation) or setuid/setgid file modes are blocked.
 
         To generate all secrets separately, supply them before setup-secrets
-        starts and disable {option}`nix-bitcoin.generateSecrets`.
+        starts and disable {option}`bitcoinix.generateSecrets`.
       '';
     };
 
@@ -219,8 +219,8 @@ let
     };
   };
 
-  cfg = config.nix-bitcoin;
-  nbLib = config.nix-bitcoin.lib;
+  cfg = config.bitcoinix;
+  nbLib = config.bitcoinix.lib;
 in {
   inherit options;
 
@@ -233,9 +233,9 @@ in {
 
            - Use one of the deployment methods in ${toString ./../deployment}
 
-           - Set `nix-bitcoin.generateSecrets = true` to automatically generate secrets
+           - Set `bitcoinix.generateSecrets = true` to automatically generate secrets
 
-           - Set `nix-bitcoin.secretsSetupMethod = "manual"` if you want to manually setup secrets
+           - Set `bitcoinix.secretsSetupMethod = "manual"` if you want to manually setup secrets
         '';
       }
     ];
@@ -249,9 +249,9 @@ in {
       wantedBy = [ "multi-user.target" ];
     };
 
-    nix-bitcoin.setupSecrets = mkIf cfg.generateSecrets true;
+    bitcoinix.setupSecrets = mkIf cfg.generateSecrets true;
 
-    nix-bitcoin.secretsSetupMethod = mkIf cfg.setupSecrets "setup-secrets";
+    bitcoinix.secretsSetupMethod = mkIf cfg.setupSecrets "setup-secrets";
 
     # Operation of this service:
     #  - Set owner and permissions for all used secrets

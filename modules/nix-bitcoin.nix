@@ -3,7 +3,7 @@
 with lib;
 {
   options = {
-    nix-bitcoin = {
+    bitcoinix = {
       pkgs = mkOption {
         type = types.attrs;
         default = (import ../pkgs { inherit pkgs; }).modulesPkgs;
@@ -12,7 +12,7 @@ with lib;
           let
             final = foldl (prev: overlay:
               prev // (overlay prev final)
-            ) base options.nix-bitcoin.pkgOverlays.definitions;
+            ) base options.bitcoinix.pkgOverlays.definitions;
           in
             final;
       };

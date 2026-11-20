@@ -3,7 +3,7 @@
 with lib;
 let
   options = {
-    nix-bitcoin.nodeinfo = {
+    bitcoinix.nodeinfo = {
       enable = mkEnableOption "nodeinfo";
 
       program = mkOption {
@@ -34,9 +34,9 @@ let
     };
   };
 
-  cfg = config.nix-bitcoin.nodeinfo;
-  nbLib = config.nix-bitcoin.lib;
-  nbPkgs = config.nix-bitcoin.pkgs;
+  cfg = config.bitcoinix.nodeinfo;
+  nbLib = config.bitcoinix.lib;
+  nbPkgs = config.bitcoinix.pkgs;
 
   # The packages whose version nodeinfo shows for each service
   servicePackages = {
@@ -68,7 +68,7 @@ let
                         help="print the bitcoinix revision as JSON and exit")
     args = parser.parse_args()
 
-    revision = ${pyStr config.nix-bitcoin.revision}
+    revision = ${pyStr config.bitcoinix.revision}
     if args.version:
         print(json.dumps(revision))
         exit(0)
@@ -96,7 +96,7 @@ let
         "revision": revision,
     }
     available = ["bitcoinix"]
-    operator = "${config.nix-bitcoin.operator.name}"
+    operator = "${config.bitcoinix.operator.name}"
 
     def get_onion_address(name, port):
         path = f"/var/lib/onion-addresses/{operator}/{name}"
@@ -174,9 +174,9 @@ in {
   config = mkIf cfg.enable {
     environment.systemPackages = [ script ];
 
-    nix-bitcoin.operator.enable = true;
+    bitcoinix.operator.enable = true;
 
-    nix-bitcoin.nodeinfo.services = with nodeinfoLib; {
+    bitcoinix.nodeinfo.services = with nodeinfoLib; {
       bitcoind = mkInfo "";
       clightning = mkInfo ''
         info["nodeid"] = shell("lightning-cli getinfo | ${pkgs.jq}/bin/jq -r '.id'")

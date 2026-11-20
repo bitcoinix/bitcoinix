@@ -99,10 +99,10 @@ let
   };
 
   cfg = config.services.clightning.replication;
-  nbLib = config.nix-bitcoin.lib;
+  nbLib = config.bitcoinix.lib;
   inherit (config.services) clightning;
 
-  secretsDir = config.nix-bitcoin.secretsDir;
+  secretsDir = config.bitcoinix.secretsDir;
   network = nbLib.networkName { mainnet = "bitcoin"; };
   user = clightning.user;
   group = clightning.group;
@@ -256,7 +256,7 @@ in {
       };
     };
 
-    nix-bitcoin = mkMerge [
+    bitcoinix = mkMerge [
       (mkIf useSshfs {
         secrets.clightning-replication-ssh-key = {
           user = user;

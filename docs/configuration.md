@@ -233,7 +233,7 @@ You can use the same approach to allow connections to other services.
 
 ## Network namespace isolation
 
-`nix-bitcoin.netns-isolation` is experimental and disabled by default; the secure-node
+`bitcoinix.netns-isolation` is experimental and disabled by default; the secure-node
 preset doesn't enable it. It runs each service listed in
 [netns-isolation.nix](https://github.com/bitcoinix/bitcoinix/blob/master/modules/netns-isolation.nix)
 in its own network namespace. This separates the services from each other and from the
@@ -262,7 +262,7 @@ and services without `tor.enforce` can reach your LAN. With it enabled:
   A later change of the host setting doesn't reach existing namespaces, and a switch
   that only changes this setting doesn't recreate them. Reboot after you change this setting.
 - On the host, connect to a service at its namespace address,
-  `config.nix-bitcoin.netns-isolation.netns.<service>.address`, not at `127.0.0.1`.
+  `config.bitcoinix.netns-isolation.netns.<service>.address`, not at `127.0.0.1`.
 - It can't be combined with a [bitcoind on another node](#use-bitcoind-from-another-node),
   the WireGuard preset or firewalld. It needs the iptables firewall backend and a firewall
   package with `bin/iptables`. `networking.nftables` can stay enabled if you set
@@ -375,7 +375,7 @@ services.bitcoind = {
 
 # With the secure-node preset or `enable-tor.nix`: don't create an onion service
 # on this node that forwards to the other node.
-nix-bitcoin.onionServices.bitcoind.enable = false;
+bitcoinix.onionServices.bitcoind.enable = false;
 ```
 
 With Tor enforcement (`services.<service>.tor.enforce`, enabled by the secure-node
@@ -436,9 +436,9 @@ $secretsDir/bitcoin-rpcpassword-public
 # $secretsDir/bitcoin-rpcpassword-mempool
 # $secretsDir/bitcoin-rpcpassword-btcpayserver
 ```
-Without `nix-bitcoin.generateSecrets`, `nix-bitcoin.setupSecrets` also checks a
+Without `bitcoinix.generateSecrets`, `bitcoinix.setupSecrets` also checks a
 `bitcoin-HMAC-<user>` file for each of these users. This node doesn't use them, so
-create them empty and set `nix-bitcoin.secrets.bitcoin-HMAC-<user>.allowEmpty = true`,
+create them empty and set `bitcoinix.secrets.bitcoin-HMAC-<user>.allowEmpty = true`,
 or write the HMAC of each password: the part after `rpcauth=<username>:` in the
 line that Bitcoin Core's `share/rpcauth/rpcauth.py` prints.
 See: [Secrets dir](#secrets-dir)
@@ -461,7 +461,7 @@ Note: This only works for services that are not required by other active service
 
 # Write to /run or /dev/shm from a service hook
 
-Most bitcoinix services (those that use `nix-bitcoin.lib.defaultHardening`, like
+Most bitcoinix services (those that use `bitcoinix.lib.defaultHardening`, like
 `bitcoind`, `clightning` and `lnd`) see `/run` and `/dev` as read-only.
 A custom `preStart`, `postStart` or `ExecStartPost` command in these services that
 writes there fails with `Read-only file system`.
@@ -481,22 +481,22 @@ it as root outside the sandbox.
 
 ## Secrets dir
 
-The secrets dir is set by option `nix-bitcoin.secretsDir` and has the
+The secrets dir is set by option `bitcoinix.secretsDir` and has the
 following default values:
 
 - If you're using the krops deployment method: `/var/src/secrets`
 
 - Otherwise: `/etc/nix-bitcoin-secrets`
 
-With `nix-bitcoin.setupSecrets = true`, `setup-secrets` sets the declared secrets'
+With `bitcoinix.setupSecrets = true`, `setup-secrets` sets the declared secrets'
 owners and permissions and restricts undeclared files to root. A declared secret
 that is missing or isn't a regular file fails setup, and so does an empty one,
-unless its `nix-bitcoin.secrets.<name>.allowEmpty` is set. `setup-secrets` makes the
+unless its `bitcoinix.secrets.<name>.allowEmpty` is set. `setup-secrets` makes the
 directory accessible only to root while it runs; if setup fails, services lose
 access to all secrets there until a successful run restores directory mode `0751`.
 
-`nix-bitcoin.generateSecrets = true` enables setup and generates secrets in the
-same sandbox. Custom `nix-bitcoin.generateSecretsCmds` have no IP network access
+`bitcoinix.generateSecrets = true` enables setup and generates secrets in the
+same sandbox. Custom `bitcoinix.generateSecretsCmds` have no IP network access
 and can write only to the secrets directory and private temporary directories.
 Store final secrets inside the secrets directory, including secrets supplied by
 another tool, rather than linking to external files. See the
@@ -507,7 +507,7 @@ Tools like agenix install secrets as symlinks to files outside the secrets direc
 by default. `setup-secrets` can't set the owner and permissions of these files, so
 setup fails. With agenix, set `symlink = false` for these secrets, and set their
 `owner`, `group` and `mode` to the `user`, `group` and `permissions` of
-`nix-bitcoin.secrets.<name>`. Or disable
-`nix-bitcoin.generateSecrets` and `nix-bitcoin.setupSecrets`, set
-`nix-bitcoin.secretsSetupMethod = "manual"`, and set the owners and permissions
-declared in `nix-bitcoin.secrets` yourself.
+`bitcoinix.secrets.<name>`. Or disable
+`bitcoinix.generateSecrets` and `bitcoinix.setupSecrets`, set
+`bitcoinix.secretsSetupMethod = "manual"`, and set the owners and permissions
+declared in `bitcoinix.secrets` yourself.

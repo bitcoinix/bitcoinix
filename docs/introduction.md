@@ -10,7 +10,8 @@ on dedicated hardware, in a virtual machine or in a container. You don't need pr
 experience with Nix. bitcoinix is used in production.
 
 bitcoinix is a community fork of [nix-bitcoin](https://github.com/fort-nix/nix-bitcoin), which
-was archived in August 2026. The NixOS options keep the `nix-bitcoin.*` prefix, so existing
+was archived in August 2026. The NixOS options live under
+`bitcoinix.*`. The old `nix-bitcoin.*` prefix still works as a deprecated alias, so existing
 configurations keep working.
 
 ## Features
@@ -38,7 +39,7 @@ All nixpkgs packages come from the single `nixpkgs` input, which tracks `nixos-u
 Channel `local` packages are built by bitcoinix from pinned sources, except `hwi`, which wraps
 nixpkgs' package. The flake NixOS module uses the locked unstable package set by default,
 including for local builds. Non-flake module imports and
-`nix-bitcoin.useVersionLockedPkgs = false` use your system's unstable nixpkgs instead.
+`bitcoinix.useVersionLockedPkgs = false` use your system's unstable nixpkgs instead.
 Overriding bitcoinix's `nixpkgs` input also replaces its tested pin. In these setups,
 service versions depend on your chosen revision; review the
 [package migration guidance](upgrading/0.2.0.md) before updating it.
@@ -47,7 +48,7 @@ service versions depend on your chosen revision; review the
 
 * Only the services you enable and their dependencies are installed.
 * Each service runs as its own user and is confined with systemd sandboxing. Network namespace
-  isolation (`nix-bitcoin.netns-isolation`) can further restrict which services can reach each other.
+  isolation (`bitcoinix.netns-isolation`) can further restrict which services can reach each other.
 * The `secure-node.nix` preset sends outgoing connections through Tor, adds onion services for
   incoming connections, enables the firewall, turns off SSH password login and replaces sudo
   with doas.

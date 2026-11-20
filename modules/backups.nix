@@ -19,9 +19,9 @@ let
         copy of them can lose all funds in their channels. See the Backups section
         in docs/services.md.
 
-        With {option}`nix-bitcoin.generateSecrets`, the backups are encrypted with
+        With {option}`bitcoinix.generateSecrets`, the backups are encrypted with
         the generated password `backup-encryption-password` in
-        {option}`nix-bitcoin.secretsDir`. The backups include it, but you need it
+        {option}`bitcoinix.secretsDir`. The backups include it, but you need it
         to decrypt them. Keep a copy off the node.
       '';
     };
@@ -65,7 +65,7 @@ let
   };
 
   cfg = config.services.backups;
-  nbLib = config.nix-bitcoin.lib;
+  nbLib = config.bitcoinix.lib;
 
   # duplicity matches paths as strings, so resolve `.` and `..`
   normalisePath = path: "/" + concatStringsSep "/" (foldl' (parts: part:
@@ -125,7 +125,7 @@ let
     ${optionalString cfg.with-bulk-data "${config.services.electrs.dataDir}"}
     ${config.services.nbxplorer.dataDir}
     ${config.services.btcpayserver.dataDir}
-    ${optionalString config.nix-bitcoin.generateSecrets "${config.nix-bitcoin.secretsDir}"}
+    ${optionalString config.bitcoinix.generateSecrets "${config.bitcoinix.secretsDir}"}
     /var/lib/tor
     /var/lib/nixos
 
@@ -160,7 +160,7 @@ let
     # bitcoin-cli send any file it reads as credentials to any address.
     # bitcoind writes its cookie to /run/bitcoind, see ./bitcoind.nix.
     cli = concatStringsSep " " [
-      "${config.nix-bitcoin.pkgs.bitcoind}/bin/bitcoin-cli -noconf"
+      "${config.bitcoinix.pkgs.bitcoind}/bin/bitcoin-cli -noconf"
       "-rpcconnect=${bitcoind.rpc.address} -rpcport=${toString bitcoind.rpc.port}"
       "-rpccookiefile=/run/bitcoind/.cookie"
     ];
@@ -216,7 +216,7 @@ in {
         fullIfOlderThan = mkDefault "1M";
         targetUrl = cfg.destination;
         frequency = cfg.frequency;
-        secretFile = "${config.nix-bitcoin.secretsDir}/backup-encryption-env";
+        secretFile = "${config.bitcoinix.secretsDir}/backup-encryption-env";
       };
 
       systemd.services.duplicity = {
@@ -267,12 +267,12 @@ in {
         databases = cfg.postgresqlDatabases;
       };
 
-      nix-bitcoin.secrets.backup-encryption-env = {
+      bitcoinix.secrets.backup-encryption-env = {
         user = "root";
         # A supplied env file may set nothing, e.g. with duplicity's `--no-encryption`
         allowEmpty = true;
       };
-      nix-bitcoin.generateSecretsCmds.backups = ''
+      bitcoinix.generateSecretsCmds.backups = ''
         makePasswordSecret backup-encryption-password
         if [[ backup-encryption-password -nt backup-encryption-env ]]; then
            backupPassphrase=$(<backup-encryption-password)

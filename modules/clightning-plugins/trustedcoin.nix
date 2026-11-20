@@ -17,8 +17,8 @@ let cfg = config.services.clightning.plugins.trustedcoin; in
 
     package = mkOption {
       type = types.package;
-      default = config.nix-bitcoin.pkgs.trustedcoin;
-      defaultText = "config.nix-bitcoin.pkgs.trustedcoin";
+      default = config.bitcoinix.pkgs.trustedcoin;
+      defaultText = "config.bitcoinix.pkgs.trustedcoin";
       description = "The package providing trustedcoin binaries.";
     };
 
@@ -48,7 +48,7 @@ let cfg = config.services.clightning.plugins.trustedcoin; in
     systemd.services.clightning.environment = mkIf (cfg.tor.proxy) {
       HTTPS_PROXY = let
         clnProxy = config.services.clightning.proxy;
-        proxy = if clnProxy != null then clnProxy else config.nix-bitcoin.torClientAddressWithPort;
+        proxy = if clnProxy != null then clnProxy else config.bitcoinix.torClientAddressWithPort;
       in
         "socks5://${proxy}";
     };

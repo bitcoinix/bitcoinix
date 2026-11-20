@@ -5,7 +5,7 @@ let
   # Included in all scenarios
   baseConfig = { config, pkgs, ... }: with lib; let
     cfg = config.services;
-    nbLib = config.nix-bitcoin.lib;
+    nbLib = config.bitcoinix.lib;
     inherit (nbLib.test) mkIfTest;
   in {
     imports = [
@@ -13,12 +13,12 @@ let
       nixBitcoinModule
       {
         # Features required by the Python test suite
-        nix-bitcoin.secretsDir = "/secrets";
-        nix-bitcoin.generateSecrets = true;
-        nix-bitcoin.operator.enable = true;
+        bitcoinix.secretsDir = "/secrets";
+        bitcoinix.generateSecrets = true;
+        bitcoinix.operator.enable = true;
         environment.systemPackages = with pkgs; [ jq ];
         # A fixed value, so that a new commit doesn't change every test derivation
-        nix-bitcoin.revision = "0123456789abcdef0123456789abcdef01234567";
+        bitcoinix.revision = "0123456789abcdef0123456789abcdef01234567";
       }
     ];
 
@@ -49,11 +49,11 @@ let
       tests.i2pd = cfg.bitcoind.enable && cfg.bitcoind.i2p != false;
       test.data.i2pd = optionalAttrs config.tests.i2pd {
         inherit (cfg.i2pd.settings.sam) address port;
-        netns = config.nix-bitcoin.netns-isolation.enable;
+        netns = config.bitcoinix.netns-isolation.enable;
       };
 
       tests.secrets-no-argv = cfg.bitcoind.enable;
-      test.data.secrets-no-argv.generator = "${config.nix-bitcoin.generateSecretsScript}";
+      test.data.secrets-no-argv.generator = "${config.bitcoinix.generateSecretsScript}";
 
       tests.rpc-whitelist = cfg.bitcoind.enable;
       # Which services are enabled decides which RPC users exist and what they may call
@@ -107,7 +107,7 @@ let
         ];
         available = subtractLists removed (builtins.attrNames plugins);
         enabled = builtins.filter (plugin: plugins.${plugin}.enable) available;
-        nbPkgs = config.nix-bitcoin.pkgs;
+        nbPkgs = config.bitcoinix.pkgs;
         pluginPkgs = nbPkgs.clightning-plugins // {
           clboss.path = "${plugins.clboss.package}/bin/clboss";
           clnrest = plugins.clnrest.package;
@@ -115,17 +115,17 @@ let
         };
       in map (plugin: pluginPkgs.${plugin}.path) enabled;
 
-      # Services that use `nix-bitcoin.lib.defaultHardening`, with their `ReadOnlyPaths`
+      # Services that use `bitcoinix.lib.defaultHardening`, with their `ReadOnlyPaths`
       tests.hardening-ro-paths = true;
       test.data.hardening-ro-paths = let
         # This syscall blocklist entry is specific to `defaultHardening`
-        marker = builtins.elemAt config.nix-bitcoin.lib.defaultHardening.SystemCallFilter 1;
+        marker = builtins.elemAt config.bitcoinix.lib.defaultHardening.SystemCallFilter 1;
         usesDefaultHardening = service:
           builtins.elem marker (toList (service.serviceConfig.SystemCallFilter or []));
       in mapAttrs (_: service: toList (service.serviceConfig.ReadOnlyPaths or []))
         (filterAttrs (_: usesDefaultHardening) config.systemd.services);
 
-      # Services restricted to local addresses (`nix-bitcoin.lib.allowLocalIPAddresses`)
+      # Services restricted to local addresses (`bitcoinix.lib.allowLocalIPAddresses`)
       tests.tor-enforce = true;
       test.data.tor-enforce = let
         # Select units by either part of the restriction, so that a unit that
@@ -133,7 +133,7 @@ let
         isRestricted = service: let serviceConfig = service.serviceConfig; in
           elem "127.0.0.1/32" (toList (serviceConfig.IPAddressAllow or []))
           || elem "/run/nscd" (toList (serviceConfig.InaccessiblePaths or []));
-        netns = config.nix-bitcoin.netns-isolation;
+        netns = config.bitcoinix.netns-isolation;
       in {
         selected = attrNames (filterAttrs (_: isRestricted) config.systemd.services);
         # The units that must be restricted, independent of how they're selected
@@ -153,7 +153,7 @@ let
       # also when no service enforces Tor
       systemd.services.nb-tor-enforce-custom = mkIfTest "tor-enforce" {
         wantedBy = [ "multi-user.target" ];
-        serviceConfig = config.nix-bitcoin.lib.allowLocalIPAddresses // {
+        serviceConfig = config.bitcoinix.lib.allowLocalIPAddresses // {
           IPAddressDeny = "any";
           ExecStart = "${pkgs.coreutils}/bin/sleep infinity";
         };
@@ -179,7 +179,7 @@ let
         extraCurrency = mkDefault "CHF";
       };
       # Use a simple, non-random password for manual web interface tests
-      nix-bitcoin.generateSecretsCmds.rtl = mkIf cfg.rtl.enable (mkForce ''
+      bitcoinix.generateSecretsCmds.rtl = mkIf cfg.rtl.enable (mkForce ''
         echo a > rtl-password
       '');
 
@@ -217,20 +217,20 @@ let
         };
       };
 
-      nix-bitcoin.onionServices.lnd.public = true;
+      bitcoinix.onionServices.lnd.public = true;
       test.data.lnd-public-onion = let
-        onion = config.nix-bitcoin.onionServices.lnd;
+        onion = config.bitcoinix.onionServices.lnd;
         # The mapping to lnd's peer port, picked as in modules/lnd.nix
         mapping = findFirst (mapping: (mapping.target.port or mapping.port) == cfg.lnd.port) null
           (config.services.tor.relay.onionServices.lnd.map or []);
       in if cfg.lnd.enable && onion.enable && onion.public && mapping != null then {
-        addressFile = "${config.nix-bitcoin.onionAddresses.dataDir}/services/lnd";
+        addressFile = "${config.bitcoinix.onionAddresses.dataDir}/services/lnd";
         inherit (mapping) port;
       } else null;
 
-      tests.onion-addresses = config.nix-bitcoin.onionAddresses.access != {};
+      tests.onion-addresses = config.bitcoinix.onionAddresses.access != {};
       test.data.onion-addresses = let
-        inherit (config.nix-bitcoin) onionAddresses;
+        inherit (config.bitcoinix) onionAddresses;
       in {
         inherit (onionAddresses) access dataDir;
         serviceUsers = genAttrs onionAddresses.services (service:
@@ -246,7 +246,7 @@ let
       # lndconnect without onion must leave the REST servers on localhost.
       # With netns-isolation, the addresses are set by netns-isolation.
       tests.lndconnect-local-bind =
-        !config.nix-bitcoin.netns-isolation.enable
+        !config.bitcoinix.netns-isolation.enable
         && config.test.data.lndconnect-local-bind != [];
       test.data.lndconnect-local-bind =
         optional (with cfg.lnd; enable && lndconnect.enable && !lndconnect.onion) {
@@ -267,7 +267,7 @@ let
           file = "${cfg.bitcoind.dataDir}/bitcoin.conf";
           mode = "640";
           inherit (cfg.bitcoind) user;
-          planter = config.nix-bitcoin.operator.name;
+          planter = config.bitcoinix.operator.name;
         }
         # Only clightning can write its data dir. Older versions let group
         # members write it, so a symlink can be left from then.
@@ -319,11 +319,11 @@ let
       services.btcpayserver.lightningBackend = mkDefault "lnd";
       test.data.btcpayserver = { inherit (cfg.btcpayserver) lightningBackend; };
 
-      tests.nodeinfo = config.nix-bitcoin.nodeinfo.enable;
+      tests.nodeinfo = config.bitcoinix.nodeinfo.enable;
       # The version of the package each enabled service runs
       test.data.nodeinfo-versions = mapAttrs (_: pkg: pkg.version)
         (filterAttrs (name: _: cfg.${name}.enable) {
-          inherit (config.nix-bitcoin.pkgs) bitcoind electrs fulcrum rtl;
+          inherit (config.bitcoinix.pkgs) bitcoind electrs fulcrum rtl;
           clightning = cfg.clightning.package;
           lnd = cfg.lnd.package;
           btcpayserver = cfg.btcpayserver.package;
@@ -332,9 +332,9 @@ let
 
       tests.backups = cfg.backups.enable;
 
-      tests.setup-secrets = config.nix-bitcoin.setupSecrets;
+      tests.setup-secrets = config.bitcoinix.setupSecrets;
       test.data.setup-secrets-declared = let
-        names = builtins.attrNames config.nix-bitcoin.secrets;
+        names = builtins.attrNames config.bitcoinix.secrets;
       in if names == [] then null else builtins.head names;
 
       # To test that unused secrets are made inaccessible by 'setup-secrets'
@@ -383,7 +383,7 @@ let
 
     # Supply secrets before setup-secrets, which must not generate them itself.
     setup-secrets = { config, ... }: {
-      nix-bitcoin = {
+      bitcoinix = {
         generateSecrets = mkForce false;
         setupSecrets = true;
         secrets = genAttrs [ "first" "second" "empty" ] (name: {
@@ -403,7 +403,7 @@ let
         script = ''
           install -d -m 0700 /secrets
           cd /secrets
-          ${config.nix-bitcoin.generateSecretsScript}
+          ${config.bitcoinix.generateSecretsScript}
           printf first-secret > first
           printf second-secret > second
           touch empty
@@ -439,7 +439,7 @@ let
       services.btcpayserver.enable = true;
       services.backups.enable = true;
 
-      nix-bitcoin.nodeinfo.enable = true;
+      bitcoinix.nodeinfo.enable = true;
 
       services.hardware-wallets = {
         trezor = true;
@@ -455,7 +455,7 @@ let
       tests.secure-node = true;
       tests.restart-bitcoind = true;
 
-      nix-bitcoin.onionServices.mempool-frontend.enable = true;
+      bitcoinix.onionServices.mempool-frontend.enable = true;
 
       # Stop electrs from spamming the test log with 'WARN - wait until IBD is over' messages
       tests.stop-electrs = true;
@@ -510,8 +510,8 @@ let
     };
 
     netnsBase = { config, pkgs, ... }: {
-      nix-bitcoin.netns-isolation.enable = true;
-      test.data.netns = config.nix-bitcoin.netns-isolation.netns;
+      bitcoinix.netns-isolation.enable = true;
+      test.data.netns = config.bitcoinix.netns-isolation.netns;
       tests.netns-isolation = true;
       environment.systemPackages = [ pkgs.fping ];
       # The netns-isolation test checks that the service namespaces inherit this
@@ -581,12 +581,12 @@ let
     # An operator account without the operator role, set up as docs/upgrading/0.1.6.md
     # describes: explicit clnrest onion access and the clightning group
     lnconnectNoOperatorRole = {
-      nix-bitcoin.operator.enable = mkForce false;
+      bitcoinix.operator.enable = mkForce false;
       users.users.operator = {
         isNormalUser = true;
         extraGroups = [ "clightning" ];
       };
-      nix-bitcoin.onionAddresses.access.operator = [ "clnrest" ];
+      bitcoinix.onionAddresses.access.operator = [ "clnrest" ];
       services.clightning = {
         enable = true;
         plugins.clnrest = {
@@ -632,7 +632,7 @@ let
     i2p = {
       imports = [ scenarios.netnsBase scenarios.i2pLocal ];
       # Exercise configurable SAM ports and bridge addresses too.
-      nix-bitcoin.netns-isolation.addressblock = 7;
+      bitcoinix.netns-isolation.addressblock = 7;
       services.i2pd.settings.sam.port = 7657;
     };
 

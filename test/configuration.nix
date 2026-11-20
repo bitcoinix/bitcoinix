@@ -6,7 +6,7 @@ let
     imports = [ nixBitcoinModule ];
     boot.isContainer = true;
     system.stateVersion = "26.05";
-    nix-bitcoin.secretsSetupMethod = "manual";
+    bitcoinix.secretsSetupMethod = "manual";
   };
   evaluate = module: (base.extendModules { modules = [ module ]; }).config;
   failedAssertions = config:
@@ -102,22 +102,22 @@ let
     imports = [ lightning ];
     services.lnd.port = 9736;
     services.electrs.enable = true;
-    nix-bitcoin.netns-isolation.enable = true;
+    bitcoinix.netns-isolation.enable = true;
   };
   netnsNftables = evaluate {
     services.bitcoind.enable = true;
-    nix-bitcoin.netns-isolation.enable = true;
+    bitcoinix.netns-isolation.enable = true;
     networking.nftables.enable = true;
   };
   netnsNftablesIptablesBackend = evaluate {
     services.bitcoind.enable = true;
-    nix-bitcoin.netns-isolation.enable = true;
+    bitcoinix.netns-isolation.enable = true;
     networking.nftables.enable = true;
     networking.firewall.backend = "iptables";
   };
   netnsNftablesIptablesPackage = evaluate {
     services.bitcoind.enable = true;
-    nix-bitcoin.netns-isolation.enable = true;
+    bitcoinix.netns-isolation.enable = true;
     networking.nftables.enable = true;
     networking.firewall.backend = "iptables";
     networking.firewall.package = pkgs.iptables;
@@ -266,7 +266,7 @@ let
     imports = [ ../modules/presets/enable-tor.nix ];
     services.electrs.enable = true;
     services.charge-lnd.enable = true;
-    nix-bitcoin.netns-isolation = { enable = true; addressblock = 7; };
+    bitcoinix.netns-isolation = { enable = true; addressblock = 7; };
   };
   torEnforcedAvahi = evaluate {
     imports = [ ../modules/presets/enable-tor.nix ];
@@ -312,7 +312,7 @@ let
     boot.loader.grub.enable = false;
     fileSystems."/" = { device = "/dev/vda"; fsType = "ext4"; };
     system.stateVersion = "26.05";
-    nix-bitcoin.secretsSetupMethod = "manual";
+    bitcoinix.secretsSetupMethod = "manual";
     services.hardware-wallets = { ledger = true; trezor = true; trezorBridge = true; };
   }).config;
   trezorBridge = module: let config = evaluate module; in {
@@ -358,7 +358,7 @@ let
   lndconnectNoOperator = evaluate lndconnectOnion;
   lndconnectWithOperator = evaluate {
     imports = [ lndconnectOnion ];
-    nix-bitcoin.operator.enable = true;
+    bitcoinix.operator.enable = true;
   };
   lnconnectNoOperator = evaluate {
     services.clightning = {
@@ -370,7 +370,7 @@ let
   operatorAccountOnion = {
     imports = [ lndconnectOnion ];
     users.users.alice.isNormalUser = true;
-    nix-bitcoin.operator.name = "alice";
+    bitcoinix.operator.name = "alice";
     services.clightning = {
       enable = true;
       # Don't conflict with the lnd p2p port
@@ -383,7 +383,7 @@ let
   operatorRenamedAccountRoleDisabled = evaluate {
     imports = [ lndconnectOnion ];
     users.users.account = { name = "alice"; isNormalUser = true; };
-    nix-bitcoin.operator.name = "alice";
+    bitcoinix.operator.name = "alice";
     services.clightning = {
       inherit (operatorAccountOnion.services.clightning) enable port plugins;
     };
@@ -391,19 +391,19 @@ let
   # The migration that docs/upgrading/0.1.6.md describes for a disabled role
   operatorAccountGrant = {
     imports = [ operatorAccountOnion ];
-    nix-bitcoin.onionAddresses.access.alice = [ "clnrest" ];
+    bitcoinix.onionAddresses.access.alice = [ "clnrest" ];
     users.users.alice.extraGroups = [ "clightning" ];
   };
   operatorAccountExplicitAccess = evaluate operatorAccountGrant;
   # Whether a config written for the last release passes the versioning check
   passesVersionCheckAt = version: module: versioningErrors (evaluate {
     imports = [ module ];
-    nix-bitcoin.configVersion = version;
+    bitcoinix.configVersion = version;
   }) == [];
   hasNoticeAt = version: phrase: module: lib.any (lib.hasInfix phrase) (evaluate {
     imports = [ module ];
-    nix-bitcoin.configVersion = version;
-  }).nix-bitcoin.versioning.incompatibleChanges;
+    bitcoinix.configVersion = version;
+  }).bitcoinix.versioning.incompatibleChanges;
   # Check individual notices even when the unstable migration also applies.
   hasNotice = hasNoticeAt "0.1.5";
   hasOperatorAccessNotice = hasNotice "lnconnect-clnrest now gives the operator user";
@@ -430,23 +430,23 @@ let
     lib.getAttrs sshPasswordOptions (evaluate module).services.openssh.settings;
   # A user that exists only outside `users.users`, for example via useradd or LDAP
   onionAccessExternalUser = {
-    nix-bitcoin.onionAddresses.access.external-user = [ "bitcoind" ];
+    bitcoinix.onionAddresses.access.external-user = [ "bitcoind" ];
   };
   onionAccessUnknownUser = evaluate {
-    nix-bitcoin.onionAddresses.access."no-such-user" = [ "bitcoind" ];
+    bitcoinix.onionAddresses.access."no-such-user" = [ "bitcoind" ];
   };
   # The access key is a login name, which can differ from the attribute name
   onionAccessLoginName = {
     users.users.account = { name = "renamed-user"; isNormalUser = true; };
-    nix-bitcoin.onionAddresses.access."renamed-user" = [ "bitcoind" ];
+    bitcoinix.onionAddresses.access."renamed-user" = [ "bitcoind" ];
   };
   onionAccessRenamedUser = evaluate onionAccessLoginName;
   onionAccessDisabledUser = evaluate {
     users.users.disabled-user = { isNormalUser = true; enable = false; };
-    nix-bitcoin.onionAddresses.access."disabled-user" = [ "bitcoind" ];
+    bitcoinix.onionAddresses.access."disabled-user" = [ "bitcoind" ];
   };
   getOnionAccessUsers = config:
-    lib.sort lib.lessThan (builtins.attrNames config.nix-bitcoin.onionAddresses.access);
+    lib.sort lib.lessThan (builtins.attrNames config.bitcoinix.onionAddresses.access);
   getBitcoinDefaults = config: with config.services.bitcoind; {
     inherit network port listen;
     rpc = { inherit (rpc) address port allowip; };
@@ -559,7 +559,7 @@ let
       enable = true;
       replication = { enable = true; sshfs.destination = "user@host:dir"; };
     };
-  }).nix-bitcoin.generateSecretsScript;
+  }).bitcoinix.generateSecretsScript;
 
   # The preset's preStart lines, run by the check below against a scratch data dir
   remoteRpcUser = "rpc$USER'$(id)";
@@ -568,7 +568,7 @@ let
       inherit lib pkgs;
       config = {
         services.bitcoind = { dataDir = "@dataDir@"; rpc.users.privileged.name = remoteRpcUser; };
-        nix-bitcoin.secretsDir = "@secretsDir@";
+        bitcoinix.secretsDir = "@secretsDir@";
       };
     }).systemd.services.bitcoind.preStart.content;
 
@@ -577,34 +577,74 @@ let
     inherit (case) expected;
   }) restCases // extraConfigTests // pluginsConfigTests // pluginMigrationTests // {
     testLockedPackagesDefault = {
-      expr = bitcoin.nix-bitcoin.useVersionLockedPkgs;
+      expr = bitcoin.bitcoinix.useVersionLockedPkgs;
       expected = true;
+    };
+    # Configs that still use the old `nix-bitcoin.*` prefix
+    testOldOptionPrefix = {
+      expr = let
+        config = evaluate {
+          nix-bitcoin = {
+            secretsDir = "/old-prefix";
+            operator = { enable = true; name = "alice"; };
+            setup-secrets = true;
+            secretsSetupMethod = lib.mkForce "setup-secrets";
+          };
+        };
+        renameWarnings = builtins.filter (lib.hasInfix "options were renamed to `bitcoinix.*`")
+          config.warnings;
+      in {
+        inherit (config.bitcoinix) secretsDir setupSecrets;
+        operator = config.bitcoinix.operator.name;
+        read = config.nix-bitcoin.secretsDir;
+        warnings = builtins.length renameWarnings;
+        noWarning = builtins.any (lib.hasInfix "options were renamed to `bitcoinix.*`")
+          modulesOnly.warnings;
+      };
+      expected = {
+        secretsDir = "/old-prefix";
+        setupSecrets = true;
+        operator = "alice";
+        read = "/old-prefix";
+        warnings = 1;
+        noWarning = false;
+      };
+    };
+    # Definitions under the old prefix keep their priority
+    testOldOptionPrefixPriority = {
+      expr = map (old: (evaluate {
+        imports = [
+          { bitcoinix.secretsDir = "/new-prefix"; }
+          { nix-bitcoin.secretsDir = old; }
+        ];
+      }).bitcoinix.secretsDir) [ (lib.mkDefault "/old-prefix") (lib.mkForce "/old-prefix") ];
+      expected = [ "/new-prefix" "/old-prefix" ];
     };
     testConfigVersionAssertion = {
       # Exercise both release states even after version.nix advances.
       expr = map (release: map (version: !(passesVersionCheckAt version {
-        nix-bitcoin.versioning.releasedVersion = release;
+        bitcoinix.versioning.releasedVersion = release;
       })) [ "0.1.6" "0.2.0" "0.2.1" null ]) [ "0.1.6" "0.2.0" ];
       expected = [ [ false true true false ] [ true false true false ] ];
     };
     testFutureConfigVersionMessage = {
       expr = let
         messages = versioningErrors (evaluate {
-          nix-bitcoin = {
+          bitcoinix = {
             configVersion = "0.2.0";
             versioning.releasedVersion = "0.1.6";
           };
         });
       in map (phrase: lib.any (lib.hasInfix phrase) messages) [
-        ''nix-bitcoin.configVersion = "0.2.0" is newer than the latest finalized release (0.1.6).''
-        ''Set nix-bitcoin.configVersion = "0.1.6" until the release is finalized.''
+        ''bitcoinix.configVersion = "0.2.0" is newer than the latest finalized release (0.1.6).''
+        ''Set bitcoinix.configVersion = "0.1.6" until the release is finalized.''
       ];
       expected = [ true true ];
     };
     testUnreleasedMigrationWarnings = {
       expr = map (release: map (version: let
         warnings = (evaluate {
-          nix-bitcoin = {
+          bitcoinix = {
             configVersion = version;
             versioning.releasedVersion = release;
           };
@@ -619,7 +659,7 @@ let
     testReleasedMigrationError = {
       expr = map (release: let
         messages = versioningErrors (evaluate {
-          nix-bitcoin = {
+          bitcoinix = {
             configVersion = "0.1.5";
             versioning.releasedVersion = release;
             setupSecrets = true;
@@ -631,7 +671,7 @@ let
           lib.hasInfix "setup-secrets now fails" message && lib.hasInfix "See docs/upgrading/0.1.6.md." message
         ) messages;
         upcoming = lib.any (lib.hasInfix "bitcoinix now uses only unstable nixpkgs") messages;
-        target = lib.any (lib.hasInfix ''set nix-bitcoin.configVersion = "${release}";'') messages;
+        target = lib.any (lib.hasInfix ''set bitcoinix.configVersion = "${release}";'') messages;
       }) [ "0.1.6" "0.2.0" ];
       expected = [
         { released = true; upcoming = false; target = true; }
@@ -702,7 +742,7 @@ let
       expr = let
         cfg = evaluate {
           services.bitcoind = { enable = true; i2p = true; };
-          nix-bitcoin.netns-isolation.enable = true;
+          bitcoinix.netns-isolation.enable = true;
         };
       in {
         inherit (cfg.services.i2pd.settings.sam) enabled address port;
@@ -740,7 +780,7 @@ let
       expr = map (value: let
         config = evaluate {
           services.bitcoind.regtest = value;
-          nix-bitcoin.configVersion = releasedVersion;
+          bitcoinix.configVersion = releasedVersion;
         };
       in {
         inherit (config.services.bitcoind) network;
@@ -778,8 +818,8 @@ let
         notices = (evaluate {
           services.bitcoind = case.settings;
           services.electrs.enable = true;
-          nix-bitcoin.configVersion = "0.1.1";
-        }).nix-bitcoin.versioning.incompatibleChanges;
+          bitcoinix.configVersion = "0.1.1";
+        }).bitcoinix.versioning.incompatibleChanges;
       in {
         cookie = lib.any (lib.hasInfix
           "/var/lib/bitcoind/${case.cookiePath}") notices;
@@ -802,7 +842,7 @@ let
     };
     testNetworkNameOverrides = {
       expr = map (config: let
-        inherit (config.nix-bitcoin.lib) networkName;
+        inherit (config.bitcoinix.lib) networkName;
       in [
         (networkName {})
         (networkName { mainnet = "bitcoin"; })
@@ -863,11 +903,11 @@ let
     };
     testLndAnnouncesOnionPort = {
       expr = map lndAddressSuffix [
-        { nix-bitcoin.onionServices.lnd.public = true; }
-        { nix-bitcoin.onionServices.lnd = { public = true; externalPort = 9735; }; }
+        { bitcoinix.onionServices.lnd.public = true; }
+        { bitcoinix.onionServices.lnd = { public = true; externalPort = 9735; }; }
         # Another mapping before lnd's peer port
         {
-          nix-bitcoin.onionServices.lnd.public = true;
+          bitcoinix.onionServices.lnd.public = true;
           services.tor.relay.onionServices.lnd.map = lib.mkBefore [ { port = 8443; target.port = 8080; } ];
         }
         # A custom address may carry its own port
@@ -880,7 +920,7 @@ let
       expr = map (lib.hasInfix "allowedClients` is not supported with netns-isolation")
         (failedAssertions (evaluate {
           services.unbeholden-wallet = { enable = true; allowedClients = [ "192.0.2.1" ]; };
-          nix-bitcoin.netns-isolation.enable = true;
+          bitcoinix.netns-isolation.enable = true;
         }));
       expected = [ true ];
     };
@@ -985,7 +1025,7 @@ let
     };
     testNetnsRESTAddresses = {
       expr = getRestAddresses netns;
-      expected = with netns.nix-bitcoin.netns-isolation.netns; [ lnd.address clightning.address ];
+      expected = with netns.bitcoinix.netns-isolation.netns; [ lnd.address clightning.address ];
     };
     testMempoolWaitsForSecrets = {
       expr = with mempool.systemd.services.mempool;
@@ -1021,7 +1061,7 @@ let
         rpcPort = config.services.mempool.settings.CORE_RPC.PORT;
         frontend = config.services.mempool.frontend.settings;
         usesPackagedFrontend = config.services.mempool.frontend.staticContentRoot.drvPath
-          == config.nix-bitcoin.pkgs.mempool-frontend.drvPath;
+          == config.bitcoinix.pkgs.mempool-frontend.drvPath;
       }) [ "mainnet" "regtest" ];
       expected = [
         {
@@ -1063,10 +1103,10 @@ let
     testLegacyMempoolNetworkMigration = {
       expr = map (case: let
         notices = (evaluate {
-          nix-bitcoin.configVersion = "0.1.6";
+          bitcoinix.configVersion = "0.1.6";
           services.bitcoind.regtest = case.regtest;
           services.mempool.enable = case.enable;
-        }).nix-bitcoin.versioning.incompatibleChanges;
+        }).bitcoinix.versioning.incompatibleChanges;
       in {
         network = lib.any (lib.hasInfix "services.bitcoind.regtest has been replaced") notices;
         mempool = lib.any (lib.hasInfix "Mempool now uses regtest") notices;
@@ -1184,7 +1224,7 @@ let
         unaffected = hasRpcUsersNotice { services.electrs.enable = true; };
         nothingElse = map (generateSecrets: hasNotice "there's nothing else to do" {
           imports = [ rpcUsersServices ];
-          nix-bitcoin = { inherit generateSecrets; };
+          bitcoinix = { inherit generateSecrets; };
         }) [ true false ];
         # The old config may have added both methods to a remote public user,
         # whatever the new one enables
@@ -1202,7 +1242,7 @@ let
         # Once 0.2.0 is released, a config at 0.2.0 doesn't get the notice
         acknowledged = hasNoticeAt "0.2.0" "now connect to bitcoind as their own RPC users" {
           imports = [ rpcUsersServices ];
-          nix-bitcoin.versioning.releasedVersion = "0.2.0";
+          bitcoinix.versioning.releasedVersion = "0.2.0";
         };
       };
       expected = {
@@ -1213,7 +1253,7 @@ let
     };
     testEmptySecretsMigration = {
       expr = map (case: !(hasNoticeAt case.version "setup-secrets now fails" {
-        nix-bitcoin.setupSecrets = case.setupSecrets;
+        bitcoinix.setupSecrets = case.setupSecrets;
         services.lnd.enable = case.lnd;
       })) [
         { version = "0.1.5"; setupSecrets = true; lnd = false; }
@@ -1344,10 +1384,10 @@ let
     testLndconnectWithOperator = {
       expr = getOnionAccessUsers lndconnectWithOperator;
       expected = with lndconnectWithOperator;
-        lib.sort lib.lessThan [ services.lnd.user nix-bitcoin.operator.name ];
+        lib.sort lib.lessThan [ services.lnd.user bitcoinix.operator.name ];
     };
     testLnconnectOnionRequiresOperator = {
-      expr = map (lib.hasInfix "nix-bitcoin.operator.enable")
+      expr = map (lib.hasInfix "bitcoinix.operator.enable")
         (failedAssertions lnconnectNoOperator);
       expected = [ true ];
     };
@@ -1365,7 +1405,7 @@ let
     testOperatorAccountExplicitAccess = {
       expr = with operatorAccountExplicitAccess; {
         failed = failedAssertions operatorAccountExplicitAccess;
-        alice = nix-bitcoin.onionAddresses.access.alice;
+        alice = bitcoinix.onionAddresses.access.alice;
       };
       expected = { failed = []; alice = [ "clnrest" ]; };
     };
@@ -1427,13 +1467,13 @@ let
         lndOnly = hasOperatorAccessNotice {
           imports = [ lndconnectOnion ];
           users.users.alice.isNormalUser = true;
-          nix-bitcoin.operator.name = "alice";
+          bitcoinix.operator.name = "alice";
         };
         explicitAccess = hasOperatorAccessNotice operatorAccountGrant;
         # An operator account from outside `users.users`, for example via LDAP
         externalOperator = hasOperatorAccessNotice {
           imports = [ lndconnectOnion ];
-          nix-bitcoin.operator.name = "alice";
+          bitcoinix.operator.name = "alice";
           services.clightning = {
             enable = true;
             port = 9736;
@@ -1455,7 +1495,7 @@ let
         # Once 0.2.0 is released, a config at 0.2.0 doesn't get the notice
         acknowledged = hasNoticeAt "0.2.0" "`nix-bitcoin-wg-connect` from the WireGuard preset now needs" {
           imports = [ wireguardLndconnect ];
-          nix-bitcoin.versioning.releasedVersion = "0.2.0";
+          bitcoinix.versioning.releasedVersion = "0.2.0";
         };
       };
       expected = { preset = true; noPreset = false; before = true; acknowledged = false; };
@@ -1480,12 +1520,12 @@ let
         currentFails = map (lib.hasInfix "external-user")
           (failedAssertions (evaluate {
             imports = [ onionAccessExternalUser ];
-            nix-bitcoin.configVersion = releasedVersion;
+            bitcoinix.configVersion = releasedVersion;
           }));
         defined = hasAccessUsersNotice onionAccessLoginName;
         disabled = hasAccessUsersNotice {
           users.users.disabled-user = { isNormalUser = true; enable = false; };
-          nix-bitcoin.onionAddresses.access."disabled-user" = [ "bitcoind" ];
+          bitcoinix.onionAddresses.access."disabled-user" = [ "bitcoind" ];
         };
       };
       expected = {
@@ -1552,7 +1592,7 @@ let
     testNetnsRejectsMetadataAddressblock = {
       expr = map (block: builtins.any (lib.hasInfix "must not be 169 or 170") (failedAssertions (evaluate {
         services.bitcoind.enable = true;
-        nix-bitcoin.netns-isolation = { enable = true; addressblock = block; };
+        bitcoinix.netns-isolation = { enable = true; addressblock = block; };
       }))) [ 1 169 170 ];
       expected = [ false true true ];
     };
@@ -1596,7 +1636,7 @@ let
         # Once 0.2.0 is released, a config at 0.2.0 doesn't get the notice
         acknowledged = hasNoticeAt "0.2.0" "so sshd accepts only keys" {
           imports = [ (secureNodeSsh {}) ];
-          nix-bitcoin.versioning.releasedVersion = "0.2.0";
+          bitcoinix.versioning.releasedVersion = "0.2.0";
         };
       };
       expected = { presetAndSshd = true; sshdDisabled = false; withoutPreset = false; acknowledged = false; };
@@ -1627,7 +1667,7 @@ let
     # setup-secrets fails for every secret when an owner doesn't exist
     testBtcpayserverAdminPasswordOwner = {
       expr = with btcpayserverCustomUser; {
-        inherit (nix-bitcoin.secrets.btcpayserver-admin-password) user group;
+        inherit (bitcoinix.secrets.btcpayserver-admin-password) user group;
         userExists = users.users ? btcpay-custom;
         groupExists = users.groups ? payments;
       };
@@ -1813,7 +1853,7 @@ let
         # Once 0.2.0 is released, a config at 0.2.0 doesn't get the notice
         acknowledged = hasNoticeAt "0.2.0" "clightning now requires the mounts for" {
           imports = [ onDisk ];
-          nix-bitcoin.versioning.releasedVersion = "0.2.0";
+          bitcoinix.versioning.releasedVersion = "0.2.0";
         };
       };
       expected = { onDisk = true; onRoot = true; sshfs = false; previous = true; acknowledged = false; };
@@ -1827,6 +1867,16 @@ else
   pkgs.runCommand "nix-bitcoin-configuration-tests" {
     passthru.testCount = builtins.length (builtins.attrNames tests);
   } ''
+    # Only the alias module may use the old option prefix. Elsewhere, a definition
+    # warns users, a read of `config.nix-bitcoin` warns and `options.nix-bitcoin.<name>`
+    # never matches.
+    if grep -rnE '(^|[^-/<a-zA-Z])nix-bitcoin(\.[a-zA-Z]|[[:space:]]*=)|options \? nix-bitcoin' \
+        ${../modules} ${../pkgs} ${../flake.nix} \
+        | grep -v 'modules/nix-bitcoin-alias\.nix:' | grep -v 'nix-bitcoin\.nix'; then
+      echo "Use the bitcoinix option prefix instead of nix-bitcoin." >&2
+      exit 1
+    fi
+
     mkdir data secrets
     echo secret > secrets/bitcoin-rpcpassword-privileged
     sed -e "s|@dataDir@|$PWD/data|g; s|@secretsDir@|$PWD/secrets|g" ${remotePresetPreStart} > prestart.sh

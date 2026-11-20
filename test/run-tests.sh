@@ -14,7 +14,7 @@
 #     a scenario. It is evaluated in the same context as other scenarios in ./tests.nix
 #
 #     Example:
-#     ./run-tests.sh -s "{ nix-bitcoin.nodeinfo.enable = true; }" container --run c nodeinfo
+#     ./run-tests.sh -s "{ bitcoinix.nodeinfo.enable = true; }" container --run c nodeinfo
 #
 #   - When <scenario> does not name a scenario, the test is run with an adhoc scenario
 #     where services.<scenario> is enabled.

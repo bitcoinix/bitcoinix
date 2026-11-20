@@ -2,7 +2,7 @@
 
 {
   # Only the WireGuard preset declares these options.
-  condition = options ? nix-bitcoin.wireguard;
+  condition = options ? bitcoinix.wireguard;
   message = ''
     `nix-bitcoin-wg-connect` from the WireGuard preset now needs the node's
     address as an argument. Before, it looked up the node's public IP through

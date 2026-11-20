@@ -48,11 +48,11 @@
         imports = [ ./modules/modules.nix ];
 
         options = with lib; {
-          nix-bitcoin.useVersionLockedPkgs = mkOption {
+          bitcoinix.useVersionLockedPkgs = mkOption {
             type = types.bool;
             default = true;
             description = ''
-              Use the nixpkgs version locked by this flake for `nix-bitcoin.pkgs`.
+              Use the nixpkgs version locked by this flake for `bitcoinix.pkgs`.
               Only relevant if you are using a nixpkgs version for evaluating your system
               that differs from the one that is locked by this flake (via input `nixpkgs`).
               If this is the case, enabling this option uses the tested package set
@@ -73,10 +73,10 @@
         };
 
         config = {
-          nix-bitcoin.revision = lib.mkDefault (self.rev or self.dirtyRev or null);
+          bitcoinix.revision = lib.mkDefault (self.rev or self.dirtyRev or null);
 
-          nix-bitcoin.pkgs =
-            if config.nix-bitcoin.useVersionLockedPkgs
+          bitcoinix.pkgs =
+            if config.bitcoinix.useVersionLockedPkgs
             then (self.lib.mkNbPkgs { inherit (pkgs.stdenv.hostPlatform) system; }).modulesPkgs
             else (self.lib.mkNbPkgs { inherit (pkgs.stdenv.hostPlatform) system; inherit pkgs; }).modulesPkgs;
         };

@@ -2,7 +2,7 @@
 
 let
   cfg = config.services.bitcoind;
-  secretsDir = config.nix-bitcoin.secretsDir;
+  secretsDir = config.bitcoinix.secretsDir;
 in {
   systemd.services.bitcoind = {
     # Make the local bitcoin-cli work with the remote node.

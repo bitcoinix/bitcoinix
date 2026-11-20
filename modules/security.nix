@@ -10,7 +10,7 @@ let
 in
 {
   options = {
-    nix-bitcoin.security.dbusHideProcessInformation = mkOption {
+    bitcoinix.security.dbusHideProcessInformation = mkOption {
       type = types.bool;
       default = false;
       description = ''
@@ -28,7 +28,7 @@ in
   };
 
   config = mkMerge [
-  # Services restricted to local addresses (`nix-bitcoin.lib.allowLocalIPAddresses`)
+  # Services restricted to local addresses (`bitcoinix.lib.allowLocalIPAddresses`)
   # are denied the local name-resolution sockets via `InaccessiblePaths`. These
   # masks have no `-` prefix, so a missing path makes the unit fail to start
   # rather than run unmasked. Create each directory independently of its
@@ -58,9 +58,9 @@ in
     };
   })
 
-  (mkIf config.nix-bitcoin.security.dbusHideProcessInformation {
+  (mkIf config.bitcoinix.security.dbusHideProcessInformation {
     users.groups.proc = {};
-    nix-bitcoin.operator.groups = [ "proc" ]; # Enable operator access to systemd-status
+    bitcoinix.operator.groups = [ "proc" ]; # Enable operator access to systemd-status
 
     services.dbus.packages = lib.mkAfter [ # Apply at the end to override the default policy
       (pkgs.writeTextDir "etc/dbus-1/system.d/dbus.conf" ''

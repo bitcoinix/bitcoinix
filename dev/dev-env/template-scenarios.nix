@@ -15,6 +15,6 @@ rec {
 
   myscenario = { config, pkgs, lib, ... }: {
     services.clightning.enable = true;
-    nix-bitcoin.nodeinfo.enable = true;
+    bitcoinix.nodeinfo.enable = true;
   };
 }

@@ -5,7 +5,7 @@ let
   mkRenamedAnnounceTorOption = service:
     # use mkRemovedOptionModule because mkRenamedOptionModule fails with an infinite recursion error
     mkRemovedOptionModule [ "services" service "announce-tor" ] ''
-      Use option `nix-bitcoin.onionServices.${service}.public` instead.
+      Use option `bitcoinix.onionServices.${service}.public` instead.
     '';
 
   mkSplitEnforceTorOption = service:
@@ -20,7 +20,7 @@ let
 in {
   imports = [
     (mkRemovedOptionModule [ "services" "bitcoind" "makeNetworkName" ] ''
-      Use `config.nix-bitcoin.lib.networkName { mainnet = "bitcoin"; }` instead
+      Use `config.bitcoinix.lib.networkName { mainnet = "bitcoin"; }` instead
       to override mainnet's name while passing other network names through unchanged.
       See docs/upgrading/0.2.0.md.
     '')
@@ -38,7 +38,7 @@ in {
     (mkRenamedOptionModule [ "services" "lnd" "listen" ] [ "services" "lnd" "address" ])
     (mkRenamedOptionModule [ "services" "lnd" "listenPort" ] [ "services" "lnd" "port" ])
     (mkRenamedOptionModule [ "services" "btcpayserver" "bind" ] [ "services" "btcpayserver" "address" ])
-    (mkRenamedOptionModule [ "nix-bitcoin" "setup-secrets" ] [ "nix-bitcoin" "setupSecrets" ])
+    (mkRenamedOptionModule [ "bitcoinix" "setup-secrets" ] [ "bitcoinix" "setupSecrets" ])
 
     (mkRenamedAnnounceTorOption "clightning")
     (mkRenamedAnnounceTorOption "lnd")
@@ -142,9 +142,9 @@ in {
       Liquid support has been removed from bitcoinix. Remove services.btcpayserver.lbtc
       from your configuration. BTCPay Server now supports Bitcoin and Lightning only.
     '')
-    (mkRemovedOptionModule [ "nix-bitcoin" "netns-isolation" "allowedUser" ] ''
+    (mkRemovedOptionModule [ "bitcoinix" "netns-isolation" "allowedUser" ] ''
       The netns-exec wrapper has been removed, so there is no user to authorize.
-      Remove nix-bitcoin.netns-isolation.allowedUser from your configuration.
+      Remove bitcoinix.netns-isolation.allowedUser from your configuration.
       To run a command in a service namespace, use `sudo ip netns exec nb-<service> <command>`.
     '')
     (mkRemovedOptionModule [ "services" "lightning-pool" ] ''
@@ -180,7 +180,7 @@ in {
     (mkRemovedOptionModule [ "services" "bitcoind" "package" ] ''
       Bitcoin Knots support and bitcoind package selection have been removed from bitcoinix.
       Remove services.bitcoind.package from your configuration. The service now uses
-      nix-bitcoin.pkgs.bitcoind (Bitcoin Core) directly.
+      bitcoinix.pkgs.bitcoind (Bitcoin Core) directly.
       See docs/upgrading/0.1.3.md.
     '')
   ];

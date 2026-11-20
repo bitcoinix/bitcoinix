@@ -5,7 +5,7 @@
   message = ''
     bitcoinix now uses only unstable nixpkgs via the `nixpkgs` flake input.
     Remove follows declarations for the removed `nixpkgs-unstable` input.
-    In the flake NixOS module, `nix-bitcoin.useVersionLockedPkgs` now defaults
+    In the flake NixOS module, `bitcoinix.useVersionLockedPkgs` now defaults
     to true. Packages use bitcoinix's tested revision unless you override its
     nixpkgs input, for example with `bitcoinix.inputs.nixpkgs.follows`.
     Your system's nixpkgs.overlays and nixpkgs.config do not apply to these
