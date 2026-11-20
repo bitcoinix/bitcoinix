@@ -16,6 +16,20 @@ let
 
     services = mkOption {
       default = {};
+      description = ''
+        Services that run in their own network namespace `nb-<name>`, keyed by
+        the name of the service under `services`, e.g. `bitcoind`. An entry
+        takes effect only while that service is enabled. The bitcoinix modules
+        define the entries for the supported services.
+
+        A namespace accepts incoming connections only from itself, from the
+        host and from the namespaces linked by {option}`connections`.
+        Connections from the host come from the bridge address
+        `169.254.<addressblock>.10`, so every process in the host network
+        namespace can reach the service, not only the services listed in
+        {option}`connections`.
+        Services with `tor.enforce` can also connect only to these addresses.
+      '';
       type = types.attrsOf (types.submodule {
         options = {
           id = mkOption {
@@ -29,6 +43,13 @@ let
           connections = mkOption {
             type = with types; listOf str;
             default = [];
+            description = ''
+              Services whose namespaces may exchange connections with this
+              service's namespace. A connection works in both directions:
+              `clightning.connections = [ "bitcoind" ]` also lets
+              `bitcoind` connect to `clightning`. Entries for disabled
+              services are ignored.
+            '';
           };
         };
       });

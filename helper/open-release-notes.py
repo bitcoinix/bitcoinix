@@ -35,7 +35,8 @@ def add_version(text, guide, number, *, summary):
         if not summary:
             lines.insert(insert, "\n")
             insert += 1
-    entry = f"- [{number}]({guide}/{number}.md)"
+    # mdBook numbers the sidebar entries, so name them there to keep the version apart
+    entry = f"- [{'Version ' if summary else ''}{number}]({guide}/{number}.md)"
     lines.insert(insert, f"  {entry}\n" if summary else f"{entry} (upcoming)\n")
     return "".join(lines)
 

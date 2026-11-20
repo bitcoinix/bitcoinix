@@ -43,7 +43,10 @@ so they can use `machine`, `retry`, `enabled_tests`, `test_data`, and the shared
 helpers directly. The driver's lint and type checks still see the entire suite.
 Use `succeed_json` for JSON responses and `assert_file_metadata` for ownership,
 mode, and file-type checks. Shell predicates remain useful with
-`machine.wait_until_succeeds` when polling for readiness.
+`machine.wait_until_succeeds` when polling for readiness. Call
+`wait_for_lnd_server` before a test stops, restarts or terminates lnd, or stops
+bitcoind while lnd runs. On regtest, lnd can panic when it stops before its
+server has started.
 
 ### Checks without a VM
 
@@ -62,6 +65,9 @@ nix eval .#checks.x86_64-linux.module-config.testCount
 # Build the lightweight checks on Linux (or using a Linux builder).
 nix build --no-link .#checks.x86_64-linux.module-config .#checks.x86_64-linux.test-runner \
   .#checks.x86_64-linux.lnd-macaroon-filters
+
+# Check the docs site builder and build the module option list of docs/options.md.
+nix build --no-link .#checks.x86_64-linux.docs-tools .#checks.x86_64-linux.docs-options
 
 # Check CVE scan/report behavior without network access or GitHub writes.
 nix build --no-link .#checks.x86_64-linux.cve-tools
@@ -226,9 +232,9 @@ including both sides of renames, without checking out the repository. Empty list
 and lists reaching the API's 3000-file limit conservatively run the full checks.
 
 New commits cancel older test and docs runs for the same PR. Master test runs and
-docs deployments are preserved. Docs PRs build their own documentation; the latest
-release's documentation is built for deployment and, without uploading or deploying,
-on PRs that change `.github/workflows/docs.yml`.
+docs deployments are preserved. Docs PRs build their own documentation; the site of
+all releases is built for deployment and, with the PR's tooling and without uploading
+or deploying, on PRs that change `.github/workflows/docs.yml` or `helper/docs/`.
 
 The VM preparation job evaluates scenarios and checks Cachix for successful test
 results. It builds and uploads shared drivers only when a Cachix signing key is

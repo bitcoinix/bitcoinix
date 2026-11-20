@@ -8,25 +8,13 @@
 </p>
 <br/>
 <p align="center">
-    <a href="https://github.com/bitcoinix/bitcoinix/actions" target="_blank">
-        <img src="https://github.com/bitcoinix/bitcoinix/actions/workflows/test.yml/badge.svg?branch=master"
-             alt="GitHub Actions status">
-    </a>
-    <a href="https://github.com/bitcoinix/bitcoinix/tags" target="_blank">
-        <img src="https://img.shields.io/github/v/tag/bitcoinix/bitcoinix?filter=v*&amp;sort=semver" alt="GitHub tag (latest SemVer)">
-    </a>
-    <a href="https://github.com/bitcoinix/bitcoinix/commits/master" target="_blank">
-        <img src="https://img.shields.io/github/commit-activity/y/bitcoinix/bitcoinix" alt="GitHub commit activity">
-    </a>
-    <a href="https://github.com/bitcoinix/bitcoinix/graphs/contributors" target="_blank">
-        <img src="https://img.shields.io/github/contributors-anon/bitcoinix/bitcoinix" alt="GitHub contributors">
-    </a>
+  <a href="https://github.com/bitcoinix/bitcoinix/actions/workflows/test.yml?query=branch%3Amaster+event%3Apush"><img src="https://img.shields.io/github/actions/workflow/status/bitcoinix/bitcoinix/test.yml?branch=master&amp;event=push&amp;label=tests" alt="Tests on master"></a>
+  <a href="https://github.com/bitcoinix/bitcoinix/tags"><img src="https://img.shields.io/github/v/tag/bitcoinix/bitcoinix?filter=v*&amp;sort=semver&amp;label=release" alt="Latest release"></a>
+  <a href="https://docs.bitcoinix.net"><img src="https://img.shields.io/badge/docs-docs.bitcoinix.net-blue" alt="Documentation"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/bitcoinix/bitcoinix" alt="License: MIT"></a>
+  <img src="https://img.shields.io/badge/platform-x86__64--linux%20%7C%20aarch64--linux-lightgrey" alt="Platforms: x86_64-linux, aarch64-linux">
 </p>
 <br/>
-
-> [!NOTE]
-> This project and its documentation are a **work in progress**. Parts of the project
-> and the documentation may change and may be outdated.
 
 **bitcoinix** is a collection of Nix packages and NixOS modules for easily installing
 **full-featured Bitcoin nodes** with an emphasis on **security**.
@@ -44,8 +32,7 @@ Overview
 ---
 bitcoinix can be used for personal or merchant wallets, public infrastructure or
 for Bitcoin application backends. In all cases, the aim is to provide security and
-privacy by default. However, while bitcoinix is used in production today, it is
-still considered experimental.
+privacy by default. bitcoinix is used in production today.
 
 bitcoinix nodes can be deployed on dedicated hardware, virtual machines or containers.
 The Nix packages and NixOS modules can be used independently and combined freely.

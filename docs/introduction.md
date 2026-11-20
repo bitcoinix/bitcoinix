@@ -7,7 +7,7 @@ Bitcoin and Lightning nodes with an emphasis on security.
 
 Use it for personal or merchant wallets, public infrastructure or Bitcoin application backends,
 on dedicated hardware, in a virtual machine or in a container. You don't need previous
-experience with Nix. bitcoinix is used in production, but it is still considered experimental.
+experience with Nix. bitcoinix is used in production.
 
 bitcoinix is a community fork of [nix-bitcoin](https://github.com/fort-nix/nix-bitcoin), which
 was archived in August 2026. The NixOS options keep the `nix-bitcoin.*` prefix, so existing
@@ -25,8 +25,7 @@ configurations keep working.
   `operator` user for the client tools
 
 The [README](https://github.com/bitcoinix/bitcoinix#features) lists all services and plugins, the
-[NixOS options search](https://search.nixos.org/flakes?channel=unstable&sort=relevance&type=options&query=bitcoin)
-lists their options.
+[module options](options.md) list their options.
 
 ## Software versions
 

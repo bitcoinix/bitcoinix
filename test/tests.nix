@@ -45,9 +45,12 @@ let
       ]);
 
       tests.bitcoind = cfg.bitcoind.enable;
+      # lnd requires bitcoind and stops with it, also when test `lnd` is off
+      test.data.restart-bitcoind.lnd = cfg.lnd.enable;
 
       tests.i2pd = cfg.bitcoind.enable && cfg.bitcoind.i2p != false;
-      test.data.i2pd = optionalAttrs config.tests.i2pd {
+      # Scenarios that set `tests = mkForce { ... }` have no `tests.i2pd`
+      test.data.i2pd = optionalAttrs (config.tests.i2pd or false) {
         inherit (cfg.i2pd.settings.sam) address port;
         netns = config.nix-bitcoin.netns-isolation.enable;
       };

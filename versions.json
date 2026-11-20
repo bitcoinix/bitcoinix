@@ -9,11 +9,11 @@
   },
   "charge-lnd": {
     "channel": "unstable",
-    "version": "0.3.1"
+    "version": "0.3.2"
   },
   "clboss": {
     "channel": "unstable",
-    "version": "0.17.2"
+    "version": "0.17.3"
   },
   "clightning": {
     "channel": "unstable",
@@ -45,11 +45,11 @@
   },
   "electrs": {
     "channel": "unstable",
-    "version": "0.12.0"
+    "version": "0.12.1"
   },
   "extra-container": {
     "channel": "unstable",
-    "version": "0.17"
+    "version": "1.0.1"
   },
   "fulcrum": {
     "channel": "unstable",

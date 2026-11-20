@@ -66,6 +66,22 @@ def assert_running(unit):
         machine.wait_for_unit(unit)
     assert_no_failure(unit)
 
+def wait_for_lnd_server():
+    """Wait until lnd's server has started. lnd answers RPCs before that, and a
+    stop or SIGTERM in between can make lnd panic. That exit would fail later
+    `assert_no_failure("lnd")` checks. Start lnd first, or this waits until the
+    driver's timeout.
+    lnd starts its server once its chain has synced. In the test VM, that only
+    happens with the blocks that the regtest fixture mines. Elsewhere, lnd never
+    starts its server and can't panic this way. Ask the fixture, not
+    `enabled_tests`, which changes when a run selects a subset of the tests.
+    lnd counts its chain as synced only while the tip is less than two hours
+    old, so in an older debug VM, this waits until the timeout after a restart."""
+    if test_data.get("num_blocks"):
+        machine.wait_until_succeeds("runuser -u operator -- lncli state | grep -q SERVER_ACTIVE")
+    else:
+        machine.wait_until_succeeds("runuser -u operator -- lncli getinfo")
+
 def wait_for_open_port(address, port):
     def is_port_open(_):
         status, _ = machine.execute(f"nc -z {address} {port}")
