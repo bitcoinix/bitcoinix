@@ -105,7 +105,7 @@ let
     ];
 
   env = {
-    LISTEN_ADDR = hostPort cfg.address cfg.port;
+    LISTEN_ADDR = bracketed cfg.address cfg.port;
     DATA_DIR = cfg.dataDir;
     BROADCAST_ENABLED = cfg.broadcast;
     # The service runs under systemd, which adds its own timestamps
@@ -117,10 +117,13 @@ let
     "${net}_MEMPOOL_ENABLED" = cfg.mempool;
   } // cfg.settings;
 
-  # `nbLib.addressWithPort` does not bracket IPv6 addresses
-  hostPort = addr: port:
-    let host = nbLib.address addr; in
+  # `nbLib.addressWithPort` does not bracket IPv6 addresses.
+  # `bracketed` is for the explorer's own listener and keeps a wildcard
+  # address. `hostPort` is for connecting to rbitcoin, so it maps a wildcard
+  # listen address to loopback.
+  bracketed = host: port:
     "${if hasInfix ":" host then "[${host}]" else host}:${toString port}";
+  hostPort = addr: bracketed (nbLib.address addr);
 
   toEnv = v: if isBool v then boolToString v else toString v;
 
