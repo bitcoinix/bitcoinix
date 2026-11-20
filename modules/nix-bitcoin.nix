@@ -3,7 +3,7 @@
 with lib;
 {
   options = {
-    nix-bitcoin = {
+    bitcoinix = {
       pkgs = mkOption {
         type = types.attrs;
         default = (import ../pkgs { inherit pkgs; }).modulesPkgs;
@@ -11,14 +11,14 @@ with lib;
         description = ''
           The packages that the bitcoinix services run: the packages defined in
           {file}`pkgs/` and the service packages selected from nixpkgs.
-          Refer to a package as `config.nix-bitcoin.pkgs.<name>`, e.g.
-          `config.nix-bitcoin.pkgs.bitcoind`.
+          Refer to a package as `config.bitcoinix.pkgs.<name>`, e.g.
+          `config.bitcoinix.pkgs.bitcoind`.
         '';
         apply = base:
           let
             final = foldl (prev: overlay:
               prev // (overlay prev final)
-            ) base options.nix-bitcoin.pkgOverlays.definitions;
+            ) base options.bitcoinix.pkgOverlays.definitions;
           in
             final;
       };
@@ -60,7 +60,7 @@ with lib;
           traffic, so merge them with `allowLocalIPAddresses` or
           `allowAllIPAddresses` for a service that needs the network:
           ```nix
-          systemd.services.<name>.serviceConfig = with config.nix-bitcoin.lib;
+          systemd.services.<name>.serviceConfig = with config.bitcoinix.lib;
             defaultHardening // allowLocalIPAddresses;
           ```
           `allowLocalIPAddresses` allows localhost and, with netns-isolation,

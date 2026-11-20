@@ -28,7 +28,7 @@ The HTTP listener defaults to `127.0.0.1:8081`. Put an HTTPS reverse proxy in fr
 for a public Lightning Address. Set `settings.trusted_proxies` to the proxy's IP
 addresses or CIDRs if it forwards `X-Forwarded-Host` or `X-Forwarded-For`.
 With namespace isolation, use the service's namespace address as the proxy target.
-Onion domains can use HTTP through `nix-bitcoin.onionServices.unbeholden-lnurl.enable`.
+Onion domains can use HTTP through `bitcoinix.onionServices.unbeholden-lnurl.enable`.
 
 `settings.withdraw` defines vouchers, `settings.notifications.ntfy` enables payment
 notifications, and `settings.nostr = {};` enables zap receipts. Amounts are in

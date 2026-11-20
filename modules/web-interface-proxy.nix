@@ -9,7 +9,7 @@ with lib;
 let
   cfg = config.services.${name};
   dataDir = cfg.dataDir or null;
-  nbLib = config.nix-bitcoin.lib;
+  nbLib = config.bitcoinix.lib;
   # ListenStream needs brackets around an IPv6 address.
   address = if hasInfix ":" cfg.address then "[${cfg.address}]" else cfg.address;
   listenAddress = "${address}:${toString cfg.port}";
@@ -20,7 +20,7 @@ let
   ipFilters = filterAttrs (key: _: elem key [ "IPAddressAllow" "IPAddressDeny" ])
     config.systemd.services.${name}.serviceConfig;
 in {
-  config = mkIf (cfg.enable && !config.nix-bitcoin.netns-isolation.enable) {
+  config = mkIf (cfg.enable && !config.bitcoinix.netns-isolation.enable) {
     assertions = [{
       assertion = cfg.port != 0;
       message = ''
@@ -78,7 +78,7 @@ in {
         # proxy retries. It needs neither the database nor local resolvers.
         # An empty InaccessiblePaths= resets all preceding masks in systemd.
         InaccessiblePaths = nbLib.localResolverPaths ++ optional (dataDir != null && dataDir != "") dataDir
-          ++ [ config.nix-bitcoin.secretsDir ];
+          ++ [ config.bitcoinix.secretsDir ];
         PrivateNetwork = true;
         RestrictAddressFamilies = "AF_UNIX";
         SystemCallFilter = nbLib.defaultHardening.SystemCallFilter ++ [ "name_to_handle_at" ];

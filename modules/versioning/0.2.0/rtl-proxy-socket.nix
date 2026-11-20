@@ -5,7 +5,7 @@ let
 in
 {
   # With netns-isolation, RTL keeps listening on its namespace's address
-  condition = rtl.enable && !config.nix-bitcoin.netns-isolation.enable;
+  condition = rtl.enable && !config.bitcoinix.netns-isolation.enable;
   # Names no configured address, since it can't tell a host name from an IP address
   message = ''
     RTL now listens on a unix socket, and systemd holds `services.rtl.address`

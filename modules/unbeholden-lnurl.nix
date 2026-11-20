@@ -37,8 +37,8 @@ let
     };
     package = mkOption {
       type = types.package;
-      default = config.nix-bitcoin.pkgs.unbeholden-lnurl;
-      defaultText = "config.nix-bitcoin.pkgs.unbeholden-lnurl";
+      default = config.bitcoinix.pkgs.unbeholden-lnurl;
+      defaultText = "config.bitcoinix.pkgs.unbeholden-lnurl";
       description = "The package providing Unbeholden LNURL.";
     };
     settings = mkOption {
@@ -58,14 +58,14 @@ let
           verify_key_file = mkOption {
             type = types.str;
             default = "${secretsDir}/unbeholden-lnurl-verify";
-            defaultText = "\${config.nix-bitcoin.secretsDir}/unbeholden-lnurl-verify";
+            defaultText = "\${config.bitcoinix.secretsDir}/unbeholden-lnurl-verify";
             description = "File with the key for verify URLs. Changing it invalidates old verify URLs.";
           };
           withdraw_secret_file = mkOption {
             type = with types; nullOr str;
             default = if settings.config ? withdraw_secret then null
               else "${secretsDir}/unbeholden-lnurl-withdraw";
-            defaultText = "\${config.nix-bitcoin.secretsDir}/unbeholden-lnurl-withdraw, or null if `withdraw_secret` is set";
+            defaultText = "\${config.bitcoinix.secretsDir}/unbeholden-lnurl-withdraw, or null if `withdraw_secret` is set";
             description = "File with the voucher secret. Changing it changes every voucher URL.";
           };
           addresses = mkOption {
@@ -104,7 +104,7 @@ let
               options.private_key_file = mkOption {
                 type = types.str;
                 default = "${secretsDir}/unbeholden-lnurl-nostr";
-                defaultText = "\${config.nix-bitcoin.secretsDir}/unbeholden-lnurl-nostr";
+                defaultText = "\${config.bitcoinix.secretsDir}/unbeholden-lnurl-nostr";
                 description = "File with the Nostr private key.";
               };
             });
@@ -125,8 +125,8 @@ let
   };
 
   cfg = config.services.unbeholden-lnurl;
-  nbLib = config.nix-bitcoin.lib;
-  secretsDir = config.nix-bitcoin.secretsDir;
+  nbLib = config.bitcoinix.lib;
+  secretsDir = config.bitcoinix.secretsDir;
   lnd = config.services.lnd;
   cln = config.services.clightning;
   clnrest = cln.plugins.clnrest;
@@ -275,7 +275,7 @@ in {
     };
 
     services.unbeholden-lnurl.settings.outbound_proxy = mkIf cfg.tor.proxy
-      (mkDefault "socks5://${config.nix-bitcoin.torClientAddressWithPort}");
+      (mkDefault "socks5://${config.bitcoinix.torClientAddressWithPort}");
 
     environment.systemPackages = optional withdraw listVouchers;
 
@@ -319,12 +319,12 @@ in {
     };
     users.groups.${cfg.group} = {};
 
-    nix-bitcoin.secrets = {
+    bitcoinix.secrets = {
       unbeholden-lnurl-verify.user = cfg.user;
       unbeholden-lnurl-withdraw = mkIf generateWithdrawSecret { user = cfg.user; };
       unbeholden-lnurl-nostr = mkIf (cfg.settings.nostr != null) { user = cfg.user; };
     };
-    nix-bitcoin.generateSecretsCmds.unbeholden-lnurl = concatMapStrings (name: ''
+    bitcoinix.generateSecretsCmds.unbeholden-lnurl = concatMapStrings (name: ''
       if isAbsent ${name}; then
         writeSecret ${name} ${pkgs.openssl}/bin/openssl rand -hex 32
       else

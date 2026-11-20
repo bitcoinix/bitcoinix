@@ -49,7 +49,7 @@ in
 
   config = mkIf (cfg.enable && clightning.enable) {
     services.clightning.pluginsConfig = ''
-      plugin=${config.nix-bitcoin.pkgs.clightning-plugins.feeadjuster.path}
+      plugin=${config.bitcoinix.pkgs.clightning-plugins.feeadjuster.path}
       feeadjuster-adjustment-method="${cfg.method}"
     '' + optionalString (!cfg.fuzz) ''
       feeadjuster-deactivate-fuzz

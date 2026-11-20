@@ -17,8 +17,8 @@ let
       };
       package = mkOption {
         type = types.package;
-        default = config.nix-bitcoin.pkgs.btcpayserver;
-        defaultText = "config.nix-bitcoin.pkgs.btcpayserver";
+        default = config.bitcoinix.pkgs.btcpayserver;
+        defaultText = "config.bitcoinix.pkgs.btcpayserver";
         description = "The package providing btcpayserver binaries.";
       };
       dataDir = mkOption {
@@ -73,8 +73,8 @@ let
       };
       package = mkOption {
         type = types.package;
-        default = config.nix-bitcoin.pkgs.nbxplorer;
-        defaultText = "config.nix-bitcoin.pkgs.nbxplorer";
+        default = config.bitcoinix.pkgs.nbxplorer;
+        defaultText = "config.bitcoinix.pkgs.nbxplorer";
         description = "The package providing nbxplorer binaries.";
       };
       address = mkOption {
@@ -107,7 +107,7 @@ let
   };
 
   cfg = config.services;
-  nbLib = config.nix-bitcoin.lib;
+  nbLib = config.bitcoinix.lib;
 
   inherit (config.services) bitcoind;
   # Neither NBXplorer nor BTCPay ships an appsettings*.json; their settings
@@ -129,7 +129,7 @@ let
     network=${bitcoind.network}
     bind=${bind}
     port=${toString cfg.btcpayserver.port}
-    socksendpoint=${config.nix-bitcoin.torClientAddressWithPort}
+    socksendpoint=${config.bitcoinix.torClientAddressWithPort}
     btcexplorerurl=${nbExplorerUrl}
     btcexplorercookiefile=${nbExplorerCookie}
     postgres=User ID=${cfg.btcpayserver.user};Host=/run/postgresql;Database=btcpaydb
@@ -159,7 +159,7 @@ let
   };
 
   adminEmail = "admin@localhost";
-  adminPasswordFile = "${config.nix-bitcoin.secretsDir}/btcpayserver-admin-password";
+  adminPasswordFile = "${config.bitcoinix.secretsDir}/btcpayserver-admin-password";
   # BTCPay adds a missing leading `/` to `rootpath`, and `/` means no prefix
   rootPath = optionalString (cfg.btcpayserver.rootpath != null)
     (removeSuffix "/" "/${removePrefix "/" cfg.btcpayserver.rootpath}");
@@ -234,7 +234,7 @@ in {
       preStart = ''
         conf=$(
           cat ${configFile}
-          echo "btcrpcpassword=$(cat ${config.nix-bitcoin.secretsDir}/bitcoin-rpcpassword-btcpayserver)"
+          echo "btcrpcpassword=$(cat ${config.bitcoinix.secretsDir}/bitcoin-rpcpassword-btcpayserver)"
         )
         install -T -m 600 <(echo "$conf") '${cfg.nbxplorer.dataDir}/settings.config'
       '';
@@ -350,7 +350,7 @@ in {
     };
     users.groups.${cfg.btcpayserver.group} = {};
 
-    nix-bitcoin.secrets = {
+    bitcoinix.secrets = {
       # Only NBXplorer reads this password. btcpayserver is in NBXplorer's group
       # to read the API cookie, so the group gets no access here.
       bitcoin-rpcpassword-btcpayserver = {
@@ -363,7 +363,7 @@ in {
         inherit (cfg.btcpayserver) user group;
       };
     };
-    nix-bitcoin.generateSecretsCmds.btcpayserver = ''
+    bitcoinix.generateSecretsCmds.btcpayserver = ''
       makeBitcoinRPCPassword btcpayserver
       makePasswordSecret btcpayserver-admin-password
     '';

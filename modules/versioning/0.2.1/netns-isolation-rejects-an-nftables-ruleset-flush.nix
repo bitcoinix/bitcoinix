@@ -1,7 +1,7 @@
 { config, ... }:
 
 let
-  cfg = config.nix-bitcoin.netns-isolation;
+  cfg = config.bitcoinix.netns-isolation;
 in
 {
   # The old config is unknown, and turning `networking.nftables` off also runs

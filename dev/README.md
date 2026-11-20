@@ -246,7 +246,7 @@ At release time, consolidate the Markdown files in the release-preparation commi
    including links from release notes to upgrade notes. Check references in
    `README.md`, `docs/`, `examples/`, `modules/` and `helper/`.
 3. End the upgrade page with the instruction to set
-   `nix-bitcoin.configVersion = "<version>";` after completing the migrations.
+   `bitcoinix.configVersion = "<version>";` after completing the migrations.
    Remove the development-only instruction to keep the previous config version.
 4. Remove the `(upcoming)` labels from the version links in `docs/release-notes.md`
    and `docs/upgrading.md`.

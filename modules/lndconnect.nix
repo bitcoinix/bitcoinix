@@ -72,7 +72,7 @@ let
       };
     };
 
-    nix-bitcoin.mkLndconnect = mkOption {
+    bitcoinix.mkLndconnect = mkOption {
       readOnly = true;
       default = mkLndconnect;
       description = ''
@@ -82,8 +82,8 @@ let
     };
   };
 
-  nbLib = config.nix-bitcoin.lib;
-  runAsUser = config.nix-bitcoin.runAsUserCmd;
+  nbLib = config.bitcoinix.lib;
+  runAsUser = config.bitcoinix.runAsUserCmd;
 
   inherit (config.services)
     lnd
@@ -116,7 +116,7 @@ let
   let
     useCertPathCmd = getCertPathCmd != null && !enableOnion;
     checkOwner = secretsOwner != null;
-    onionDir = config.nix-bitcoin.onionAddresses.dataDir;
+    onionDir = config.bitcoinix.onionAddresses.dataDir;
     onionFile = if userOnionService != null
       then ''"${onionDir}/$(id -un)/${userOnionService}"''
       else "'${onionDir}/${onionService}'";
@@ -162,7 +162,7 @@ let
             echo "Tor or the onion-addresses service may not have started yet. Check them with"
             echo "'systemctl status tor onion-addresses'."
             echo "Or user $(id -un) has no access to this onion address. See option"
-            echo "'nix-bitcoin.onionAddresses.access'."
+            echo "'bitcoinix.onionAddresses.access'."
           } >&2
           exit 1
         fi
@@ -200,7 +200,7 @@ let
       fi
     ''}
     url=$(
-      ${getExe config.nix-bitcoin.pkgs.lndconnect} --url \
+      ${getExe config.bitcoinix.pkgs.lndconnect} --url \
         ${optionalString enableOnion ''--host="$host"''} \
         --port=${toString port} \
         ${certArg} \
@@ -232,7 +232,7 @@ let
 
   # Like onion-services.nix, give the operator onion access only when the
   # operator role is enabled, so that access stays an explicit choice
-  operator = config.nix-bitcoin.operator;
+  operator = config.bitcoinix.operator;
   operatorName = operator.name;
 in {
   inherit options;
@@ -267,7 +267,7 @@ in {
             };
           };
           # Two definitions, so that `operatorName == lnd.user` is not a duplicate key
-          nix-bitcoin.onionAddresses.access = mkMerge [
+          bitcoinix.onionAddresses.access = mkMerge [
             { ${lnd.user} = [ "lnd-rest" ]; }
             (mkIf operator.enable { ${operatorName} = [ "lnd-rest" ]; })
           ];
@@ -323,7 +323,7 @@ in {
           };
           # The operator's copy also allows nodeinfo to show the clnrest onion address.
           # Two definitions, so that `operatorName == clightning.user` is not a duplicate key
-          nix-bitcoin.onionAddresses.access = mkMerge [
+          bitcoinix.onionAddresses.access = mkMerge [
             # Without clightning, its user doesn't exist
             (mkIf clightning.enable { ${clightning.user} = [ "clnrest" ]; })
             (mkIf operator.enable { ${operatorName} = [ "clnrest" ]; })

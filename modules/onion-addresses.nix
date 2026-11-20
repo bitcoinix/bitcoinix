@@ -8,7 +8,7 @@
 
 with lib;
 let
-  options.nix-bitcoin.onionAddresses = {
+  options.bitcoinix.onionAddresses = {
     access = mkOption {
       type = with types; attrsOf (listOf str);
       default = {};
@@ -41,8 +41,8 @@ let
     };
   };
 
-  cfg = config.nix-bitcoin.onionAddresses;
-  nbLib = config.nix-bitcoin.lib;
+  cfg = config.bitcoinix.onionAddresses;
+  nbLib = config.bitcoinix.lib;
   # The service chowns to these names, so compare with the login names of the
   # enabled accounts, not with the attribute names of `users.users`
   userNames = map (u: u.name) (filter (u: u.enable or true) (attrValues config.users.users));
@@ -56,7 +56,7 @@ in {
     assertions = [
       { assertion = missingUsers == [];
         message = ''
-          `nix-bitcoin.onionAddresses.access` contains users that aren't defined and enabled in `users.users`:
+          `bitcoinix.onionAddresses.access` contains users that aren't defined and enabled in `users.users`:
           ${concatStringsSep ", " missingUsers}
         '';
       }

@@ -9,7 +9,7 @@ in
   # report every config that imports the preset and keeps its setting.
   # The preset declares a marker option: with `imports = [ (import <preset>) ]`,
   # its definitions are attributed to the importing file.
-  condition = config.nix-bitcoin ? hardened-extended-preset-enabled
+  condition = config.bitcoinix ? hardened-extended-preset-enabled
     && toString (config.boot.kernel.sysctl.${sysctl} or "") == "0"
     && !config.boot.isContainer
     && config.networking.enableIPv6;

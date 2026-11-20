@@ -50,10 +50,10 @@ Connect ZEUS to your LND or Core Lightning node over Tor or WireGuard.
    it. Root can always run it, because then it runs as the `clightning` user, which has
    its own copy. The operator user needs access to the onion address only to run
    `lnconnect-clnrest` as itself. It gets this access when the operator role is enabled
-   (`nix-bitcoin.operator.enable = true;`, which the secure-node preset sets).
+   (`bitcoinix.operator.enable = true;`, which the secure-node preset sets).
    With the role disabled, grant the access explicitly:
    ```nix
-   nix-bitcoin.onionAddresses.access.<operator name> = [ "clnrest" ];
+   bitcoinix.onionAddresses.access.<operator name> = [ "clnrest" ];
    ```
    `lnconnect-clnrest` also reads the admin rune, which only the `clightning` group can
    read. The operator role adds the operator user to this group. With the role disabled,

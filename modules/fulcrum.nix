@@ -64,8 +64,8 @@ let
   };
 
   cfg = config.services.fulcrum;
-  nbLib = config.nix-bitcoin.lib;
-  secretsDir = config.nix-bitcoin.secretsDir;
+  nbLib = config.bitcoinix.lib;
+  secretsDir = config.bitcoinix.secretsDir;
   bitcoind = config.services.bitcoind;
 
   configFile = builtins.toFile "fulcrum.conf" ''
@@ -128,7 +128,7 @@ in {
         } > '${cfg.dataDir}/fulcrum.conf'
       '';
       serviceConfig = nbLib.defaultHardening // {
-        ExecStart = "${config.nix-bitcoin.pkgs.fulcrum}/bin/Fulcrum '${cfg.dataDir}/fulcrum.conf'";
+        ExecStart = "${config.bitcoinix.pkgs.fulcrum}/bin/Fulcrum '${cfg.dataDir}/fulcrum.conf'";
         User = cfg.user;
         Group = cfg.group;
         Restart = "on-failure";

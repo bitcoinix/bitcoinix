@@ -45,8 +45,8 @@ in
     };
     package = mkOption {
       type = types.package;
-      default = config.nix-bitcoin.pkgs.clboss;
-      defaultText = "config.nix-bitcoin.pkgs.clboss";
+      default = config.bitcoinix.pkgs.clboss;
+      defaultText = "config.bitcoinix.pkgs.clboss";
       description = "The package providing clboss binaries.";
     };
   };
@@ -68,6 +68,6 @@ in
 
     systemd.services.clightning.path = [
       pkgs.dnsutils
-    ] ++ optional config.services.clightning.tor.proxy (hiPrio config.nix-bitcoin.torify);
+    ] ++ optional config.services.clightning.tor.proxy (hiPrio config.bitcoinix.torify);
   };
 }

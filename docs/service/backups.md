@@ -10,7 +10,7 @@ for the options.
 
 The backup includes the data directories of bitcoind, lnd, Core Lightning, NBXplorer
 and BTCPay Server, dumps of the BTCPay Server databases, `/var/lib/tor`,
-`/var/lib/nixos` and, with `nix-bitcoin.generateSecrets`, the secrets directory.
+`/var/lib/nixos` and, with `bitcoinix.generateSecrets`, the secrets directory.
 It leaves out the mainnet, signet and testnet4 blockchains and their indexes
 unless `with-bulk-data` is set. This also covers networks previously used on the node.
 

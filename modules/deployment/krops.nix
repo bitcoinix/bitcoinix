@@ -1,6 +1,6 @@
 { lib, ... }:
 {
-  nix-bitcoin = {
+  bitcoinix = {
     secretsDir = "/var/src/secrets";
     setupSecrets = true;
   };

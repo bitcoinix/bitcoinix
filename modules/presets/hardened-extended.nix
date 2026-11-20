@@ -10,7 +10,7 @@
 {
   imports = [{
     # Used by ../versioning/0.2.0/hardened-extended-accept-ra.nix
-    options.nix-bitcoin.hardened-extended-preset-enabled = {};
+    options.bitcoinix.hardened-extended-preset-enabled = {};
   }];
 
   boot.kernel.sysctl = {

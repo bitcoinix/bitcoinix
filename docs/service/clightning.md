@@ -88,7 +88,7 @@ Also back up:
   The `services.backups` module includes it.
 - with `encrypt`, the password `$secretsDir/clightning-replication-password`. Without it,
   the copy can't be decrypted. `services.backups` includes the secrets dir only
-  with `nix-bitcoin.generateSecrets`.
+  with `bitcoinix.generateSecrets`.
 
 ### Remote target via SSHFS
 
@@ -117,7 +117,7 @@ Also back up:
    on the network path to impersonate the target and receive the database,
    in plaintext without `encrypt`.
 
-2. Deploy. With `nix-bitcoin.generateSecrets`, this creates the SSH key
+2. Deploy. With `bitcoinix.generateSecrets`, this creates the SSH key
    `$secretsDir/clightning-replication-ssh-key`.
    `clightning` starts only once the target accepts this key (step 3).
 

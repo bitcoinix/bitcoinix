@@ -70,13 +70,13 @@ in {
       ];
 
       environment.systemPackages = [
-        config.nix-bitcoin.pkgs.hwi
+        config.bitcoinix.pkgs.hwi
         # Provides lsusb for debugging
         pkgs.usbutils
       ];
 
       users.groups.${cfg.group} = {};
-      nix-bitcoin.operator.groups = [ cfg.group ];
+      bitcoinix.operator.groups = [ cfg.group ];
     })
 
     (mkIf cfg.ledger {
@@ -94,7 +94,7 @@ in {
       });
     })
     (mkIf cfg.trezor {
-      environment.systemPackages = [ config.nix-bitcoin.pkgs.nbPython3Packages.trezor ];
+      environment.systemPackages = [ config.bitcoinix.pkgs.nbPython3Packages.trezor ];
       # Don't use rules from nixpkgs because we want to use our own group.
       services.udev.packages = lib.singleton (pkgs.writeTextFile {
         name = "trezord-udev-rules";
