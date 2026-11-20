@@ -37,6 +37,17 @@ def test_regtest():
         machine.wait_until_succeeds(current_run_log_has_string("fulcrum", "listening for connections"))
         assert_full_match(get_block_height(ip('fulcrum'), 50002), f"{num_blocks}\n")
 
+    if enabled("rbitcoin"):
+        # rbitcoin syncs bitcoind's chain (its only peer) and agrees on the tip
+        machine.wait_until_succeeds(
+            f"[[ $(runuser -u operator -- rbitcoin-cli getblockcount) == {num_blocks} ]]"
+        )
+        best = succeed("runuser -u operator -- rbitcoin-cli getbestblockhash").strip().strip('"')
+        assert best == succeed("bitcoin-cli getbestblockhash").strip(), best
+        if test_data["rbitcoin"]["electrum"]:
+            wait_for_open_port(ip("rbitcoin"), 50003)
+            assert_full_match(get_block_height(ip('rbitcoin'), 50003), f"{num_blocks}\n")
+
     if enabled("clightning"):
         machine.wait_until_succeeds(
             f"[[ $(runuser -u operator -- lightning-cli getinfo | jq -M .blockheight) == {num_blocks} ]]"
@@ -67,6 +78,82 @@ def test_regtest():
         assert_full_match(
             f"curl -fsS http://{ip('nginx')}:60845/api/block-height/0", genesis
         )
+
+
+# Impure: mines a block. Runs after `regtest`, which checks the block count.
+@test("rbitcoin-mempool")
+def test_rbitcoin_mempool():
+    api = f"http://{ip('nginx')}:60845/api/v1"
+    num_blocks = test_data["num_blocks"]
+
+    # mempool authenticates with rbitcoin's cookie, so it gets no bitcoind RPC user
+    succeed("! test -e /secrets/bitcoin-rpcpassword-mempool")
+
+    # Address data comes from rbitcoin's Electrum server, not its RPC.
+    # Query by scripthash: mempool decodes addresses as mainnet, so a regtest
+    # address would fail before reaching Electrum.
+    script = succeed(
+        "bitcoin-cli getblock $(bitcoin-cli getblockhash 1) 2"
+        " | jq -r '.tx[0].vout[0].scriptPubKey.hex'"
+    ).strip()
+    scripthash = succeed(
+        f"printf \"$(echo {script} | sed 's/../\\\\x&/g')\" | sha256sum | cut -d' ' -f1"
+    ).strip()
+    machine.wait_until_succeeds(
+        f"[[ $(curl -fsS {api}/scripthash/{scripthash} | jq .chain_stats.tx_count) -ge 1 ]]"
+    )
+
+    # rbitcoin writes a new RPC cookie on every start. mempool must pick it up
+    # (it re-reads COOKIE_PATH after an HTTP 401) and keep following the chain.
+    succeed("systemctl restart rbitcoin")
+    succeed(
+        "bitcoin-cli -rpcwallet=test generatetoaddress 1"
+        " $(bitcoin-cli -rpcwallet=test getnewaddress)"
+    )
+    machine.wait_until_succeeds(
+        f"[[ $(curl -fsS {api}/blocks/tip/height) == {num_blocks + 1} ]]"
+    )
+
+
+# Impure: restarts and kills rbitcoin. Runs after `regtest` and
+# `rbitcoin-mempool`, which mine the blocks checked here.
+@test("rbitcoin-space-follows-node")
+def test_rbitcoin_space_follows_node():
+    base = f"http://{ip('rbitcoin-space')}:60847"
+    height = succeed("bitcoin-cli getblockcount").strip()
+    machine.wait_until_succeeds(f"[[ $(curl -fsS {base}/regtest/api/blocks/tip/height) == {height} ]]")
+
+    def main_pid():
+        return succeed("systemctl show -p MainPID --value rbitcoin-space").strip()
+
+    def expect_new_cookie_accepted(old_pid):
+        # rbitcoin wrote a new cookie on start. The explorer reads it only at its
+        # own start, so it must have been restarted with rbitcoin.
+        machine.wait_until_succeeds(
+            f"[[ $(systemctl show -p MainPID --value rbitcoin-space) != {old_pid} ]]"
+            " && systemctl is-active rbitcoin-space"
+        )
+        rbitcoin_space_wait_ready()
+
+    # An explicit restart is repeated to the explorer (PartOf)
+    pid = main_pid()
+    succeed("systemctl restart rbitcoin")
+    expect_new_cookie_accepted(pid)
+
+    # A crash stops the explorer (BindsTo). rbitcoin's automatic restart
+    # starts it again (Upholds).
+    pid = main_pid()
+    succeed("systemctl kill -s KILL rbitcoin")
+    expect_new_cookie_accepted(pid)
+    # Not `assert_running`: the kill above logged "Failed with result 'signal'"
+    machine.wait_for_unit("rbitcoin")
+
+    # A manual stop sticks while rbitcoin keeps running
+    succeed("systemctl stop rbitcoin-space")
+    machine.sleep(15)
+    machine.fail("systemctl is-active rbitcoin-space")
+    succeed("systemctl start rbitcoin-space")
+    rbitcoin_space_wait_ready()
 
 
 @test("trustedcoin")

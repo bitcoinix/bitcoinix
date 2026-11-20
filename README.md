@@ -133,6 +133,8 @@ NixOS modules ([src](modules/modules.nix))
   * [Unbeholden Wallet](https://github.com/unbeholdendev/unbeholden-wallet): watch-only wallet in the browser that signs on an air-gapped device
   * [electrs](https://github.com/romanz/electrs): Electrum server
   * [Fulcrum](https://github.com/cculianu/Fulcrum): Electrum server (see [the module](modules/fulcrum.nix) for a comparison with electrs)
+  * [rbitcoin](https://github.com/rbitcoin-org/rbitcoin) ([experimental](docs/services.md#rbitcoin)): Bitcoin full node in Rust with a built-in Electrum server, usable as mempool's node instead of bitcoind
+  * [rbitcoin.space](https://github.com/smolcars/rbitcoin-space) ([experimental](docs/services.md#rbitcoinspace)): block explorer for rbitcoin with a live mempool, mining pages and an Esplora-compatible API
   * [BTCPay Server](https://github.com/btcpayserver/btcpayserver)
   * [Bitcoin Hardware Wallet Interface (HWI)](https://github.com/bitcoin-core/HWI)
 * Helper

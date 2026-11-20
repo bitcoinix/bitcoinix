@@ -120,6 +120,9 @@ in {
         mempool-frontend = {
           externalPort = 80;
         };
+        rbitcoin-space = {
+          externalPort = 80;
+        };
       };
     }
   ];

@@ -64,7 +64,8 @@ let
         btcpayserver = cfg.btcpayserver.enable;
         clightning = cfg.clightning.enable;
         clightning-bcli = cfg.clightning.enable && cfg.clightning.useBcliPlugin;
-        mempool = cfg.mempool.enable;
+        # With rbitcoin, mempool uses rbitcoin's cookie and has no bitcoind user
+        mempool = cfg.mempool.enable && cfg.mempool.electrumServer != "rbitcoin";
       };
 
       tests.bitcoind-rest = cfg.bitcoind.enable;
@@ -189,7 +190,7 @@ let
       tests.mempool = cfg.mempool.enable;
       test.data.mempool.network = cfg.bitcoind.network;
       services.mempool = {
-        electrumServer = "fulcrum";
+        electrumServer = mkDefault "fulcrum";
         settings.MEMPOOL.POOLS_JSON_URL = mkIf config.test.noConnections "disable-pool-fetching";
       };
 
@@ -314,6 +315,31 @@ let
       tests.charge-lnd = cfg.charge-lnd.enable;
 
       tests.electrs = cfg.electrs.enable;
+
+      tests.rbitcoin = cfg.rbitcoin.enable;
+      services.rbitcoin = {
+        # Follows bitcoind, which it syncs from
+        network = cfg.bitcoind.network;
+        # Ports that don't collide with bitcoind, electrs and fulcrum
+        port = 18454;
+        rpc.port = 18453;
+        electrum.port = 50003;
+        esplora.port = 3003;
+        # Sync from bitcoind only, so the test needs no internet access
+        connect = [
+          (config.nix-bitcoin.lib.addressWithPort cfg.bitcoind.address cfg.bitcoind.port)
+        ];
+      };
+      services.bitcoind.listen = mkIf cfg.rbitcoin.enable true;
+      test.data.rbitcoin = {
+        rpc = cfg.rbitcoin.rpc.enable;
+        electrum = cfg.rbitcoin.electrum.enable;
+      };
+      tests.rbitcoin-space = cfg.rbitcoin-space.enable;
+      tests.rbitcoin-space-follows-node = cfg.rbitcoin-space.enable;
+      tests.rbitcoin-mempool = cfg.mempool.enable && cfg.mempool.electrumServer == "rbitcoin";
+      nix-bitcoin.netns-isolation.services.rbitcoin.connections =
+        mkIf cfg.rbitcoin.enable [ "bitcoind" ];
 
       services.fulcrum.port = 50002;
       tests.fulcrum = cfg.fulcrum.enable;
@@ -489,7 +515,25 @@ let
       services.charge-lnd.enable = true;
       services.electrs.enable = true;
       services.fulcrum.enable = true;
+      services.rbitcoin.enable = true;
+      services.rbitcoin.electrum.enable = true;
       services.btcpayserver.enable = true;
+    };
+
+    # rbitcoin as mempool's node and Electrum server
+    rbitcoinMempool = {
+      imports = [ scenarios.regtestBase ];
+      services.mempool.enable = true;
+      services.mempool.electrumServer = "rbitcoin";
+    };
+
+    # rbitcoin.space, the block explorer, on rbitcoin
+    rbitcoinSpace = {
+      imports = [ scenarios.regtestBase ];
+      services.rbitcoin-space.enable = true;
+    };
+    rbitcoinSpaceNetns = {
+      imports = with scenarios; [ rbitcoinSpace netnsBase ];
     };
 
     # netns and regtest, without secure-node.nix

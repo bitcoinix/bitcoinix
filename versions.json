@@ -87,6 +87,14 @@
     "channel": "unstable",
     "version": "2.6.17"
   },
+  "rbitcoin": {
+    "channel": "local",
+    "version": "0.9.2"
+  },
+  "rbitcoin-space": {
+    "channel": "local",
+    "version": "0.4.0"
+  },
   "rtl": {
     "channel": "unstable",
     "version": "0.15.17"

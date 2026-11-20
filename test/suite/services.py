@@ -119,6 +119,70 @@ def test_fulcrum():
     machine.wait_until_succeeds(current_run_log_has_string("fulcrum", "started ok"))
 
 
+@test("rbitcoin")
+def test_rbitcoin():
+    assert_running("rbitcoin")
+    # The operator reaches the node through the unix socket
+    machine.wait_until_succeeds("runuser -u operator -- rbitcoin-cli getblockcount")
+
+    if not test_data["rbitcoin"]["rpc"]:
+        return
+    cookie = "/run/rbitcoin/rpc.cookie"
+    assert_full_match(f"stat -c '%a %U %G' {cookie}", "640 rbitcoin rbitcoinrpc\n")
+    # The cookie is built in a root-only temp dir that is removed afterwards
+    assert_full_match("find /run -maxdepth 1 -name 'rbitcoin-cookie.*' | wc -l", "0\n")
+    # Only group `rbitcoinrpc` can read the cookie
+    machine.fail(f"runuser -u operator -- cat {cookie}")
+    # The cookie authenticates Bitcoin Core style HTTP Basic RPC, other credentials don't
+    rpc = (
+        """curl -s -o /dev/null -w '%{http_code}' --data-binary """
+        """'{"jsonrpc":"1.0","id":0,"method":"getblockcount","params":[]}' """
+        f"http://{ip('rbitcoin')}:18453/"
+    )
+    assert_full_match(f"{rpc} --user \"$(cat {cookie})\"", "200")
+    assert_full_match(f"{rpc} --user __cookie__:wrong", "401")
+
+
+def rbitcoin_space_wait_ready():
+    # `ready` needs an accepted RPC call and a connected Electrum client.
+    # The RPC check repeats every 30 s, so a refused cookie shows within that time.
+    machine.wait_until_succeeds(
+        f"[[ $(curl -sS http://{ip('rbitcoin-space')}:60847/readyz | jq -r .networks.regtest.rpc) == ok ]]"
+    )
+    machine.wait_until_succeeds(
+        f"curl -fsS -o /dev/null http://{ip('rbitcoin-space')}:60847/readyz"
+    )
+
+
+@test("rbitcoin-space")
+def test_rbitcoin_space():
+    assert_running("rbitcoin-space")
+    rbitcoin_space_wait_ready()
+    # Both are probed after Electrum connects, so they can trail `ready`
+    readyz = f"curl -sS http://{ip('rbitcoin-space')}:60847/readyz | jq -r .networks.regtest"
+    machine.wait_until_succeeds(f"[[ $({readyz}.address_index) == on ]]")
+    machine.wait_until_succeeds(f"[[ $({readyz}.store) == ok ]]")
+
+    base = f"http://{ip('rbitcoin-space')}:60847"
+    # The frontend, from the package's web directory
+    succeed(f"curl -fsS {base}/ | grep -qi '<!doctype html>'")
+    # The Esplora-compatible API, answered through rbitcoin's Esplora server
+    node_height = succeed("runuser -u operator -- rbitcoin-cli getblockcount").strip()
+    machine.wait_until_succeeds(
+        f"[[ $(curl -fsS {base}/regtest/api/blocks/tip/height) == {node_height} ]]"
+    )
+
+    # The RPC password comes from rbitcoin's cookie at runtime: it is in the
+    # environment, but neither on the command line nor in the unit
+    pid = succeed("systemctl show -p MainPID --value rbitcoin-space").strip()
+    password = succeed("cut -d: -f2 /run/rbitcoin/rpc.cookie").strip()
+    machine.fail(f"grep -qF {password} /proc/{pid}/cmdline")
+    machine.fail(f"systemctl cat rbitcoin-space | grep -qF {password}")
+    succeed(f"tr '\\0' '\\n' < /proc/{pid}/environ | grep -qxF REGTEST_RPC_PASSWORD={password}")
+    # Owner-only, like every process's environment
+    machine.fail(f"runuser -u operator -- cat /proc/{pid}/environ")
+
+
 @test("clightning")
 def test_clightning():
     assert_running("clightning")

@@ -10,6 +10,7 @@
 
     # Main features
     ./bitcoind.nix
+    ./rbitcoin.nix
     ./clightning.nix
     ./clightning-plugins
     ./clightning-replication.nix
@@ -21,6 +22,7 @@
     ./mempool.nix
     ./electrs.nix
     ./fulcrum.nix
+    ./rbitcoin-space.nix
     ./unbeholden-wallet.nix
     ./btcpayserver.nix
     ./hardware-wallets.nix
