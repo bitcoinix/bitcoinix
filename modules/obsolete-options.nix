@@ -183,5 +183,14 @@ in {
       nix-bitcoin.pkgs.bitcoind (Bitcoin Core) directly.
       See docs/upgrading/0.1.3.md.
     '')
+  ]
+  ++
+  # 0.2.0
+  [
+    (mkRemovedOptionModule [ "services" "bitcoind" "sysperms" ] ''
+      Bitcoin Core 25.0 removed its sysperms setting, so bitcoind ignored this option.
+      To let the bitcoind group read the blocks dir, use
+      `services.bitcoind.dataDirReadableByGroup` instead. It turns off bitcoind's wallet.
+    '')
   ];
 }

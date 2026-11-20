@@ -314,6 +314,7 @@ buildable=(
     hardened
     clightning-replication
     lndPruned
+    bitcoindGroupRead
     lnconnectNoOperatorRole
     i2p
     i2pLocal
