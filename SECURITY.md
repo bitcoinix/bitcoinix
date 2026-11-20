@@ -1,8 +1,5 @@
 # Security Policy
 
-> [!NOTE]
-> This is a basic draft. The project is a work in progress and this policy may change.
-
 ## Supported versions
 
 Security fixes are provided on a best-effort basis for:
@@ -33,6 +30,8 @@ without a guaranteed response time or fix time.
 There is no security fund and no bug bounty (this may be reconsidered in the future).
 The project relies on responsible reports and on the good faith of the community.
 Reporters are credited in the [Wall of Fame](#wall-of-fame), unless they wish to remain anonymous.
+Once a release with the fix is tagged, the advisory is published at
+<https://github.com/bitcoinix/bitcoinix/security/advisories> and the reporter is added to the Wall of Fame.
 
 Please follow [coordinated vulnerability disclosure](https://en.wikipedia.org/wiki/Coordinated_vulnerability_disclosure)
 and give the maintainers a reasonable time to fix an issue before publishing it.
@@ -195,13 +194,13 @@ and `update-nix-bitcoin` refuses to move to a release older than the one pinned 
 
 ### bitcoinix
 
-| Researcher | Report | Advisory | Fix |
-| :-- | :-- | :-- | :-- |
-| [ostermayer](https://github.com/ostermayer), [bobberb](https://github.com/bobberb) | `lnd-create-macaroons` and the RTL credential scripts followed symlinks in service-user directories as root | [GHSA-m72m-4gw2-mfqw](https://github.com/bitcoinix/bitcoinix/security/advisories/GHSA-m72m-4gw2-mfqw) | [#34](https://github.com/bitcoinix/bitcoinix/pull/34), [#47](https://github.com/bitcoinix/bitcoinix/pull/47) |
-| [ostermayer](https://github.com/ostermayer) | `onion-addresses` copied Tor hostname files unchecked as root (config injection, operator-to-root race) | [GHSA-cc4h-g372-wqv3](https://github.com/bitcoinix/bitcoinix/security/advisories/GHSA-cc4h-g372-wqv3) | [#43](https://github.com/bitcoinix/bitcoinix/pull/43) |
-| [ostermayer](https://github.com/ostermayer) | The clightning config was written through a symlink in a group-writable data dir (operator to clightning code execution) | [GHSA-m787-rw34-jpm3](https://github.com/bitcoinix/bitcoinix/security/advisories/GHSA-m787-rw34-jpm3) | [#94](https://github.com/bitcoinix/bitcoinix/pull/94), [#114](https://github.com/bitcoinix/bitcoinix/pull/114) |
-
-All three are fixed in 0.1.1.
+| Researcher | Report | Advisory | Fix | Fixed in |
+| :-- | :-- | :-- | :-- | :-- |
+| [ostermayer](https://github.com/ostermayer), [bobberb](https://github.com/bobberb) | `lnd-create-macaroons` and the RTL credential scripts followed symlinks in service-user directories as root | [GHSA-m72m-4gw2-mfqw](https://github.com/bitcoinix/bitcoinix/security/advisories/GHSA-m72m-4gw2-mfqw) | [#34](https://github.com/bitcoinix/bitcoinix/pull/34), [#47](https://github.com/bitcoinix/bitcoinix/pull/47) | 0.1.1 |
+| [ostermayer](https://github.com/ostermayer) | `onion-addresses` copied Tor hostname files unchecked as root (config injection, operator-to-root race) | [GHSA-cc4h-g372-wqv3](https://github.com/bitcoinix/bitcoinix/security/advisories/GHSA-cc4h-g372-wqv3) | [#43](https://github.com/bitcoinix/bitcoinix/pull/43) | 0.1.1 |
+| [ostermayer](https://github.com/ostermayer) | The clightning config was written through a symlink in a group-writable data dir (operator to clightning code execution) | [GHSA-m787-rw34-jpm3](https://github.com/bitcoinix/bitcoinix/security/advisories/GHSA-m787-rw34-jpm3) | [#94](https://github.com/bitcoinix/bitcoinix/pull/94), [#114](https://github.com/bitcoinix/bitcoinix/pull/114) | 0.1.1 |
+| [ostermayer](https://github.com/ostermayer) | `tor.enforce` let services reach link-local addresses (cloud metadata service) and resolve names outside Tor | [GHSA-cgh8-4w2p-8fr8](https://github.com/bitcoinix/bitcoinix/security/advisories/GHSA-cgh8-4w2p-8fr8) | [#264](https://github.com/bitcoinix/bitcoinix/pull/264) | 0.1.6 |
+| [ostermayer](https://github.com/ostermayer) | `lnd-create-macaroons` ran curl and jq as root with config files from the lnd data dir (lnd user or operator to root) | [GHSA-cwmc-wjvh-3qp6](https://github.com/bitcoinix/bitcoinix/security/advisories/GHSA-cwmc-wjvh-3qp6) | [#241](https://github.com/bitcoinix/bitcoinix/pull/241) | 0.1.6 |
 
 ### Upstream nix-bitcoin
 
