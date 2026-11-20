@@ -35,6 +35,7 @@ let
       '';
     };
     dataDir = mkOption {
+      internal = true;
       readOnly = true;
       default = "/var/lib/onion-addresses";
     };

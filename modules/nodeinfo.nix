@@ -7,6 +7,7 @@ let
       enable = mkEnableOption "nodeinfo";
 
       program = mkOption {
+        internal = true;
         readOnly = true;
         default = script;
         defaultText = "(See source)";

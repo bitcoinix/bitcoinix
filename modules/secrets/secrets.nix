@@ -59,20 +59,36 @@ let
 
     secrets = mkOption {
       default = {};
+      description = ''
+        Secret files in {option}`nix-bitcoin.secretsDir` that the enabled
+        services use, keyed by file name, with the owner and permissions each
+        file needs. The services declare their own secrets here.
+
+        With {option}`nix-bitcoin.setupSecrets`, `setup-secrets` applies these
+        owners and permissions before the services start. With
+        `nix-bitcoin.secretsSetupMethod = "manual"`, set them yourself.
+      '';
       type = with types; attrsOf (submodule (
         { config, ... }: {
           options = {
             user = mkOption {
               type = str;
               default = "root";
+              description = "User that owns the secret file.";
             };
             group = mkOption {
               type = str;
               default = config.user;
+              defaultText = literalExpression "user";
+              description = "Group of the secret file.";
             };
             permissions = mkOption {
               type = str;
               default = "440";
+              description = ''
+                Mode of the secret file, in the octal notation of
+                {command}`chmod`.
+              '';
             };
             allowEmpty = mkOption {
               type = bool;
@@ -90,6 +106,23 @@ let
     secretsSetupMethod = mkOption {
       type = with types; nullOr str;
       default = null;
+      description = ''
+        How the secrets in {option}`nix-bitcoin.secretsDir` are provided.
+        Evaluation fails while this is `null`. Values:
+
+        - `"setup-secrets"`: set automatically when
+          {option}`nix-bitcoin.setupSecrets` or
+          {option}`nix-bitcoin.generateSecrets` is enabled.
+        - `"nixops"`: set by the NixOps deployment module.
+        - `"manual"`: you provide the secrets and set the owners and
+          permissions declared in {option}`nix-bitcoin.secrets` yourself,
+          before the services start.
+
+        For any value other than `"manual"`, `nix-bitcoin-secrets.target` is
+        started on every activation, and services start after it. A custom
+        deployment method can set its own value and order its secrets setup
+        before this target.
+      '';
     };
 
     generateSecretsScript = mkOption {
