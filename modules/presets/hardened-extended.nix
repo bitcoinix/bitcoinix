@@ -27,7 +27,7 @@
 
     # Disable accepting IPv6 router advertisements
     "net.ipv6.conf.all.accept_ra" = "0";
-    "net.ipv6.default.accept_ra" = "0";
+    "net.ipv6.conf.default.accept_ra" = "0";
 
     # Disable TCP SACK. SACK is commonly exploited and unnecessary for many
     # circumstances so it should be disabled if you don't require it
