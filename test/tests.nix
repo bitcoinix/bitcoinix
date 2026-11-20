@@ -47,6 +47,7 @@ let
       ]);
 
       tests.bitcoind = cfg.bitcoind.enable;
+      test.data.bitcoinNetwork = cfg.bitcoind.network;
       # lnd requires bitcoind and stops with it, also when test `lnd` is off
       test.data.restart-bitcoind.lnd = cfg.lnd.enable;
 
@@ -57,9 +58,8 @@ let
         netns = config.nix-bitcoin.netns-isolation.enable;
       };
 
-      test.data.bitcoind-group-read = with cfg.bitcoind; {
-        inherit dataDir network;
-        networkDir = dataDir + optionalString (network != "mainnet") "/${network}";
+      test.data.bitcoind-group-read = {
+        inherit (cfg.bitcoind) dataDir network networkDir;
       };
 
       tests.secrets-no-argv = cfg.bitcoind.enable;
@@ -214,7 +214,6 @@ let
       '');
 
       tests.mempool = cfg.mempool.enable;
-      test.data.mempool.network = cfg.bitcoind.network;
       services.mempool = {
         electrumServer = "fulcrum";
         settings.MEMPOOL.POOLS_JSON_URL = mkIf config.test.noConnections "disable-pool-fetching";
@@ -411,7 +410,16 @@ let
     ];
   };
 
-  scenarios = with lib; {
+  scenarios = with lib; genAttrs [ "signet" "testnet4" ] (network: {
+    services.bitcoind = { inherit network; listen = true; };
+    services.btcpayserver = { enable = true; lightningBackend = "clightning"; };
+    services.clightning.plugins = {
+      clboss.enable = network == "signet";
+      trustedcoin.enable = network == "signet";
+    };
+    services.unbeholden-wallet.enable = true; # electrs
+    services.mempool.enable = true; # Fulcrum, selected by baseConfig
+  }) // {
     # Included in all scenarios by ./lib/make-test.nix
     base = baseConfig;
 

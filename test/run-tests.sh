@@ -309,6 +309,8 @@ basic() { buildTests basic "$@"; }
 # shellcheck disable=2034
 buildable=(
     "${basic[@]}"
+    signet
+    testnet4
     full
     regtest
     hardened

@@ -5,15 +5,35 @@ With a flake-based deployment, you deploy with `nixos-rebuild` or `colmena` as d
 
 ## Bitcoin network
 
-The deployment defaults to mainnet. To use a local regression testing network, set:
+> [!WARNING]
+> Use a separate deployment for each Bitcoin network. If you change
+> `services.bitcoind.network` on an existing node, Bitcoin Core, Core Lightning
+> and electrs switch to the selected network's data directories. Fulcrum,
+> Mempool, BTCPay Server and NBXplorer still open their existing databases.
+> For example, switching a mainnet BTCPay node to signet leaves its mainnet
+> stores and extended public keys (xpubs) in the database used on signet.
+
+The deployment defaults to mainnet. To run a node on signet, set
 
 ```nix
-services.bitcoind.network = "regtest";
+services.bitcoind.network = "signet";
 ```
 
-The supported values are `"mainnet"` and `"regtest"`. Bitcoin and the services
-connected to it derive their network settings from this option. Mempool
-automatically configures its backend and frontend for the selected network.
+| Network | Use | Bitcoin P2P port | Bitcoin RPC port |
+| --- | --- | ---: | ---: |
+| `"mainnet"` | Production | 8333 | 8332 |
+| `"signet"` | Public signet | 38333 | 38332 |
+| `"testnet4"` | Public proof-of-work test network | 48333 | 48332 |
+| `"regtest"` | Local regression tests | 18444 | 18443 |
+
+Core Lightning, electrs, Fulcrum, Unbeholden Wallet, Mempool and BTCPay Server
+can use either public test network. Mempool serves the selected network at `/`.
+With the packaged software, these combinations fail at evaluation time.
+
+- **LND on signet or testnet4.** Its wallet initializer, `lndinit`, cannot
+  create wallets for these networks. This also applies when another service
+  enables LND, such as charge-lnd or BTCPay Server with the LND backend.
+- **CLBOSS or Trustedcoin on testnet4.** Both Core Lightning plugins support signet.
 
 ## Deployment shell
 This section applies to the legacy [krops deployment](./install.md#5-alternative-deploy-with-krops-legacy).

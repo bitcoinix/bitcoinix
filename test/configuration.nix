@@ -17,6 +17,7 @@ let
   ) (failedAssertions config);
   releasedVersion = import ../version.nix;
   changes020Released = lib.versionAtLeast releasedVersion "0.2.0";
+  publicTestNetworks = [ "signet" "testnet4" ];
 
   # These fixtures are independent of VM scenarios and their overrides.
   restAllowed = {
@@ -853,11 +854,90 @@ let
         rpc = tests.testBitcoinDefaults.expected.rpc // { port = 18443; };
       };
     };
+    testRegtestOnionPort = let
+      check = { network ? "regtest", enable ? true, onion ? true, settings ? {} }: let
+        config = evaluate {
+          services.bitcoind = { inherit network enable; listen = true; } // settings;
+          nix-bitcoin.onionServices.bitcoind.enable = onion;
+          nix-bitcoin.configVersion = "0.1.6";
+        };
+        mappings = config.services.tor.relay.onionServices.bitcoind.map or [];
+      in {
+        ports = map (m: [ m.port m.target.port ]) mappings;
+        notice = lib.any (lib.hasInfix "default regtest onion target port")
+          config.nix-bitcoin.versioning.incompatibleChanges;
+      };
+    in {
+      expr = map check [
+        {} { settings.onionPort = 8334; } { settings.onionPort = 18445; }
+        { onion = false; } { enable = false; } { network = "mainnet"; }
+      ];
+      expected = [
+        { ports = [[ 18444 18445 ]]; notice = true; }
+        { ports = [[ 18444 8334 ]]; notice = false; }
+        { ports = [[ 18444 18445 ]]; notice = false; }
+        { ports = []; notice = false; }
+        { ports = []; notice = false; }
+        { ports = [[ 8333 8334 ]]; notice = false; }
+      ];
+    };
     testNetworkRejectsUnsupportedValues = {
       expr = map (network: (builtins.tryEval
         (evaluate { services.bitcoind.network = network; }).services.bitcoind.network).success)
-        [ "testnet" "signet" "" true ];
+        [ "testnet" "testnet5" "" true ];
       expected = [ false false false false ];
+    };
+    testPublicTestNetworks = {
+      expr = map (network: let
+        config = evaluate {
+          services.bitcoind = { inherit network; dataDir = "/srv/bitcoin"; };
+          nix-bitcoin.onionServices.bitcoind.enable = true;
+          services.btcpayserver = { enable = true; lightningBackend = "clightning"; };
+          services.clightning.plugins = {
+            clboss.enable = network == "signet";
+            trustedcoin.enable = network == "signet";
+          };
+          services.mempool = { enable = true; electrumServer = "fulcrum"; };
+          services.fulcrum.port = 50002;
+          services.unbeholden-wallet.enable = true; # Also enables electrs
+          services.backups.enable = true;
+        };
+        inherit (config.services) bitcoind;
+        fileList = lib.splitString "\n" (builtins.readFile config.services.duplicity.includeFileList);
+      in {
+        errors = failedAssertions config;
+        inherit (bitcoind) port onionPort networkDir;
+        rpcPort = bitcoind.rpc.port;
+        clnDir = config.services.clightning.networkDir;
+        excludesBulkData = lib.all (dir: lib.elem "- ${bitcoind.networkDir}/${dir}" fileList)
+          [ "blocks" "chainstate" "indexes" ];
+      }) publicTestNetworks;
+      expected = [
+        { errors = []; port = 38333; rpcPort = 38332; onionPort = 38334;
+          networkDir = "/srv/bitcoin/signet"; clnDir = "/var/lib/clightning/signet"; excludesBulkData = true; }
+        { errors = []; port = 48333; rpcPort = 48332; onionPort = 48334;
+          networkDir = "/srv/bitcoin/testnet4"; clnDir = "/var/lib/clightning/testnet4"; excludesBulkData = true; }
+      ];
+    };
+    testLndRejectsPublicTestNetworks = {
+      expr = map (network: failedAssertions (evaluate {
+        services.bitcoind.network = network;
+        # Also covers dependencies which enable LND implicitly.
+        services.charge-lnd.enable = true;
+      })) publicTestNetworks;
+      expected = map (network: [
+        "services.lnd cannot use ${network}: lndinit does not support wallet initialization on this network."
+      ]) publicTestNetworks;
+    };
+    testTestnet4RejectsUnsupportedPlugins = {
+      expr = map (plugin: failedAssertions (evaluate {
+        services.bitcoind.network = "testnet4";
+        services.clightning = { enable = true; plugins.${plugin}.enable = true; };
+      })) [ "clboss" "trustedcoin" ];
+      expected = [
+        [ "services.clightning.plugins.clboss does not support testnet4." ]
+        [ "services.clightning.plugins.trustedcoin does not support testnet4." ]
+      ];
     };
     testLegacyRegtestOption = {
       expr = map (value: let
@@ -914,14 +994,10 @@ let
         { settings.regtest = true; cookiePath = "regtest/.cookie"; indexDir = "regtest"; }
         { settings.network = "mainnet"; cookiePath = ".cookie"; indexDir = "bitcoin"; }
         { settings.network = "regtest"; cookiePath = "regtest/.cookie"; indexDir = "regtest"; }
+        { settings.network = "signet"; cookiePath = "signet/.cookie"; indexDir = "signet"; }
+        { settings.network = "testnet4"; cookiePath = "testnet4/.cookie"; indexDir = "testnet4"; }
       ];
-      expected = [
-        { cookie = true; index = true; }
-        { cookie = true; index = true; }
-        { cookie = true; index = true; }
-        { cookie = true; index = true; }
-        { cookie = true; index = true; }
-      ];
+      expected = lib.replicate 7 { cookie = true; index = true; };
     };
     testNetworkNameOverrides = {
       expr = map (config: let
@@ -1145,7 +1221,7 @@ let
         frontend = config.services.mempool.frontend.settings;
         usesPackagedFrontend = config.services.mempool.frontend.staticContentRoot.drvPath
           == config.nix-bitcoin.pkgs.mempool-frontend.drvPath;
-      }) [ "mainnet" "regtest" ];
+      }) ([ "mainnet" "regtest" ] ++ publicTestNetworks);
       expected = [
         {
           network = "mainnet";
@@ -1157,6 +1233,18 @@ let
           network = "regtest";
           rpcPort = 18443;
           frontend = { MAINNET_ENABLED = false; REGTEST_ENABLED = true; ROOT_NETWORK = "regtest"; };
+          usesPackagedFrontend = false;
+        }
+        {
+          network = "signet";
+          rpcPort = 38332;
+          frontend = { MAINNET_ENABLED = false; SIGNET_ENABLED = true; ROOT_NETWORK = "signet"; };
+          usesPackagedFrontend = false;
+        }
+        {
+          network = "testnet4";
+          rpcPort = 48332;
+          frontend = { MAINNET_ENABLED = false; TESTNET4_ENABLED = true; ROOT_NETWORK = "testnet4"; };
           usesPackagedFrontend = false;
         }
       ];
@@ -1939,6 +2027,23 @@ let
         ];
       };
       expected = { sysperms = [ true false ]; removed = true; symlink = [ true false false ]; };
+    };
+    testBitcoindGroupReadWaitsForNetworkMount = {
+      expr = map (network: (evaluate {
+        services.bitcoind = {
+          inherit network;
+          enable = true;
+          dataDirReadableByGroup = true;
+          dataDir = "/srv/bitcoin data";
+        };
+      }).systemd.services.bitcoind-group-read.unitConfig.RequiresMountsFor)
+        [ "mainnet" "regtest" "signet" "testnet4" ];
+      expected = [
+        [ ''"/srv/bitcoin data/blocks/index"'' ]
+        [ ''"/srv/bitcoin data/regtest/blocks/index"'' ]
+        [ ''"/srv/bitcoin data/signet/blocks/index"'' ]
+        [ ''"/srv/bitcoin data/testnet4/blocks/index"'' ]
+      ];
     };
     testLndMacaroonRootKeyIds = let
       info = ''{"entity":"info","action":"read"}'';

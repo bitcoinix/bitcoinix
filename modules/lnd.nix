@@ -190,6 +190,10 @@ in {
       (nbLib.extraConfigWarning "services.lnd.extraConfig");
 
     assertions = [
+      # TODO-EXTERNAL: Recheck the --network choices in lndinit's cmd_init_wallet.go.
+      { assertion = elem bitcoind.network [ "mainnet" "regtest" ];
+        message = "services.lnd cannot use ${bitcoind.network}: lndinit does not support wallet initialization on this network.";
+      }
       { assertion =
           !(config.services ? clightning)
           || !config.services.clightning.enable
@@ -290,6 +294,7 @@ in {
           (umask 077 && mkdir -p '${networkDir}')
           walletTmp=$(mktemp -d -- '${networkDir}/wallet-init.XXXXXX')
           if ! ${lndinit} -v init-wallet \
+               --network=${bitcoind.network} \
                --file.seed="$seed" \
                --file.wallet-password='${secretsDir}/lnd-wallet-password' \
                --init-file.output-wallet-dir="$walletTmp"; then

@@ -122,6 +122,11 @@ gate failures and driver caching without network access.
 Permissions, secrets, namespace isolation, backups, and service restarts still
 need the VM tests.
 
+The `signet` and `testnet4` scenarios start the services offline and check the
+Bitcoin genesis hash, Core Lightning network, BTCPay credentials and served
+Mempool frontend. Run either with `./run-tests.sh -s signet` or
+`./run-tests.sh -s testnet4`.
+
 The `i2pLocal` and `i2p` VM scenarios check the I2P SAM handshake on localhost
 and from Bitcoin's network namespace. The latter uses a custom bridge address
 and SAM port. Both scenarios run in CI and in `./run-tests.sh buildable`.

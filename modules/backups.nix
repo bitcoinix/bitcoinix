@@ -114,11 +114,11 @@ let
 
     ${builtins.concatStringsSep "\n" cfg.extraFiles}
 
-    ${optionalString (!cfg.with-bulk-data) ''
-      - ${config.services.bitcoind.dataDir}/blocks
-      - ${config.services.bitcoind.dataDir}/chainstate
-      - ${config.services.bitcoind.dataDir}/indexes
-    ''}
+    ${optionalString (!cfg.with-bulk-data) (concatMapStringsSep "\n" (dir: ''
+      - ${dir}/blocks
+      - ${dir}/chainstate
+      - ${dir}/indexes
+    '') bulkDataDirs)}
     ${config.services.bitcoind.dataDir}
     ${config.services.clightning.dataDir}
     ${config.services.lnd.dataDir}
@@ -150,6 +150,10 @@ let
   # made during a write is torn. Before each backup, bitcoind writes a consistent
   # copy of each loaded wallet to this dir, which the backup includes with the data dir.
   bitcoind = config.services.bitcoind;
+  # Preserve existing backups on mainnet and regtest. The new public networks
+  # store their blockchain below the network directory.
+  bulkDataDirs = [ bitcoind.dataDir ]
+    ++ optional (elem bitcoind.network [ "signet" "testnet4" ]) bitcoind.networkDir;
   walletBackupDir = "${bitcoind.dataDir}/wallet-backups";
   backupWallets = bitcoind.enable && bitcoind.disablewallet != true;
   # The bitcoind-remote preset replaces the daemon with a oneshot unit, and the

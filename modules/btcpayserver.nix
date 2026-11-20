@@ -117,7 +117,13 @@ let
   dotnetNoReload = { DOTNET_hostBuilder__reloadConfigOnChange = "false"; };
 
   nbExplorerUrl = "http://${nbLib.addressWithPort cfg.nbxplorer.address cfg.nbxplorer.port}/";
-  nbExplorerCookie = "${cfg.nbxplorer.dataDir}/${nbLib.networkName { mainnet = "Main"; regtest = "RegTest"; }}/.cookie";
+  nbExplorerNetworkDir = nbLib.networkName {
+    mainnet = "Main";
+    regtest = "RegTest";
+    signet = "Signet";
+    testnet4 = "Testnet4";
+  };
+  nbExplorerCookie = "${cfg.nbxplorer.dataDir}/${nbExplorerNetworkDir}/.cookie";
   # BTCPay binds to every `bind` it finds in its config file and command line
   btcpayserverConfig = bind: builtins.toFile "btcpayserver-config" (''
     network=${bitcoind.network}
@@ -127,6 +133,9 @@ let
     btcexplorerurl=${nbExplorerUrl}
     btcexplorercookiefile=${nbExplorerCookie}
     postgres=User ID=${cfg.btcpayserver.user};Host=/run/postgresql;Database=btcpaydb
+  '' + optionalString (bitcoind.network == "testnet4") ''
+    # BTCPay defaults to a testnet3 explorer for testnet4 transactions.
+    blockexplorerlink=https://mempool.space/testnet4/tx/{0}
   '' + optionalString (cfg.btcpayserver.rootpath != null) ''
     rootpath=${cfg.btcpayserver.rootpath}
   '' + optionalString (cfg.btcpayserver.lightningBackend == "clightning") ''
