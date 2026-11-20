@@ -187,12 +187,12 @@ let
   # to another rune.
   recordedRuneFile = "${cln.dataDir}/unbeholden-lnurl-rune";
   recordedRuneId = pkgs.writeText "unbeholden-lnurl-rune-id.jq" ''
-    .runes[] | select(.rune == $recorded and (.blacklisted | not)) | .unique_id
+    .runes[] | select(.rune == $ENV.recorded and (.blacklisted | not)) | .unique_id
   '';
   revokeRecordedRune = ''
     if [[ -e ${recordedRuneFile} ]]; then
       cli=${cln.cli}/bin/lightning-cli
-      id=$($cli showrunes | ${pkgs.jq}/bin/jq -r --arg recorded "$(<${recordedRuneFile})" -f ${recordedRuneId})
+      id=$($cli showrunes | recorded=$(<${recordedRuneFile}) ${pkgs.jq}/bin/jq -r -f ${recordedRuneId})
       if [[ $id =~ ^[0-9]+$ ]]; then
         $cli blacklistrune "$id" "$id" > /dev/null
       fi
@@ -203,9 +203,9 @@ let
   # Keep the recorded rune while the service has it and its restrictions match.
   # Otherwise revoke it, so that no rune with old permissions remains valid.
   runeAction = pkgs.writeText "unbeholden-lnurl-rune-action.jq" ''
-    [.runes[] | select(.rune == $recorded)][0] as $rune
+    [.runes[] | select(.rune == $ENV.recorded)][0] as $rune
     | if $rune == null or $rune.blacklisted then "create"
-      elif $ENV.rune == $recorded and
+      elif $ENV.rune == $ENV.recorded and
         [$rune.restrictions[] | [.alternatives[] | .fieldname + .condition + .value]] == $want
       then "keep"
       else "revoke \($rune.unique_id)" end
@@ -232,7 +232,7 @@ let
     if [[ $recorded ]]; then
       rune=$(asUser head -c 4096 ${runeFile} 2>/dev/null) || rune=
       result=$(cli showrunes \
-        | rune=$rune $jq -r --arg recorded "$recorded" --argjson want "$restrictions" -f ${runeAction})
+        | rune=$rune recorded=$recorded $jq -r --argjson want "$restrictions" -f ${runeAction})
       read -r action id <<< "$result"
     fi
     if [[ $action == revoke ]]; then
