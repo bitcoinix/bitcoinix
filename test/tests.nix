@@ -45,6 +45,8 @@ let
       ]);
 
       tests.bitcoind = cfg.bitcoind.enable;
+      # lnd requires bitcoind and stops with it, also when test `lnd` is off
+      test.data.restart-bitcoind.lnd = cfg.lnd.enable;
 
       tests.i2pd = cfg.bitcoind.enable && cfg.bitcoind.i2p != false;
       test.data.i2pd = optionalAttrs config.tests.i2pd {

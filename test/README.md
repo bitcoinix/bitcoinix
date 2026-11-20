@@ -43,7 +43,10 @@ so they can use `machine`, `retry`, `enabled_tests`, `test_data`, and the shared
 helpers directly. The driver's lint and type checks still see the entire suite.
 Use `succeed_json` for JSON responses and `assert_file_metadata` for ownership,
 mode, and file-type checks. Shell predicates remain useful with
-`machine.wait_until_succeeds` when polling for readiness.
+`machine.wait_until_succeeds` when polling for readiness. Call
+`wait_for_lnd_server` before a test stops, restarts or terminates lnd, or stops
+bitcoind while lnd runs. On regtest, lnd can panic when it stops before its
+server has started.
 
 ### Checks without a VM
 
