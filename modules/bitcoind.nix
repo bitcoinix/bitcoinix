@@ -12,15 +12,16 @@ let
       };
       port = mkOption {
         type = types.port;
-        default = { mainnet = 8333; regtest = 18444; }.${cfg.network};
-        defaultText = literalMD "8333 on mainnet, 18444 on regtest";
+        default = ports.p2p;
+        defaultText = literalMD (describePorts "p2p");
         description = "Port to listen for peer connections.";
       };
       onionPort = mkOption {
         type = types.nullOr types.port;
         # When the bitcoind onion service is enabled, add an onion-tagged socket
         # to distinguish local connections from Tor connections
-        default = if (config.nix-bitcoin.onionServices.bitcoind.enable or false) then 8334 else null;
+        default = if (config.nix-bitcoin.onionServices.bitcoind.enable or false) then ports.onion else null;
+        defaultText = literalMD "`null` when the bitcoind onion service is disabled, otherwise ${describePorts "onion"}.";
         description = ''
           Port to listen for Tor peer connections.
           If set, inbound connections to this port are tagged as onion peers.
@@ -83,8 +84,8 @@ let
         };
         port = mkOption {
           type = types.port;
-          default = { mainnet = 8332; regtest = 18443; }.${cfg.network};
-          defaultText = literalMD "8332 on mainnet, 18443 on regtest";
+          default = ports.rpc;
+          defaultText = literalMD (describePorts "rpc");
           description = "Port to listen for JSON-RPC connections.";
         };
         threads = mkOption {
@@ -151,12 +152,21 @@ let
         };
       };
       network = mkOption {
-        type = types.enum [ "mainnet" "regtest" ];
+        type = types.enum (attrNames networkPorts);
         default = "mainnet";
         description = ''
           Bitcoin network used by the deployment's services.
+          Use signet or testnet4 for a public test network.
           Use regtest for a local regression testing network.
+          Evaluation fails if an enabled service is incompatible with the network.
         '';
+      };
+      networkDir = mkOption {
+        type = types.path;
+        readOnly = true;
+        default = cfg.dataDir + optionalString (cfg.network != "mainnet") "/${cfg.network}";
+        defaultText = literalMD "`dataDir` on mainnet, `dataDir/network` on other networks.";
+        description = "The directory where Bitcoin Core stores data for the selected network.";
       };
       proxy = mkOption {
         type = types.nullOr types.str;
@@ -320,6 +330,15 @@ let
   };
 
   cfg = config.services.bitcoind;
+  networkPorts = {
+    mainnet  = { p2p =  8333; rpc =  8332; onion =  8334; };
+    regtest  = { p2p = 18444; rpc = 18443; onion = 18445; };
+    signet   = { p2p = 38333; rpc = 38332; onion = 38334; };
+    testnet4 = { p2p = 48333; rpc = 48332; onion = 48334; };
+  };
+  ports = networkPorts.${cfg.network};
+  describePorts = name: concatStringsSep ", " (mapAttrsToList
+    (network: values: "${toString values.${name}} on ${network}") networkPorts);
   bitcoind = config.nix-bitcoin.pkgs.bitcoind;
   nbLib = config.nix-bitcoin.lib;
   secretsDir = config.nix-bitcoin.secretsDir;
@@ -338,9 +357,9 @@ let
 
     startupnotify=/run/current-system/systemd/bin/systemd-notify --ready
 
-    ${optionalString (cfg.network == "regtest") ''
-      regtest=1
-      [regtest]
+    ${optionalString (cfg.network != "mainnet") ''
+      ${cfg.network}=1
+      [${cfg.network}]
     ''}
     ${optionalString (cfg.dbCache != null) "dbcache=${toString cfg.dbCache}"}
     prune=${toString cfg.prune}
@@ -500,8 +519,8 @@ in {
         ) (builtins.attrNames cfg.rpc.users);
       in ''
         ${optionalString cfg.dataDirReadableByGroup ''
-          if [[ -e '${cfg.dataDir}/blocks' ]]; then
-            chmod -R g+rX '${cfg.dataDir}/blocks'
+          if [[ -e '${cfg.networkDir}/blocks' ]]; then
+            chmod -R g+rX '${cfg.networkDir}/blocks'
           fi
         ''}
 

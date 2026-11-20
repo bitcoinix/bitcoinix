@@ -1,7 +1,10 @@
 { config, lib, pkgs, ... }:
 
 with lib;
-let cfg = config.services.clightning.plugins.trustedcoin; in
+let
+  cfg = config.services.clightning.plugins.trustedcoin;
+  network = config.services.bitcoind.network;
+in
 {
   options.services.clightning.plugins.trustedcoin = {
     enable = mkOption {
@@ -35,6 +38,12 @@ let cfg = config.services.clightning.plugins.trustedcoin; in
   };
 
   config = mkIf cfg.enable {
+    # TODO-EXTERNAL: Trustedcoin maps chain names and block explorers in main.go.
+    assertions = [{
+      assertion = !config.services.clightning.enable || elem network [ "mainnet" "regtest" "signet" ];
+      message = "services.clightning.plugins.trustedcoin does not support ${network}.";
+    }];
+
     services.clightning = {
       useBcliPlugin = false;
       pluginsConfig = ''

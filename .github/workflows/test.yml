@@ -83,6 +83,8 @@ jobs:
           - default
           - netns
           - netnsRegtest
+          - signet
+          - testnet4
           - wireguard-lndconnect
           - setup-secrets
           - unbeholden-wallet-electrs
