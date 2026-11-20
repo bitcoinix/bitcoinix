@@ -12,7 +12,10 @@ def test_restart_bitcoind():
     # A deploy that changes the bitcoind unit stops bitcoind and starts it
     # again. The stop propagates to the dependents. The start must bring them
     # back. An explicit stop must keep everything down.
-    dependents = [unit for unit in ["lnd", "clightning", "electrs"] if unit in enabled_tests]
+    # unbeholden-lnurl `requires` its backend, which starts it again.
+    dependents = [
+        unit for unit in ["lnd", "clightning", "electrs", "unbeholden-lnurl"] if unit in enabled_tests
+    ]
 
     def state(unit):
         return succeed(f"systemctl show -P ActiveState {unit}").strip()
@@ -155,6 +158,8 @@ def test_clnrest_admin_rune():
         succeed("systemctl stop clightning")
         if contents is not None:
             succeed(f"printf %s {shlex.quote(contents)} > {rune_file}")
+        # The preceding tests use up clightning's start limit
+        succeed("systemctl reset-failed clightning")
         # Returns after `postStart`, which creates the rune
         succeed("systemctl start clightning")
         rune = succeed(f"cat {rune_file}").rstrip("\n")

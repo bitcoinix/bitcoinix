@@ -333,6 +333,10 @@ in {
           config.services.mempool.electrumServer
         ];
       };
+      unbeholden-lnurl = {
+        id = 34;
+        connections = [ config.services.unbeholden-lnurl.backend "nginx" ];
+      };
       unbeholden-wallet = {
         id = 33;
         connections = [ config.services.unbeholden-wallet.electrumServer "nginx" ];
@@ -371,6 +375,8 @@ in {
 
     services.mempool.address = netns.mempool.address;
     services.mempool.frontend.address = netns.nginx.address;
+
+    services.unbeholden-lnurl.address = netns.unbeholden-lnurl.address;
 
     services.unbeholden-wallet.address = netns.unbeholden-wallet.address;
   }

@@ -62,6 +62,12 @@ def test_netns_isolation():
                 f"ip netns exec nb-{src} fping -c1 -t100 --reachable=1 {dest_ips}"
             )
 
+    if "unbeholden-lnurl" in enabled_tests:
+        backend = "lnd" if test_data["unbeholden-lnurl"]["backend"] == "lnd" else "clightning"
+        assert_reachable("unbeholden-lnurl", [backend])
+        assert_unreachable("unbeholden-lnurl", ["bitcoind"])
+        assert_unreachable("bitcoind", ["unbeholden-lnurl"])
+
     # These reachability tests are non-exhaustive
     assert_reachable("bitcoind", ["clightning", "lnd"])
     assert_unreachable("bitcoind", ["btcpayserver", "rtl"])

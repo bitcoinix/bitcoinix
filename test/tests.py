@@ -27,6 +27,7 @@ TEST_PHASES = (
         "rtl-backend-certs",
         "mempool",
         "unbeholden-wallet",
+        "unbeholden-lnurl",
         "nodeinfo",
         "secure-node",
         "onion-addresses",

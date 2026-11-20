@@ -572,10 +572,121 @@ let
       };
     }).systemd.services.bitcoind.preStart.content;
 
+  lnurlConfig = backend: module: evaluate {
+    imports = [ module ];
+    services.unbeholden-lnurl = {
+      enable = true;
+      inherit backend;
+      settings.addresses.test = {
+        description = "Bitcoinix test";
+        min_sendable = 1000;
+        max_sendable = 1000000;
+      };
+    };
+  };
+  lnurlTests = lib.listToAttrs (lib.concatMap (backend: let
+    config = lnurlConfig backend {};
+    unit = config.systemd.services.unbeholden-lnurl;
+  in [
+    (lib.nameValuePair "testLnurl-${backend}-backend" {
+      expr = {
+        lnd = config.services.lnd.enable;
+        cln = config.services.clightning.enable;
+        assertions = failedAssertions config;
+      };
+      expected = { lnd = backend == "lnd"; cln = backend == "clightning"; assertions = []; };
+    })
+    (lib.nameValuePair "testLnurl-${backend}-unit" {
+      expr = {
+        user = unit.serviceConfig.User;
+        startsWithBackend = builtins.elem "${backend}.service" unit.after;
+        privateTmp = unit.serviceConfig.PrivateTmp;
+        noNewPrivileges = unit.serviceConfig.NoNewPrivileges;
+      };
+      expected = {
+        user = "unbeholden-lnurl";
+        startsWithBackend = true;
+        privateTmp = true;
+        noNewPrivileges = true;
+      };
+    })
+    (lib.nameValuePair "testLnurl-${backend}-secrets" {
+      expr = map (name: config.nix-bitcoin.secrets.${name}.user)
+        [ "unbeholden-lnurl-verify" "unbeholden-lnurl-withdraw" ];
+      expected = [ "unbeholden-lnurl" "unbeholden-lnurl" ];
+    })
+    (lib.nameValuePair "testLnurl-${backend}-netns" {
+      expr = let
+        isolated = lnurlConfig backend { nix-bitcoin.netns-isolation.enable = true; };
+      in {
+        inherit (isolated.services.unbeholden-lnurl) address;
+        inherit (isolated.nix-bitcoin.netns-isolation.services.unbeholden-lnurl) connections;
+      };
+      expected = {
+        address = "169.254.1.34";
+        connections = [ backend "nginx" ];
+      };
+    })
+  ]) [ "lnd" "clightning" ]) // {
+    testLnurlLndReceivePermissions = {
+      expr = builtins.fromJSON ("["
+        + (lnurlConfig "lnd" {}).services.lnd.macaroons.unbeholden-lnurl.permissions + "]");
+      expected = map (action: { entity = "uri"; inherit action; }) [
+        "/lnrpc.Lightning/AddInvoice"
+        "/lnrpc.Lightning/LookupInvoice"
+        "/lnrpc.Lightning/ListInvoices"
+        "/lnrpc.Lightning/SubscribeInvoices"
+      ];
+    };
+    testLnurlRevokesUnusedRune = {
+      expr = lib.mapAttrs (_: config: lib.hasInfix "unbeholden-lnurl-rune"
+        config.systemd.services.clightning.postStart) {
+        cln = lnurlConfig "clightning" {};
+        lnd = lnurlConfig "lnd" { services.clightning.enable = true; };
+        disabled = evaluate { services.clightning.enable = true; };
+      };
+      expected = { cln = false; lnd = true; disabled = true; };
+    };
+    testLnurlTorProxy = {
+      expr = let config = lnurlConfig "clightning" {
+        imports = [ ../modules/presets/enable-tor.nix ];
+      }; in {
+        enforce = config.services.unbeholden-lnurl.tor.enforce;
+        proxy = config.services.unbeholden-lnurl.settings.outbound_proxy;
+      };
+      expected = { enforce = true; proxy = "socks5://127.0.0.1:9050"; };
+    };
+    testLnurlRequiresFeature = {
+      expr = builtins.elem "services.unbeholden-lnurl requires addresses, withdraw vouchers, notifications or nostr in its settings."
+        (failedAssertions (evaluate { services.unbeholden-lnurl.enable = true; }));
+      expected = true;
+    };
+    testLnurlInlineWithdrawSecret = {
+      expr = let config = lnurlConfig "lnd" {
+        services.unbeholden-lnurl.settings.withdraw_secret = "0123456789abcdef0123456789abcdef";
+      }; in {
+        file = config.services.unbeholden-lnurl.settings.withdraw_secret_file;
+        secret = config.nix-bitcoin.secrets ? unbeholden-lnurl-withdraw;
+      };
+      expected = { file = null; secret = false; };
+    };
+    testLnurlDisabled = {
+      expr = builtins.hasAttr "unbeholden-lnurl" modulesOnly.systemd.services;
+      expected = false;
+    };
+    testLnurlRejectsNonPositiveAmounts = {
+      expr = (builtins.tryEval (builtins.deepSeq
+        (lnurlConfig "lnd" {
+          services.unbeholden-lnurl.settings.addresses.test.min_sendable = lib.mkForce 0;
+        }).services.unbeholden-lnurl.settings.addresses true)).success;
+      expected = false;
+    };
+  };
+
   tests = lib.mapAttrs' (name: case: lib.nameValuePair "testREST-${name}" {
     expr = restAllowed case.args;
     inherit (case) expected;
-  }) restCases // extraConfigTests // pluginsConfigTests // pluginMigrationTests // {
+  }) restCases // lnurlTests // extraConfigTests // pluginsConfigTests // pluginMigrationTests // {
     testLockedPackagesDefault = {
       expr = bitcoin.nix-bitcoin.useVersionLockedPkgs;
       expected = true;

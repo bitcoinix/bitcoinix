@@ -458,3 +458,98 @@ def test_nodeinfo():
 @test("secure-node")
 def test_secure_node():
     assert_running("onion-addresses")
+
+
+@test("unbeholden-lnurl")
+def test_unbeholden_lnurl():
+    data = test_data["unbeholden-lnurl"]
+    assert_running("unbeholden-lnurl")
+    url = f"http://{ip('unbeholden-lnurl')}:{data['port']}"
+    wait_for_open_port(ip("unbeholden-lnurl"), data["port"])
+    assert_full_match(f"curl -fsS {url}/health", "ok")
+    address = f"{url}/.well-known/lnurlp/test"
+    discovery = succeed_json(f"curl -fsS {address}")
+    assert discovery["tag"] == "payRequest", discovery
+    assert discovery["minSendable"] == 1000, discovery
+    assert discovery["maxSendable"] == 1000000, discovery
+    assert urlparse(discovery["callback"]).path == "/.well-known/lnurlp/test/invoice"
+    assert ["text/plain", "Bitcoinix test"] in json.loads(discovery["metadata"])
+    assert_full_match(
+        f"curl -sS -o /dev/null -w '%{{http_code}}' {url}/.well-known/lnurlp/unknown", "404"
+    )
+    invalid = succeed_json(f"curl -fsS '{address}/invoice?amount=999'")
+    assert invalid["status"] == "ERROR", invalid
+    command = f"curl -fsS '{address}/invoice?amount=1000'"
+    machine.wait_until_succeeds(command + " | jq -e '.pr | startswith(\"lnbcrt\")'")
+    invoice = succeed_json(command)
+    assert invoice["pr"].startswith("lnbcrt"), invoice
+    assert invoice["routes"] == [], invoice
+    verify_path = urlparse(invoice["verify"]).path
+    verified = succeed_json(f"curl -fsS {url}{shlex.quote(verify_path)}")
+    assert verified == {
+        "status": "OK", "settled": False, "preimage": None, "pr": invoice["pr"]
+    }, verified
+    if data["backend"] == "clightning":
+        rune_file = f"{data['dataDir']}/cln-rune"
+        record_file = f"{data['clnDataDir']}/unbeholden-lnurl-rune"
+
+        def runes():
+            return {r["unique_id"]: r for r in succeed_json("lightning-cli showrunes")["runes"]}
+
+        def blacklisted():
+            return {id for id, r in runes().items() if r.get("blacklisted")}
+
+        def recorded():
+            rune = succeed(f"cat {record_file}").strip()
+            return next(id for id, r in runes().items() if r["rune"] == rune)
+
+        def restart_with_rune_file(content):
+            succeed(
+                f"runuser -u unbeholden-lnurl -- tee {rune_file} <<< {shlex.quote(content)}",
+                "systemctl restart unbeholden-lnurl",
+            )
+            machine.wait_for_unit("unbeholden-lnurl")
+
+        before = runes()
+        rune_id = recorded()
+        assert succeed(f"cat {rune_file}").strip() == before[rune_id]["rune"]
+    succeed("systemctl restart unbeholden-lnurl")
+    machine.wait_for_unit("unbeholden-lnurl")
+    if data["backend"] == "clightning":
+        assert runes().keys() == before.keys(), "A restart created another rune"
+        assert recorded() == rune_id
+        # A changed rune file revokes only the recorded rune. Its content is
+        # never passed to lightning-cli, so a forged rune can't pick a rune to revoke.
+        other = succeed_json("lightning-cli createrune restrictions='[[\"method=getinfo\"]]'")
+        for content in [other["rune"], '"{\\"filter\\":{}}"']:
+            revoked = blacklisted() | {rune_id}
+            restart_with_rune_file(content)
+            assert blacklisted() == revoked, (blacklisted(), revoked)
+            assert recorded() != rune_id
+            rune_id = recorded()
+            assert succeed(f"cat {rune_file}").strip() == runes()[rune_id]["rune"]
+        # The setup accesses the data dir only as the service user, so a
+        # planted symlink can't redirect a read or write to a file of another user
+        target = "/etc/unbeholden-lnurl-target"
+        succeed(
+            f"install -m 600 <(echo original) {target}",
+            f"runuser -u unbeholden-lnurl -- ln -sfT {target} {rune_file}",
+            "systemctl restart unbeholden-lnurl",
+        )
+        machine.wait_for_unit("unbeholden-lnurl")
+        assert_full_match(f"stat -c '%U %a' {target} && cat {target}", "root 600\noriginal\n")
+        assert_full_match(f"stat -c %F {rune_file}", "regular file\n")
+        succeed(f"rm {target}")
+        # After clightning starts on a new or restored database, the recorded
+        # rune is missing, and its ID can belong to another rune. Revoke nothing.
+        revoked = blacklisted()
+        succeed(
+            f"runuser -u clightning -- tee {record_file} <<< missing-rune",
+            "systemctl reset-failed unbeholden-lnurl",
+            "systemctl restart unbeholden-lnurl",
+        )
+        machine.wait_for_unit("unbeholden-lnurl")
+        assert blacklisted() == revoked, (blacklisted(), revoked)
+        assert succeed(f"cat {rune_file}").strip() == runes()[recorded()]["rune"]
+    machine.wait_until_succeeds(f"curl -fsS {url}/health")
+    assert succeed_json(f"curl -fsS {url}{shlex.quote(verify_path)}") == verified
