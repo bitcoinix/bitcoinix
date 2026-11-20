@@ -29,6 +29,8 @@ nix flake check --all-systems
 ./test/shellcheck.sh        # shellchecks every .sh and shebang'd extensionless file
 nix run nixpkgs#mdbook -- build   # build the docs into ./book (gitignored)
 nix run nixpkgs#mdbook -- serve   # serve the docs locally with live reload
+# build the docs with the module option list, as published
+nix shell --inputs-from . nixpkgs#{git,mdbook,python3} -c python3 helper/docs/build.py book
 ```
 
 Build/run a node VM: `nix run .` (alias for `.#vm`).
@@ -92,6 +94,9 @@ sudo ./test/run-tests.sh container          # fast container; needs systemd + ro
   is published from the latest verified release tag, after "Verify release tags"
   succeeds for a pushed tag (or manually), never from `master`. Docs changes on `master`
   go live with the next release, so `docs/` must describe the upcoming release.
+  `helper/docs/build.py site` serves the latest release at `/` and each release from
+  0.1.6 on at `/v/<version>/`; keep page URLs at `/` stable, code and old docs link
+  to them. Releases build with the master tooling, so keep it compatible with them.
 - `dev/` holds debugging helpers (`dev.sh`, `dev-features.sh`, `topics/`); see `dev/README.md`.
 
 ## Architecture
@@ -216,6 +221,9 @@ On every change, re-check whether the docs (`README.md`, `docs/`, `dev/README.md
 `examples/`) are affected. Not every change needs a docs update, but a significant
 new feature or a behaviour change MUST be reflected in the docs, in the same PR.
 Pages under `docs/` must be listed in `docs/SUMMARY.md` to appear in the mdBook build.
+The option list in `docs/options.md` is generated from the option declarations
+(`legacyPackages.<system>.docsOptions`, `helper/docs/options.nix`); describe options
+in their `description`, not in that page.
 
 - During development, keep each change in a separate Markdown file to avoid merge
   conflicts, like the notices in `modules/versioning/<version>/`. Use descriptive,
