@@ -8,6 +8,14 @@ with lib;
         type = types.attrs;
         default = (import ../pkgs { inherit pkgs; }).modulesPkgs;
         defaultText = "nix-bitcoin/pkgs.modulesPkgs";
+        description = ''
+          The package set of the bitcoinix modules, like `config.nix-bitcoin.pkgs.bitcoind`.
+          It holds the packages that bitcoinix builds and the nixpkgs packages it
+          selects for its services.
+          The flake's NixOS module builds it from the nixpkgs locked by the flake or
+          from the system's nixpkgs, see {option}`nix-bitcoin.useVersionLockedPkgs`.
+          Without the flake, it comes from the system's nixpkgs.
+        '';
         apply = base:
           let
             final = foldl (prev: overlay:
@@ -47,9 +55,20 @@ with lib;
         readOnly = true;
         default = import ../pkgs/lib.nix lib pkgs config;
         defaultText = "nix-bitcoin/pkgs/lib.nix";
+        description = ''
+          Helpers of the bitcoinix modules, defined in `pkgs/lib.nix`. Your own
+          modules can use them too, like `config.nix-bitcoin.lib.defaultHardening`,
+          the systemd sandboxing settings of most bitcoinix services.
+          `defaultHardening` denies all IP traffic. To allow it, also merge
+          `allowLocalIPAddresses` or `allowAllIPAddresses`.
+          `allowLocalIPAddresses` allows only localhost and, with netns isolation,
+          the namespace subnet. It also hides the local name-resolution sockets,
+          like those of nscd, systemd-resolved and D-Bus.
+        '';
       };
 
       torClientAddressWithPort = mkOption {
+        internal = true;
         readOnly = true;
         default = with config.services.tor.client.socksListenAddress;
           "${addr}:${toString port}";
@@ -59,6 +78,7 @@ with lib;
       # Torify binary that works with custom Tor SOCKS addresses
       # Related issue: https://github.com/NixOS/nixpkgs/issues/94236
       torify = mkOption {
+        internal = true;
         readOnly = true;
         default = pkgs.writers.writeBashBin "torify" ''
           ${pkgs.tor}/bin/torify \
@@ -70,6 +90,7 @@ with lib;
 
       # A helper for using doas instead of sudo when doas is enabled
       runAsUserCmd = mkOption {
+        internal = true;
         readOnly = true;
         default = if config.security.doas.enable
                   then "doas -u"

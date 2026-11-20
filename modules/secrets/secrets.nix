@@ -59,20 +59,32 @@ let
 
     secrets = mkOption {
       default = {};
+      description = ''
+        The secret files in {option}`nix-bitcoin.secretsDir` that services use, by
+        file name, with their owner and permissions. The bitcoinix modules declare
+        the secrets of the enabled services here.
+        `setup-secrets` (see {option}`nix-bitcoin.setupSecrets`) and the nixops
+        deployment apply these settings. `setup-secrets` also restricts undeclared
+        files in the directory to root. With manual setup
+        (see {option}`nix-bitcoin.secretsSetupMethod`), set them yourself.
+      '';
       type = with types; attrsOf (submodule (
         { config, ... }: {
           options = {
             user = mkOption {
               type = str;
               default = "root";
+              description = "Owner of the secret file.";
             };
             group = mkOption {
               type = str;
               default = config.user;
+              description = "Group of the secret file. Defaults to the value of {option}`user`.";
             };
             permissions = mkOption {
               type = str;
               default = "440";
+              description = "Mode of the secret file, in octal as passed to {command}`chmod`.";
             };
             allowEmpty = mkOption {
               type = bool;
@@ -90,6 +102,20 @@ let
     secretsSetupMethod = mkOption {
       type = with types; nullOr str;
       default = null;
+      description = ''
+        How the secrets in {option}`nix-bitcoin.secretsDir` are set up. Evaluation
+        fails while this is `null`.
+        bitcoinix sets it to `"setup-secrets"` when {option}`nix-bitcoin.setupSecrets`
+        is enabled, and the nixops deployment sets it to `"nixops"`.
+        Set it to `"manual"` to install the secrets yourself, with the owners and
+        permissions declared in {option}`nix-bitcoin.secrets`, before the services
+        start. bitcoinix then doesn't check them, and the service users need
+        execute access to the directory (`setup-secrets` uses mode `0751`).
+        This needs {option}`nix-bitcoin.generateSecrets` and
+        {option}`nix-bitcoin.setupSecrets` disabled.
+        A custom deployment method can set its own value and order its setup
+        before `nix-bitcoin-secrets.target`.
+      '';
     };
 
     generateSecretsScript = mkOption {

@@ -10,6 +10,12 @@ with lib;
 let
   options.nix-bitcoin.onionServices = mkOption {
     default = {};
+    description = ''
+      Tor onion services for incoming connections, by service name, like `bitcoind`.
+      An entry applies to `services.<name>` and only while that service is enabled.
+      The `enable-tor.nix` preset, which the secure-node preset includes, enables
+      them for bitcoind, electrs, fulcrum and rtl.
+    '';
     type = with types; attrsOf (submodule (
       { config, ... }: {
         options = {

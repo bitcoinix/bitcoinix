@@ -16,6 +16,14 @@ let
 
     services = mkOption {
       default = {};
+      description = ''
+        Services that run in their own network namespace when netns isolation is
+        enabled, by service name. An entry applies to `services.<name>` and only
+        while that service is enabled. Its systemd unit `<name>.service` runs in
+        namespace `nb-<name>` with the address `169.254.<addressblock>.<id>`.
+        bitcoinix defines the entries for its services and for nginx, which serves
+        the mempool frontend. An nginx that you enable yourself runs in `nb-nginx` too.
+      '';
       type = types.attrsOf (types.submodule {
         options = {
           id = mkOption {
@@ -29,6 +37,19 @@ let
           connections = mkOption {
             type = with types; listOf str;
             default = [];
+            description = ''
+              Other entries of {option}`nix-bitcoin.netns-isolation.services`
+              whose namespaces may connect to this service's namespace. This is
+              symmetric: listing `bitcoind` here lets this service and bitcoind
+              connect to each other. Disabled services in this list are ignored.
+
+              A namespace accepts incoming connections only from itself, from the
+              namespaces connected this way and from the host. Connections from the
+              host come from the bridge address `169.254.<addressblock>.10`, so every
+              process in the host network namespace can connect.
+              With `services.<name>.tor.enforce`, the namespace firewall also limits
+              the service's outgoing connections to these addresses.
+            '';
           };
         };
       });
