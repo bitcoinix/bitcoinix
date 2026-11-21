@@ -25,6 +25,7 @@ TEST_PHASES = (
         "rtl",
         "rtl-credentials",
         "rtl-backend-certs",
+        "rtl-permissions",
         "mempool",
         "unbeholden-wallet",
         "unbeholden-lnurl",

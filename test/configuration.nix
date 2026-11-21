@@ -1531,6 +1531,48 @@ let
       };
       expected = { default = false; other = false; override = true; otherBackend = true; };
     };
+    # Earlier versions copied the admin credentials of both backends to RTL.
+    # RTL's start removes the copy of a backend that RTL doesn't use, as the rtl
+    # user, who owns the macaroon dir also without lnd.
+    testRtlUnusedCredentials = let
+      removed = nodes: let
+        config = evaluate { services.rtl = { enable = true; inherit nodes; }; };
+        commands = config.systemd.services.rtl.serviceConfig.ExecStartPre;
+      in map (copy: lib.any (command: lib.hasInfix "/bin/rm -f " command
+                                      && lib.hasInfix "/var/lib/rtl/${copy}" command) commands)
+        [ "macaroons/admin.macaroon" "clightning-admin-rune" ]
+        ++ [ (lib.elem "d '/var/lib/rtl/macaroons' 0770 rtl rtl - -" config.systemd.tmpfiles.rules) ];
+    in {
+      expr = {
+        both = removed { lnd.enable = true; clightning.enable = true; };
+        lnd = removed { lnd.enable = true; };
+        clightning = removed { clightning.enable = true; };
+      };
+      expected = {
+        both = [ false false true ];
+        lnd = [ false true true ];
+        clightning = [ true false true ];
+      };
+    };
+    # Before 0.2.0, RTL copied the admin credentials of its backends
+    testVersioningRtlCredentials = let
+      notices = nodes: map (phrase: hasNotice phrase { services.rtl = { enable = true; inherit nodes; }; })
+        [ "RTL now gets its own lnd macaroon" "lnd restarts once" ];
+    in {
+      expr = {
+        lnd = notices { lnd.enable = true; };
+        clightning = notices { clightning.enable = true; };
+        withoutRtl = hasNotice "RTL now gets its own lnd macaroon" { services.lnd.enable = true; };
+        # Once 0.2.0 is released, a config at 0.2.0 doesn't get the notice
+        acknowledged = hasNoticeAt "0.2.0" "RTL now gets its own lnd macaroon" {
+          services.rtl = { enable = true; nodes.lnd.enable = true; };
+          nix-bitcoin.versioning.releasedVersion = "0.2.0";
+        };
+      };
+      expected = {
+        lnd = [ true true ]; clightning = [ true false ]; withoutRtl = false; acknowledged = false;
+      };
+    };
     # lndconnect reads the lnd user's copy, so only the clnrest access is checked
     testVersioningOperatorAccess = {
       expr = {
@@ -1766,27 +1808,39 @@ let
     testLndMacaroonRootKeyIds = let
       info = ''{"entity":"info","action":"read"}'';
       onchain = ''{"entity":"onchain","action":"read"}'';
+      listUnspent = ''{"entity":"uri","action":"/walletrpc.WalletKit/ListUnspent"}'';
       id = lndMacaroonId "app" "app" "${info},${onchain}";
+      idWithOptional = permissions: optionalPermissions: (lndMacaroon "app" {
+        user = "app"; inherit permissions optionalPermissions;
+      }).services.lnd.macaroons.app.rootKeyId;
     in {
       expr = {
         equivalent = map (permissions: lndMacaroonId "app" "app" permissions == id) [
           " ${onchain} ,\n${info}"
           "${info},${onchain},${info}"
           ''{"action":"read","entity":"info"},${onchain}''
-        ];
+        ] ++ [ (idWithOptional "${info},${onchain}" "" == id) ];
         changed = map (other: other != id) [
           (lndMacaroonId "app2" "app" "${info},${onchain}")
           (lndMacaroonId "app" "app2" "${info},${onchain}")
           (lndMacaroonId "app" "app" info)
           (lndMacaroonId "app" "app" ''${info},{"entity":"onchain","action":"write"}'')
+          (idWithOptional "${info},${onchain}" listUnspent)
         ];
+        # A permission that becomes optional gives a new ID too
+        moved = idWithOptional "${info},${onchain}" listUnspent
+          != idWithOptional "${info},${onchain},${listUnspent}" "";
+        # The ID from before optional permissions, which deployed macaroons use
+        unchanged = id == "7954054930408256540";
         # 0x6e62000000000000 to 0x6e62ffffffffffff
         inRange = builtins.stringLength id == 19
           && id >= "7953919891889717248" && id <= "7954201366866427903";
       };
       expected = {
-        equivalent = [ true true true ];
-        changed = [ true true true true ];
+        equivalent = [ true true true true ];
+        changed = [ true true true true true ];
+        moved = true;
+        unchanged = true;
         inRange = true;
       };
     };
@@ -1803,6 +1857,25 @@ let
         ''{"entity":"uri","action":"/a:b"}''
       ];
       expected = [ [ true ] [ true ] [ true ] [ true ] [ true ] [ true ] ];
+    };
+    # Only `uri` permissions can be optional
+    testLndMacaroonRejectsInvalidOptionalPermissions = {
+      expr = map (optionalPermissions:
+        map (lib.hasInfix "services.lnd.macaroons.app.optionalPermissions must be")
+          (failedAssertions (lndMacaroon "app" {
+            user = "app";
+            permissions = ''{"entity":"info","action":"read"}'';
+            inherit optionalPermissions;
+          }))
+      ) [
+        ""
+        ''{"entity":"uri","action":"/walletrpc.WalletKit/ListUnspent"}''
+        ''{"entity":"info","action":"read"}''
+        ''"uri:/walletrpc.WalletKit/ListUnspent"''
+        ''{"entity":"uri","action":"/a:b"}''
+        ''{"entity":"uri","action":""}''
+      ];
+      expected = [ [] [] [ true ] [ true ] [ true ] [ true ] ];
     };
     testLndMacaroonRejectsUnsafeNames = let
       # `<name>.macaroon` must fit the 255 byte limit for file names

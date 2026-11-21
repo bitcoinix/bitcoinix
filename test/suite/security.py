@@ -289,6 +289,15 @@ def clnrest_cert_file(cln, name):
     return os.path.join(cln["networkDir"], test_data.get("clnrest-certs", ""), name)
 
 
+def clnrest_status(cln, rune, method):
+    # clnrest answers RPCs with 201 Created, and a rune that it refuses with 401
+    return succeed(
+        "curl -sS -o /dev/null -w '%{http_code}' --max-time 30 --insecure "
+        f"-H @<(printf 'rune: %s\\n' {shlex.quote(rune)}) -X POST "
+        f"https://{ip('clightning')}:{cln['port']}/v1/{method}"
+    )
+
+
 @test("rtl-credentials")
 def test_rtl_credentials():
     # The lnd macaroon and the clightning rune are copied to RTL by root scripts.
@@ -322,7 +331,8 @@ def test_rtl_credentials():
                              mode="640", file_type="regular file")
         succeed(f"cmp {dest} <({expected_content_cmd})")
 
-    def check(script, owner, src, dest, expected_content_cmd, invalid_contents=("",)):
+    def check(script, owner, src, dest, expected_content_cmd, invalid_contents=("",),
+              symlink_target=canary, symlink_error="Permission denied"):
         as_owner = f"runuser -u {owner} --"
 
         # Destination is a symlink to a root-only file
@@ -330,15 +340,15 @@ def test_rtl_credentials():
         assert_canary_untouched()
         assert_dest_ok(dest, expected_content_cmd)
 
-        # Source is a symlink to a root-only file.
+        # Source is a symlink to another file, root-only by default.
         # It must not be read and copied to the destination.
         succeed(
             f"{as_owner} mv -T {src} {src}.orig",
-            f"{as_owner} ln -s {canary} {src}",
+            f"{as_owner} ln -s {symlink_target} {src}",
         )
         status, output = machine.execute(f"{script} 2>&1")
         succeed(f"{as_owner} mv -T {src}.orig {src}")
-        if status == 0 or "Permission denied" not in output:
+        if status == 0 or symlink_error not in output:
             raise Exception(f"Unexpected result when reading {src}: {status}, '{output}'")
         machine.fail(f"grep -q canary {dest}")
         assert_canary_untouched()
@@ -359,9 +369,136 @@ def test_rtl_credentials():
         succeed(script)
         assert_dest_ok(dest, expected_content_cmd)
 
+    def check_rune(script, cln):
+        # RTL's rune is created once and kept in clightning's network dir.
+        # A start creates a new one when the file holds no rune that clightning
+        # stored with RTL's restrictions. It revokes all other runes with RTL's
+        # marker, but no other rune.
+        as_cln = f"runuser -u {cln['user']} --"
+        src = f"{cln['networkDir']}/rtl-rune"
+        dest = f"{data_dir}/clightning-admin-rune"
+        marker = "bitcoinix-rtl#"
+        # The unique IDs of the valid runes with the marker
+        rtl_runes = ("lightning-cli showrunes | jq -c --arg marker " + shlex.quote(marker) +
+                     " '[.runes[] | select((.blacklisted | not) and any(.restrictions[];"
+                     " [.alternatives[] | .fieldname + .condition + .value] == [$marker]))"
+                     " | .unique_id]'")
+
+        def show(rune):
+            return succeed_json(f"lightning-cli -k showrunes rune={shlex.quote(rune)}")["runes"][0]
+
+        def create(restrictions, rune=None):
+            args = f"rune={shlex.quote(rune)} " if rune else ""
+            return succeed_json(f"lightning-cli -k createrune {args}"
+                                f"restrictions={shlex.quote(json.dumps(restrictions))}")["rune"]
+
+        def set_src(contents):
+            # With the mode of the files that the script creates
+            succeed(f"printf %s {shlex.quote(contents)} | {as_cln} bash -c 'umask 077; cat > {src}.test'",
+                    f"{as_cln} mv -fT {src}.test {src}")
+
+        def run_script():
+            succeed(script)
+            assert_file_metadata(src, owner=cln["user"], mode="600", file_type="regular file")
+            rune = succeed(f"cat {src}").rstrip("\n")
+            assert_dest_ok(dest, f"printf 'LIGHTNING_RUNE=\"%s\"\\n' {shlex.quote(rune)}")
+            # It's the only valid rune with RTL's marker
+            assert succeed_json(rtl_runes) == [show(rune)["unique_id"]], rune
+            return rune
+
+        rune = succeed(f"cat {src}").rstrip("\n")
+        count_runes = "lightning-cli showrunes | jq '.runes | length'"
+        runes = succeed(count_runes)
+        assert run_script() == rune, "A start replaced RTL's rune"
+        assert succeed(count_runes) == runes, "A start created another rune"
+
+        # Earlier versions copied the admin rune to RTL. Without one
+        # (`createAdminRune = false`), use a rune without restrictions instead.
+        if cln["createAdminRune"]:
+            admin_rune = succeed(f"cat {cln['networkDir']}/admin-rune").rstrip("\n")
+        else:
+            admin_rune = succeed_json("lightning-cli createrune")["rune"]
+        succeed(f"printf 'LIGHTNING_RUNE=\"%s\"\\n' {shlex.quote(admin_rune)} | {as_rtl} tee {dest} >/dev/null")
+        assert run_script() == rune
+
+        # Destination is a symlink to a root-only file
+        succeed(f"{as_rtl} ln -sfn {canary} {dest}")
+        assert run_script() == rune
+        assert_canary_untouched()
+
+        # Each of these gets a new rune, and the start revokes the one before
+        succeed(f"{as_cln} ln -sfn {canary} {src}")
+        previous = run_script()
+        machine.fail(f"grep -q canary {src} {dest}")
+        assert_canary_untouched()
+        foreign = [
+            # The admin rune, a rune derived from it and another app's rune.
+            # They don't have the marker and must not be revoked.
+            admin_rune,
+            create([["method=getinfo"]], rune=admin_rune),
+            create([["method=getinfo"]]),
+        ]
+        for contents in ("", "null\n", "not-a-rune\n", *(f"{r}\n" for r in foreign)):
+            with machine.nested(f"rune file contents: {contents!r}"):
+                set_src(contents)
+                new = run_script()
+                assert new not in (previous, contents.rstrip("\n"))
+                assert show(previous).get("blacklisted"), previous
+                previous = new
+        for r in foreign:
+            assert not show(r).get("blacklisted"), f"A rune without RTL's marker was revoked: {r}"
+
+        # An earlier RTL rune with other restrictions, and one that a lost file
+        # left behind
+        earlier = create([["method=getinfo"], [marker]])
+        lost = create([["method=getinfo"], [marker]])
+        set_src(f"{earlier}\n")
+        new = run_script()
+        for r in (previous, earlier, lost):
+            assert show(r).get("blacklisted"), r
+        previous = new
+
+        # A rune that was revoked by hand, for example after a leak
+        unique_id = show(previous)["unique_id"]
+        succeed(f"lightning-cli blacklistrune {unique_id} {unique_id}")
+        new = run_script()
+        assert new != previous
+        previous = new
+
+        # clightning gives a new rune the next unique ID, also when it's blacklisted.
+        # RTL's rune is the last one created, so its ID comes right before the next IDs.
+        # Revoke it and the next two IDs, then restart RTL.
+        unique_id = int(show(previous)["unique_id"])
+        succeed(f"lightning-cli blacklistrune {unique_id} {unique_id + 2}", "systemctl restart rtl")
+        new = succeed(f"cat {src}").rstrip("\n")
+        info = show(new)
+        assert not info.get("blacklisted") and int(info["unique_id"]) == unique_id + 3, info
+        assert clnrest_status(cln, new, "getinfo") == "201"
+        assert run_script() == new
+        previous = new
+
+        # After 10 new runes with blacklisted IDs, the start fails and keeps the files.
+        # It still revokes an earlier RTL rune. The next start tries the next IDs.
+        unique_id = int(show(previous)["unique_id"])
+        earlier = create([["method=getinfo"], [marker]])
+        assert int(show(earlier)["unique_id"]) == unique_id + 1
+        succeed(f"lightning-cli blacklistrune {unique_id} {unique_id}",
+                f"lightning-cli blacklistrune {unique_id + 2} {unique_id + 11}")
+        status, output = machine.execute(f"{script} 2>&1")
+        assert status != 0 and f"up to {unique_id + 11}, are blacklisted" in output, (status, output)
+        assert show(earlier).get("blacklisted"), earlier
+        assert succeed(f"cat {src}").rstrip("\n") == previous
+        assert_dest_ok(dest, f"printf 'LIGHTNING_RUNE=\"%s\"\\n' {shlex.quote(previous)}")
+        assert int(show(run_script())["unique_id"]) == unique_id + 12
+
+        # Start RTL with its new rune. RTL reads the rune only when it starts.
+        succeed("systemctl restart rtl")
+        assert_running("rtl")
+        machine.wait_until_succeeds(current_run_log_has_string("rtl", "Server is up and running"))
+
     if lnd := data["lnd"]:
         script = get_script("rtl-copy-macaroon")
-        admin_macaroon = f"{lnd['networkDir']}/admin.macaroon"
+        macaroon = "/run/lnd/rtl.macaroon"
         macaroons_dir = f"{data_dir}/macaroons"
         dest = f"{macaroons_dir}/admin.macaroon"
 
@@ -385,17 +522,23 @@ def test_rtl_credentials():
         )
         assert_file_metadata(macaroons_dir, owner=data["user"], group=data["group"], mode="770")
         succeed(f"{as_rtl} cp /dev/null {dest}", script)
-        assert_dest_ok(dest, f"cat {admin_macaroon}")
+        assert_dest_ok(dest, f"cat {macaroon}")
 
-        check(script, lnd["user"], admin_macaroon, dest, f"cat {admin_macaroon}")
+        # Earlier versions copied the admin macaroon to RTL
+        succeed(f"{as_rtl} tee {dest} < {lnd['networkDir']}/admin.macaroon >/dev/null", script)
+        assert_dest_ok(dest, f"cat {macaroon}")
+
+        # The lnd user can write the source dir, `/run/lnd`. A symlink there to a
+        # file of the rtl user must not make RTL send this file to lnd.
+        rtl_canary = "/run/rtl-test-rtl-canary"
+        succeed(f"install -m 600 -o {data['user']} <(echo rtl-canary) {rtl_canary}")
+        check(script, lnd["user"], macaroon, dest, f"cat {macaroon}",
+              symlink_target=rtl_canary, symlink_error="Too many levels of symbolic links")
+        succeed(f"rm {rtl_canary}")
 
     if cln := data["clightning"]:
         script = get_script("rtl-create-clnrest-rune-file")
-        admin_rune = f"{cln['networkDir']}/admin-rune"
-        # Earlier versions installed a `null` rune when `createrune` failed
-        check(script, cln["user"], admin_rune, f"{data_dir}/clightning-admin-rune",
-              f"printf 'LIGHTNING_RUNE=\"%s\"\\n' \"$(cat {admin_rune})\"",
-              invalid_contents=("", "null\n"))
+        check_rune(script, cln)
         cert = clnrest_cert_file(cln, "server.pem")
         check(script, cln["user"], cert, f"{data_dir}/clnrest-cert.pem", f"cat {cert}")
 
@@ -525,6 +668,160 @@ def test_rtl_backend_certs():
         assert status != 0 and error in output, output
 
     succeed("systemctl stop rtl-test-fake-backend", f"rm -r {fake}")
+
+
+# The lnd RPCs that RTL calls: the RPCs of the lnd REST routes in RTL's
+# `backend/controllers/lnd`
+RTL_LND_RPCS = [f"/lnrpc.Lightning/{rpc}" for rpc in (
+    "AddInvoice", "ClosedChannels", "CloseChannel", "ConnectPeer", "DecodePayReq",
+    "DescribeGraph", "DisconnectPeer", "ExportAllChannelBackups", "ExportChannelBackup",
+    "FeeReport", "ForwardingHistory", "GetChanInfo", "GetInfo", "GetNetworkInfo",
+    "GetNodeInfo", "GetTransactions", "ListChannels", "ListInvoices", "ListPayments",
+    "ListPeers", "NewAddress", "OpenChannelSync", "PendingChannels", "QueryRoutes",
+    "RestoreChannelBackups", "SendCoins", "SignMessage", "UpdateChannelPolicy",
+    "VerifyChanBackup", "VerifyMessage", "WalletBalance",
+)] + [
+    "/invoicesrpc.Invoices/LookupInvoiceV2",
+    "/invoicesrpc.Invoices/SubscribeSingleInvoice",
+    "/routerrpc.Router/SendPaymentV2",
+    "/routerrpc.Router/TrackPaymentV2",
+] + [f"/walletrpc.WalletKit/{rpc}" for rpc in (
+    "BumpFee", "LabelTransaction", "LeaseOutput", "ListUnspent", "ReleaseOutput",
+)]
+
+# The clightning methods that RTL calls, from `backend/controllers/cln` in RTL's source.
+# clnrest checks `listclnrest-notifications` for RTL's websocket.
+RTL_CLN_METHODS = (
+    "autoclean-once", "checkmessage", "close", "connect", "decode", "disableoffer",
+    "disconnect", "feerates", "fetchinvoice", "fundchannel", "funderupdate", "getinfo",
+    "getroute", "invoice", "keysend", "listchannels", "listclnrest-notifications",
+    "listconfigs", "listforwards", "listfunds", "listinvoices", "listnodes", "listoffers",
+    "listpeerchannels", "listpeers", "listsendpays", "newaddr", "offer", "pay",
+    "setchannel", "signmessage", "withdraw",
+)
+
+
+@test("rtl-permissions")
+def test_rtl_permissions():
+    # RTL gets an lnd macaroon and a clightning rune with only the permissions
+    # that its features use. Check RTL's copies.
+    assert_running("rtl")
+    data = test_data["rtl-credentials"]
+    data_dir = data["dataDir"]
+
+    if lnd := data["lnd"]:
+        # A scenario can build lnd without some of its gRPC services. lnd then lacks
+        # their RPCs, and RTL's macaroon lacks their permissions.
+        missing_services = test_data.get("lnd-missing-services", [])
+        missing = [rpc for rpc in RTL_LND_RPCS if rpc.split("/")[1] in missing_services]
+        rpcs = [rpc for rpc in RTL_LND_RPCS if rpc not in missing]
+        # lnd's start warns about each of them
+        log = succeed("journalctl -b -o cat -u lnd")
+        warned = set(re.findall(r"Macaroon rtl doesn't get optional permission uri:(\S+),", log))
+        assert warned == set(missing), warned
+
+        lncli = "runuser -u operator -- lncli"
+        # Readable by the lncli wrapper, which runs as the lnd user
+        macaroon = "/run/rtl-permissions-test.macaroon"
+        succeed(f"install -m 400 -o {lnd['user']} {data_dir}/macaroons/admin.macaroon {macaroon}")
+        # This --macaroonpath overrides the admin macaroon of the lncli wrapper
+        succeed(f"{lncli} --macaroonpath {macaroon} getinfo")
+        # It has a `uri` permission for each of these RPCs, and no other permission
+        permissions = succeed_json(f"{lncli} printmacaroon --macaroon_file {macaroon}")["permissions"]
+        assert sorted(permissions) == sorted(f"uri:{rpc}" for rpc in rpcs), permissions
+        status, output = machine.execute(f"{lncli} --macaroonpath {macaroon} bakemacaroon info:read 2>&1")
+        assert status != 0 and "permission denied" in output, (status, output)
+
+        def has_permissions(rpc):
+            # lnd checks the macaroon for the RPC's permissions. The admin macaroon
+            # authenticates the check.
+            body = (f"base64 -w0 {macaroon} | jq -Rs --arg rpc {rpc} "
+                    "'{macaroon: ., fullMethod: $rpc, check_default_perms_from_full_method: true}'")
+            curl = ("curl -sS --max-time 30 --cacert /secrets/lnd-cert "
+                    "-H @<(printf 'Grpc-Metadata-macaroon: %s\\n' "
+                    f"\"$(xxd -ps -c 99999 {lnd['networkDir']}/admin.macaroon)\") --data-binary @- "
+                    f"https://{ip('lnd')}:{lnd['restPort']}/v1/macaroon/checkpermissions")
+            return succeed_json(f"{body} | runuser -u {lnd['user']} -- bash -c {shlex.quote(curl)}")
+
+        for rpc in rpcs:
+            response = has_permissions(rpc)
+            assert response.get("valid") is True, (rpc, response)
+        # lnd answers an unknown RPC with another error
+        for rpc in ("/lnrpc.Lightning/BakeMacaroon", "/lnrpc.Lightning/StopDaemon",
+                    "/lnrpc.Lightning/DeleteAllPayments", "/signrpc.Signer/SignOutputRaw"):
+            response = has_permissions(rpc)
+            assert response.get("message") == "permission denied", (rpc, response)
+        succeed(f"rm {macaroon}")
+
+    if cln := data["clightning"]:
+        rune = succeed(
+            f"sed -n 's/^LIGHTNING_RUNE=\"\\(.*\\)\"$/\\1/p' {data_dir}/clightning-admin-rune"
+        ).rstrip("\n")
+
+        assert clnrest_status(cln, rune, "getinfo") == "201"
+        # A method that RTL doesn't call
+        assert clnrest_status(cln, rune, "createrune") == "401"
+
+        def checkrune(method):
+            return f"lightning-cli -k checkrune rune={shlex.quote(rune)} method={method}"
+
+        for method in RTL_CLN_METHODS:
+            succeed(f"{checkrune(method)} | jq -e .valid")
+        for method in ("createrune", "blacklistrune", "showrunes", "stop"):
+            assert_matches(f"{checkrune(method)} 2>&1 || true", "Not permitted")
+
+    # After login, RTL's dashboard loads these for each backend. A missing lnd
+    # permission or clightning method for one of these requests fails it.
+    dashboard = {
+        "lnd": [("GET", path, None) for path in (
+            "getinfo", "balance", "channels", "channels/pending", "channels/closed", "peers",
+            "network/info", "fees", "payments?max_payments=100000&reversed=true",
+            "invoices?num_max_invoices=10&index_offset=0&reversed=true",
+        )],
+        "cln": [
+            ("GET", "getinfo", None), ("POST", "invoices/lookup", {}),
+            ("GET", "channels/listPeerChannels", None), ("GET", "onchain/utxos", None),
+            ("POST", "network/feeRates", {"style": "perkw"}),
+            ("POST", "network/feeRates", {"style": "perkb"}),
+            ("GET", "peers", None), ("GET", "payments", None),
+        ],
+    }
+    # Node indices from `modules/rtl.nix`
+    nodes = {"cln": (1, data["clightning"]), "lnd": (2, data["lnd"])}
+    rtl = f"http://{ip('rtl')}:{data['port']}/rtl"
+    jar = "/run/rtl-permissions-test-cookies"
+    # The first page sets the session and CSRF cookies
+    succeed(f"curl -fsS -o /dev/null -c {jar} {rtl}/")
+    xsrf = unquote(succeed(f"awk '$6 == \"XSRF-TOKEN\" {{ print $7 }}' {jar}").strip())
+    token = None
+
+    def api(method, path, body=None):
+        headers = [f"X-XSRF-TOKEN: {xsrf}"] + ([f"Authorization: Bearer {token}"] if token else [])
+        args = " ".join(f"-H {shlex.quote(header)}" for header in headers)
+        if body is not None:
+            args += f" -H 'Content-Type: application/json' --data-binary {shlex.quote(json.dumps(body))}"
+        output = succeed(f"curl -sS --max-time 60 -b {jar} -c {jar} {args} -X {method} "
+                         f"-w '\\n%{{http_code}}' {shlex.quote(f'{rtl}/api/{path}')}")
+        response, status = output.rsplit("\n", 1)
+        return status, response
+
+    password = succeed("cat /secrets/rtl-password").rstrip("\n")
+    status, response = api("POST", "authenticate", {
+        "authenticateWith": "PASSWORD",
+        "authenticationValue": hashlib.sha256(password.encode()).hexdigest(),
+    })
+    assert status == "200", (status, response)
+    token = json.loads(response)["token"]
+    for backend, (index, enabled) in nodes.items():
+        if not enabled:
+            continue
+        with machine.nested(f"RTL dashboard: {backend}"):
+            status, response = api("GET", f"conf/updateSelNode/{index}/-1")
+            assert status == "200", (status, response)
+            for method, path, body in dashboard[backend]:
+                status, response = api(method, f"{backend}/{path}", body)
+                assert status == "200", (backend, path, status, response)
+    succeed(f"rm {jar}")
 
 
 @test("onion-addresses")
