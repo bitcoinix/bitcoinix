@@ -1,5 +1,5 @@
 # Shared imports for the assembled driver script.
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, unquote, urlparse
 import base64
 import hashlib
 import hmac

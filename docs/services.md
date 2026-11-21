@@ -263,6 +263,52 @@ backends enabled, stopping one of them also stops RTL for the other one, and
 starting RTL starts a stopped backend too. So during maintenance of one backend,
 leave RTL stopped.
 
+#### Backend credentials
+
+RTL gets its own lnd macaroon and clightning rune. With them, RTL can send funds and
+open and close channels, but it can't bake macaroons, create runes, stop lnd, delete
+lnd's payment history or use lnd's signer RPCs. RTL copies them to its data dir when
+it starts.
+
+- lnd: the custom macaroon `services.lnd.macaroons.rtl`, see
+  [Custom macaroons](#custom-macaroons). It allows only the lnd RPCs that RTL calls.
+  Its permissions for the RPCs of `invoicesrpc` and `walletrpc` are optional, so RTL
+  also starts with an lnd package that lacks their build tags. RTL's features that use
+  these RPCs then fail.
+- clightning: a rune that allows only the methods that RTL calls. bitcoinix creates it
+  once and keeps it at `rtl-rune` in clightning's network dir. The rune has the comment
+  `bitcoinix-rtl`. Each start of RTL revokes all other runes with this comment, for
+  example the old rune after an update that changes RTL's methods.
+
+  To revoke the rune, for example after a leak, run
+  `lightning-cli blacklistrune <id> <id>` with the `unique_id` that
+  `lightning-cli showrunes` shows for it. Then run `systemctl restart clightning`.
+  clnrest runs as a plugin of clightning, and it checks the rune of a websocket client
+  only when the client connects. So the restart closes the connections that still use
+  the revoked rune. clightning's start also starts RTL again, see
+  [Backend maintenance](#backend-maintenance), and RTL creates a new rune. A new rune
+  gets the next unique ID, also when that ID is blacklisted. So RTL's start creates up
+  to 10 runes until one has an ID that isn't blacklisted. If there's none, the start
+  fails. systemd starts RTL again after 10 seconds, and it tries the next IDs. Each
+  failed try stores 10 more runes in clightning's database, so blacklist only the IDs of
+  runes that you have.
+
+  When you disable RTL or its clightning node in your config, the rune stays valid.
+  Revoke it the same way. Then the restart doesn't start RTL. If nothing else in your
+  config enables clightning, the deploy also removes clightning and `lightning-cli`.
+  Then you can't revoke the rune, and it works again when you enable clightning later.
+  So revoke the rune before the deploy. Run `systemctl stop rtl`, blacklist the rune while clightning
+  still runs, and then deploy. The deploy stops clightning, which closes clnrest's
+  connections. A start of lnd or clightning before the deploy starts RTL again, and
+  RTL creates a new rune. So right before the deploy, check that `systemctl is-active rtl`
+  prints `inactive` and that `lightning-cli showrunes` shows each rune with the comment
+  `bitcoinix-rtl` as blacklisted.
+
+  clightning keeps the revoked runes and the count of unique IDs in its database.
+  When clightning starts with a new or older database, for example after a recovery,
+  revoked runes work again, and a new rune can get the unique ID of an older rune,
+  like the admin rune. Revoking one of them then revokes both.
+
 #### Backend certificates
 
 A connection from RTL to a backend's address and port must present that backend's
@@ -787,8 +833,8 @@ local user and service can then use the Trezor through it.
 
 `services.lnd.macaroons.<name>` gives a service its own macaroon with only the
 permissions it needs. Each time lnd starts, bitcoinix creates the macaroon at
-`/run/lnd/<name>.macaroon`, readable only by `user`. BTCPay Server and charge-lnd get
-their macaroons this way.
+`/run/lnd/<name>.macaroon`, readable only by `user`. BTCPay Server, charge-lnd, RTL and
+Unbeholden LNURL on lnd get their macaroons this way.
 
 ```nix
 services.lnd.macaroons.myapp = {
@@ -797,12 +843,20 @@ services.lnd.macaroons.myapp = {
 };
 ```
 
+A `uri` permission, like `{"entity":"uri","action":"/lnrpc.Lightning/GetInfo"}`,
+allows one RPC. When lnd doesn't have the RPC of a `uri` permission in `permissions`,
+for example because its name has a typo, lnd's start fails. Some RPCs, like those of
+`walletrpc`, exist only when lnd's package has their build tag. Put the `uri`
+permissions for these RPCs in `optionalPermissions`, in the same format. When lnd
+doesn't have one of these RPCs, the macaroon doesn't get its permission, and lnd's
+start logs a warning.
+
 #### Root keys and configuration changes
 
 Each custom macaroon has its own lnd root key. Its ID,
-`services.lnd.macaroons.<name>.rootKeyId`, is derived from the name, user and
-permissions, so copies of the macaroon stay valid when lnd restarts. A change of
-the name, user or permissions gives the macaroon a new ID. Each time lnd starts,
+`services.lnd.macaroons.<name>.rootKeyId`, is derived from the name, user,
+permissions and optional permissions, so copies of the macaroon stay valid when lnd
+restarts. A change of one of them gives the macaroon a new ID. Each time lnd starts,
 bitcoinix deletes the root key of every ID from 7953919891889717248 to
 7954201366866427903 (`0x6e62000000000000` to `0x6e62ffffffffffff`) that no
 configured macaroon uses. If it deleted a root key, it restarts lnd once more,
@@ -828,8 +882,12 @@ macaroon. Restart it on deployments that change the macaroon:
 systemd.services.myapp.restartTriggers = [ config.services.lnd.macaroons.myapp.rootKeyId ];
 ```
 
+A change of lnd's package can add or remove optional permissions without a new ID. So
+if the macaroon has optional permissions, also add `config.services.lnd.package` to
+the triggers.
+
 BTCPay Server reads its macaroon for each request to lnd, and charge-lnd for each
-run.
+run. RTL copies its macaroon when it starts, and it restarts with lnd.
 
 #### Revoke a macaroon
 
@@ -886,8 +944,8 @@ the root keys are in that database instead. Run as root:
    again, then steps 2 and 3, and keep the old copy.
    Then delete the copy: `runuser -u lnd -- rm /var/lib/lnd/old-admin.macaroon`.
 4. Start the units that you stopped, for example
-   `systemctl start charge-lnd.timer btcpayserver rtl`. RTL copies the admin
-   macaroon when it starts.
+   `systemctl start charge-lnd.timer btcpayserver rtl`. RTL copies its macaroon
+   when it starts.
 
 lnd creates new root keys and new default macaroons, and bitcoinix creates new
 custom macaroons. All earlier macaroons stop working. Then:
