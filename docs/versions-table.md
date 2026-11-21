@@ -15,7 +15,7 @@
 | `clightning-plugins/zmq` | [0.1.0-f0d33fd](https://github.com/lightningd/plugins/tree/f0d33fd/cl-zmq) | local |
 | `electrs` | [0.12.1](https://github.com/romanz/electrs/releases/tag/v0.12.1) | local |
 | `extra-container` | [1.0.1](https://github.com/extra-container/extra-container/releases/tag/v1.0.1) | unstable |
-| `fulcrum` | [2.1.4](https://github.com/cculianu/Fulcrum/releases/tag/v2.1.4) | unstable |
+| `fulcrum` | [2.1.4](https://github.com/cculianu/Fulcrum/releases/tag/v2.1.4) | local |
 | `hwi` | [3.2.0](https://github.com/bitcoin-core/HWI/releases/tag/3.2.0) | local |
 | `lnd` | [0.21.8-beta](https://github.com/lightningnetwork/lnd/releases/tag/v0.21.8-beta) | unstable |
 | `lndconnect` | [0.2.1](https://github.com/LN-Zap/lndconnect/releases/tag/v0.2.1) | unstable |

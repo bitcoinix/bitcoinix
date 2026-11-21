@@ -52,7 +52,7 @@
     "version": "1.0.1"
   },
   "fulcrum": {
-    "channel": "unstable",
+    "channel": "local",
     "version": "2.1.4"
   },
   "hwi": {
