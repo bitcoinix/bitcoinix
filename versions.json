@@ -8,7 +8,7 @@
     "version": "2.4.7"
   },
   "charge-lnd": {
-    "channel": "unstable",
+    "channel": "local",
     "version": "0.3.2"
   },
   "clboss": {
