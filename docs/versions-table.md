@@ -19,7 +19,7 @@
 | `hwi` | [3.2.0](https://github.com/bitcoin-core/HWI/releases/tag/3.2.0) | local |
 | `lnd` | [0.21.8-beta](https://github.com/lightningnetwork/lnd/releases/tag/v0.21.8-beta) | local |
 | `lndconnect` | [0.2.1](https://github.com/LN-Zap/lndconnect/releases/tag/v0.2.1) | local |
-| `lndinit` | [0.1.38-beta](https://github.com/lightninglabs/lndinit/releases/tag/v0.1.38-beta) | unstable |
+| `lndinit` | [0.1.38-beta](https://github.com/lightninglabs/lndinit/releases/tag/v0.1.38-beta) | local |
 | `mempool-backend` | [3.3.2](https://github.com/mempool/mempool/releases/tag/v3.3.2) | local |
 | `mempool-frontend` | [3.3.2](https://github.com/mempool/mempool/releases/tag/v3.3.2) | local |
 | `mempool-rust-gbt` | [3.3.2](https://github.com/mempool/mempool/releases/tag/v3.3.2) | local |

@@ -68,7 +68,7 @@
     "version": "0.2.1"
   },
   "lndinit": {
-    "channel": "unstable",
+    "channel": "local",
     "version": "0.1.38-beta"
   },
   "mempool-backend": {
