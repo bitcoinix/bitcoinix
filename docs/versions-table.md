@@ -3,7 +3,7 @@
 | Package | Version | Channel |
 |---|---|---|
 | `bitcoind` | [32.1](https://bitcoincore.org/en/releases/32.1/) | local |
-| `btcpayserver` | [2.4.7](https://github.com/btcpayserver/btcpayserver/releases/tag/v2.4.7) | unstable |
+| `btcpayserver` | [2.4.7](https://github.com/btcpayserver/btcpayserver/releases/tag/v2.4.7) | local |
 | `charge-lnd` | [0.3.2](https://github.com/accumulator/charge-lnd/releases/tag/v0.3.2) | unstable |
 | `clboss` | [0.17.3](https://github.com/ksedgwic/clboss/releases/tag/v0.17.3) | unstable |
 | `clightning` | [26.06.10](https://github.com/ElementsProject/lightning/releases/tag/v26.06.10) | unstable |
