@@ -44,7 +44,7 @@
     "version": "0.1.0-f0d33fd"
   },
   "electrs": {
-    "channel": "unstable",
+    "channel": "local",
     "version": "0.12.1"
   },
   "extra-container": {
