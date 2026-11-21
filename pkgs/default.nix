@@ -16,8 +16,10 @@ let
     builtins.filter (name: entries.${name} == "directory") (builtins.attrNames entries);
   byName = builtins.listToAttrs (map (name: {
     inherit name;
-    value = pkgs.callPackage ./by-name/${name}/package.nix { };
+    value = pkgs.callPackage ./by-name/${name}/package.nix (byNameArgs.${name} or { });
   }) byNameDirs);
+  # As in nixpkgs, bitcoind is package `bitcoin` without the GUI
+  byNameArgs.bitcoind.withGui = false;
 in
 let self = byName // {
   clightning-plugins = pkgs.lib.recurseIntoAttrs (

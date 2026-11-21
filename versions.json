@@ -1,6 +1,6 @@
 {
   "bitcoind": {
-    "channel": "unstable",
+    "channel": "local",
     "version": "32.1"
   },
   "btcpayserver": {
