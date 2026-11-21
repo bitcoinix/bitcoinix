@@ -21,7 +21,7 @@ NOTICE = re.compile(rf"modules/versioning/({VERSION})/[^/]+\.nix")
 DRAFT_LINK = re.compile(rf"(?:^|/)(?:upgrading|release-notes)/(?P<version>{VERSION})/.+\.(?:md|markdown|html)$", re.I | re.S)
 INDEXES = ("docs/SUMMARY.md", "docs/upgrading.md", "docs/release-notes.md")
 GUIDES = {"release-notes": "Release notes", "upgrading": "Upgrading to config version"}
-CONFIG_VERSION = re.compile(r'\bnix-bitcoin\.configVersion\s*=\s*"([^"]+)"\s*;')
+CONFIG_VERSION = re.compile(r'\b(?:bitcoinix|nix-bitcoin)\.configVersion\s*=\s*"([^"]+)"\s*;')
 
 
 def version(value):
@@ -204,10 +204,10 @@ def check_page(page, guide, number, upcoming):
             if linked_draft(link):
                 yield f"{page}: replace the link to the individual draft {link}."
         if guide == "upgrading":
-            assignment = f'nix-bitcoin.configVersion = "{number}";'
+            assignment = f'bitcoinix.configVersion = "{number}";'
             if not doc.ends_with_config_version(number):
                 yield f"{page}: end with an instruction to set `{assignment}` after migrating."
-            stale = re.compile(r'\bkeep\s+(?:nix-bitcoin\.)?configVersion\s*(?:=\s*"|at the latest finalized release)', re.I)
+            stale = re.compile(r'\bkeep\s+(?:(?:bitcoinix|nix-bitcoin)\.)?configVersion\s*(?:=\s*"|at the latest finalized release)', re.I)
             if any(stale.search(block.text) for block in doc.blocks if block.tag in ("p", "li")):
                 yield f"{page}: remove the development instruction to keep the old configVersion."
 

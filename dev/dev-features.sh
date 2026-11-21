@@ -22,7 +22,7 @@ run-tests.sh -s '{
 
 run-tests.sh -s "{
   services.electrs.enable = true;
-  nix-bitcoin.nodeinfo.enable = true;
+  bitcoinix.nodeinfo.enable = true;
 }" container --run c nodeinfo
 
 #―――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――

@@ -45,15 +45,15 @@ password, and the `operator` user has none by default. Set one as root with `pas
 
 ## How do I see my node's onion addresses?
 
-Set `nix-bitcoin.nodeinfo.enable = true;` (the `secure-node.nix` preset does) and run
+Set `bitcoinix.nodeinfo.enable = true;` (the `secure-node.nix` preset does) and run
 `nodeinfo` as root or as the operator user. It lists the enabled services with their local
 and onion addresses. The operator can also read the onion addresses of all active onion
 services in `/var/lib/onion-addresses/<operator name>/`. See [nodeinfo](services.md#nodeinfo).
 
 ## How do I run a command in a service's network namespace?
 
-With `nix-bitcoin.netns-isolation.enable = true;`, each entry of
-`nix-bitcoin.netns-isolation.services` runs in a network namespace named `nb-<entry>`. Run
+With `bitcoinix.netns-isolation.enable = true;`, each entry of
+`bitcoinix.netns-isolation.services` runs in a network namespace named `nb-<entry>`. Run
 the command as root with `ip netns exec nb-<entry> <command>`, e.g.
 `ip netns exec nb-bitcoind ss -tlnp`. The mempool frontend is served by nginx, so it runs in
 `nb-nginx`, not `nb-mempool`. The `netns-exec` wrapper has been removed.
@@ -61,6 +61,6 @@ the command as root with `ip netns exec nb-<entry> <command>`, e.g.
 ## Why can't I run `bitcoin-cli`, `lightning-cli` or `lncli` as my user?
 
 These commands work as root and as the operator user. Enable it with
-`nix-bitcoin.operator.enable = true;` (the `secure-node.nix` preset does). To use your
-existing user, also set `nix-bitcoin.operator.name = "<your user>";`. The operator joins the
+`bitcoinix.operator.enable = true;` (the `secure-node.nix` preset does). To use your
+existing user, also set `bitcoinix.operator.name = "<your user>";`. The operator joins the
 groups of the enabled services, and runs `lncli` as the `lnd` user through `doas` or `sudo`.

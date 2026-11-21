@@ -1,7 +1,7 @@
 { config, lib, ... }:
 
 {
-  # Services that get `nix-bitcoin.lib.allowLocalIPAddresses`: charge-lnd
+  # Services that get `bitcoinix.lib.allowLocalIPAddresses`: charge-lnd
   # always, the others when they enforce Tor. The nbxplorer unit is created
   # by `btcpayserver.enable`, not by the internal `nbxplorer.enable`.
   # Custom units with the restriction aren't detected: this check can't read
@@ -14,7 +14,7 @@
     ];
   message = ''
     Services with `tor.enforce`, charge-lnd, and custom units that use
-    `nix-bitcoin.lib.allowLocalIPAddresses` or `allowTor` now reach only
+    `bitcoinix.lib.allowLocalIPAddresses` or `allowTor` now reach only
     localhost and, with netns-isolation, the namespace subnet
     169.254.<addressblock>.0/24. They also resolve names in-process from
     `/etc/hosts` instead of through the local resolver sockets (nscd,

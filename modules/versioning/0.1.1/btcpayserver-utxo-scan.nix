@@ -16,6 +16,6 @@ with lib;
       services.bitcoind.rpc.users.btcpayserver.rpcwhitelist = [ "scantxoutset" ];
 
     Otherwise, leave it disabled and acknowledge the change by updating
-    `nix-bitcoin.configVersion`.
+    `bitcoinix.configVersion`.
   '';
 }

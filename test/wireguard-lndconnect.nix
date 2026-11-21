@@ -19,8 +19,8 @@ makeTestVM {
 
       nixpkgs.pkgs = pkgs;
 
-      nix-bitcoin.generateSecrets = true;
-      nix-bitcoin.operator.enable = true;
+      bitcoinix.generateSecrets = true;
+      bitcoinix.operator.enable = true;
 
       services.clightning = {
         enable = true;
@@ -279,7 +279,7 @@ makeTestVM {
 
       with subtest("secret generation keeps private keys and rebuilds public keys"):
           gen_dir = "/tmp/generate-secrets"
-          generate = f"cd {gen_dir} && ${nodes.server.nix-bitcoin.generateSecretsScript}"
+          generate = f"cd {gen_dir} && ${nodes.server.bitcoinix.generateSecretsScript}"
           priv, pub = f"{gen_dir}/wg-peer-private-key", f"{gen_dir}/wg-peer-public-key"
           server.succeed(f"mkdir -m 700 {gen_dir}", generate)
           expected = server.succeed(f"wg pubkey < {priv}")

@@ -67,7 +67,7 @@ let
   };
 
   cfg = config.services.charge-lnd;
-  nbLib = config.nix-bitcoin.lib;
+  nbLib = config.bitcoinix.lib;
 
   lnd = config.services.lnd;
 
@@ -75,7 +75,7 @@ let
   group = user;
   configFile = builtins.toFile "charge-lnd.config" cfg.policies;
   checkedConfig = pkgs.runCommand "charge-lnd-checked.config" { } ''
-    ${config.nix-bitcoin.pkgs.charge-lnd}/bin/charge-lnd --check --config ${configFile}
+    ${config.bitcoinix.pkgs.charge-lnd}/bin/charge-lnd --check --config ${configFile}
     cp ${configFile} $out
   '';
 in
@@ -105,7 +105,7 @@ in
       requires = [ "lnd.service" ];
       serviceConfig = nbLib.defaultHardening // {
         ExecStart = ''
-          ${config.nix-bitcoin.pkgs.charge-lnd}/bin/charge-lnd \
+          ${config.bitcoinix.pkgs.charge-lnd}/bin/charge-lnd \
             --tlscert ${escapeShellArg lnd.certPath} \
             --macaroon /run/lnd/charge-lnd.macaroon \
             --grpc ${nbLib.addressWithPort lnd.rpcAddress lnd.rpcPort} \

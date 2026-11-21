@@ -105,9 +105,9 @@ let
   };
 
   cfg = config.services.rtl;
-  nbLib = config.nix-bitcoin.lib;
-  nbPkgs = config.nix-bitcoin.pkgs;
-  secretsDir = config.nix-bitcoin.secretsDir;
+  nbLib = config.bitcoinix.lib;
+  nbPkgs = config.bitcoinix.pkgs;
+  secretsDir = config.bitcoinix.secretsDir;
   runePath = "${cfg.dataDir}/clightning-admin-rune";
 
   runuser = "${pkgs.util-linux}/bin/runuser";
@@ -398,8 +398,8 @@ in {
     };
     users.groups.${cfg.group} = {};
 
-    nix-bitcoin.secrets.rtl-password.user = cfg.user;
-    nix-bitcoin.generateSecretsCmds.rtl = ''
+    bitcoinix.secrets.rtl-password.user = cfg.user;
+    bitcoinix.generateSecretsCmds.rtl = ''
       makePasswordSecret rtl-password
     '';
   };

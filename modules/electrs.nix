@@ -43,8 +43,8 @@ let
   };
 
   cfg = config.services.electrs;
-  nbLib = config.nix-bitcoin.lib;
-  secretsDir = config.nix-bitcoin.secretsDir;
+  nbLib = config.bitcoinix.lib;
+  secretsDir = config.bitcoinix.secretsDir;
   bitcoind = config.services.bitcoind;
 
   # electrs 0.12 keeps its index in the same path as earlier versions but can't
@@ -61,7 +61,7 @@ in {
       { assertion = bitcoind.prune == 0;
         message = "electrs does not support bitcoind pruning.";
       }
-      { assertion = versionAtLeast config.nix-bitcoin.pkgs.bitcoind.version "31";
+      { assertion = versionAtLeast config.bitcoinix.pkgs.bitcoind.version "31";
         message = "electrs requires Bitcoin Core 31 or later.";
       }
     ];
@@ -111,7 +111,7 @@ in {
             echo 'See docs/upgrading/0.1.3.md.'
             exit ${toString oldIndexStatus}
           fi
-          exec ${config.nix-bitcoin.pkgs.electrs}/bin/electrs \
+          exec ${config.bitcoinix.pkgs.electrs}/bin/electrs \
           --log-filters=INFO \
           --network=${nbLib.networkName { mainnet = "bitcoin"; }} \
           --db-dir='${cfg.dataDir}' \

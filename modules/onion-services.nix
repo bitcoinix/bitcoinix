@@ -8,7 +8,7 @@
 
 with lib;
 let
-  options.nix-bitcoin.onionServices = mkOption {
+  options.bitcoinix.onionServices = mkOption {
     default = {};
     description = ''
       Tor onion services for incoming connections to bitcoinix services, keyed
@@ -47,8 +47,8 @@ let
     ));
   };
 
-  cfg = config.nix-bitcoin.onionServices;
-  nbLib = config.nix-bitcoin.lib;
+  cfg = config.bitcoinix.onionServices;
+  nbLib = config.bitcoinix.lib;
 
   onionServices = builtins.attrNames cfg;
 
@@ -77,12 +77,12 @@ in {
         );
       };
 
-      nix-bitcoin.onionAddresses = {
+      bitcoinix.onionAddresses = {
         # Enable public services to access their own onion addresses
         services = publicServices;
 
         # Allow the operator user to access onion addresses for all active services
-        access.${config.nix-bitcoin.operator.name} = mkIf config.nix-bitcoin.operator.enable activeServices;
+        access.${config.bitcoinix.operator.name} = mkIf config.bitcoinix.operator.enable activeServices;
       };
       systemd.services = let
         onionAddresses = [ "onion-addresses.service" ];
@@ -104,13 +104,13 @@ in {
           in srv.public && srv.enable
         ) onionServices;
       in genAttrs publicServices' (service: {
-        getPublicAddressCmd = "cat ${config.nix-bitcoin.onionAddresses.dataDir}/services/${service}";
+        getPublicAddressCmd = "cat ${config.bitcoinix.onionAddresses.dataDir}/services/${service}";
       });
     }
 
     # Set sensible defaults for some services
     {
-      nix-bitcoin.onionServices = {
+      bitcoinix.onionServices = {
         btcpayserver = {
           externalPort = 80;
         };

@@ -2,7 +2,7 @@
 
 with lib;
 let
-  options.nix-bitcoin.netns-isolation = {
+  options.bitcoinix.netns-isolation = {
     enable = mkEnableOption "netns isolation";
 
     addressblock = mkOption {
@@ -68,7 +68,7 @@ let
     };
   };
 
-  cfg = config.nix-bitcoin.netns-isolation;
+  cfg = config.bitcoinix.netns-isolation;
 
   netns = builtins.mapAttrs (n: v: {
     inherit (v) id;
@@ -125,7 +125,7 @@ in {
         # next to nftables is fine. firewalld is not supported.
         assertion = config.networking.firewall.backend == "iptables"
           && lib.getName config.networking.firewall.package != "nftables";
-        message = "`nix-bitcoin.netns-isolation` runs its iptables rules with `networking.firewall.package`, which is the nftables package without an iptables binary when `networking.nftables` is enabled, and firewalld is not supported. Disable `networking.nftables` and `services.firewalld`, or keep `networking.firewall.backend = \"iptables\"` and set `networking.firewall.package` to a package with `bin/iptables`, so that the firewall uses the iptables backend and package.";
+        message = "`bitcoinix.netns-isolation` runs its iptables rules with `networking.firewall.package`, which is the nftables package without an iptables binary when `networking.nftables` is enabled, and firewalld is not supported. Disable `networking.nftables` and `services.firewalld`, or keep `networking.firewall.backend = \"iptables\"` and set `networking.firewall.package` to a package with `bin/iptables`, so that the firewall uses the iptables backend and package.";
       }
       {
         # Services with `tor.enforce` may reach the whole namespace subnet
@@ -133,7 +133,7 @@ in {
         # cloud metadata addresses (169.254.169.254, 169.254.170.2), so keep the
         # subnet clear of them.
         assertion = !(builtins.elem cfg.addressblock [ 169 170 ]);
-        message = "`nix-bitcoin.netns-isolation.addressblock` must not be 169 or 170: the subnet 169.254.${toString cfg.addressblock}.0/24 would include a cloud metadata address, which services with `tor.enforce` are then allowed to reach. Choose a different address block.";
+        message = "`bitcoinix.netns-isolation.addressblock` must not be 169 or 170: the subnet 169.254.${toString cfg.addressblock}.0/24 would include a cloud metadata address, which services with `tor.enforce` are then allowed to reach. Choose a different address block.";
       }
     ];
     networking.dhcpcd.denyInterfaces = [ "nb-br" "nb-veth*" ];
@@ -280,7 +280,7 @@ in {
 
   # Service-specific config
   {
-    nix-bitcoin.netns-isolation.services = {
+    bitcoinix.netns-isolation.services = {
       bitcoind = {
         id = 12;
       };

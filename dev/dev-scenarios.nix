@@ -30,7 +30,7 @@ with lib;
       extraCurrency = "CHF";
     };
     test.container.exposeLocalhost = true;
-    nix-bitcoin.nodeinfo.enable = true;
+    bitcoinix.nodeinfo.enable = true;
     # test.container.enableWAN = true;
   };
 
@@ -64,7 +64,7 @@ with lib;
         };
       };
     };
-    nix-bitcoin.nodeinfo.enable = true;
+    bitcoinix.nodeinfo.enable = true;
   };
 
   trustedcoin-online = {
@@ -96,6 +96,6 @@ with lib;
         address = "0.0.0.0";
       };
     };
-    nix-bitcoin.nodeinfo.enable = true;
+    bitcoinix.nodeinfo.enable = true;
   };
 }

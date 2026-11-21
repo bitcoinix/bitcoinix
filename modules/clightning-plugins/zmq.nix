@@ -8,7 +8,7 @@ let
 
   cfg = config.services.clightning.plugins.zmq;
 
-  nbLib = config.nix-bitcoin.lib;
+  nbLib = config.bitcoinix.lib;
 
   endpoints = [
     "channel-opened"
@@ -39,7 +39,7 @@ in
 
   config = mkIf cfg.enable {
     services.clightning.pluginsConfig = ''
-      plugin=${config.nix-bitcoin.pkgs.clightning-plugins.zmq.path}
+      plugin=${config.bitcoinix.pkgs.clightning-plugins.zmq.path}
       ${concatStrings (map setEndpoint endpoints)}
     '';
 

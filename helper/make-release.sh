@@ -117,9 +117,9 @@ check_migrations_finalized() {
     for example in examples/configuration.nix examples/flakes/flake.nix \
         examples/colmena/flake.nix examples/container/flake.nix; do
         [[ -f $example ]] || die "Missing example: $example."
-        exampleVersion=$(sed -nE 's/^[[:space:]]*(nix-bitcoin\.)?configVersion = "([^"]+)";$/\2/p' "$example")
+        exampleVersion=$(sed -nE 's/^[[:space:]]*(bitcoinix\.|nix-bitcoin\.)?configVersion = "([^"]+)";$/\2/p' "$example")
         [[ $exampleVersion == "$version" ]] ||
-            die "Set nix-bitcoin.configVersion in $example to $version in the release-preparation commit."
+            die "Set bitcoinix.configVersion in $example to $version in the release-preparation commit."
         if [[ $example == */flake.nix ]]; then
             examplePin=$(sed -nE 's#^[[:space:]]*(bitcoinix|nix-bitcoin)\.url = "github:[^/]+/[^/]+/v([^"]+)";$#\2#p' "$example")
             [[ $examplePin == "$version" ]] ||

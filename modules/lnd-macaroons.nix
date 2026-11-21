@@ -43,7 +43,7 @@ let
   };
 
   cfg = config.services.lnd;
-  nbLib = config.nix-bitcoin.lib;
+  nbLib = config.bitcoinix.lib;
 
   macaroonIdTag = "6e62";
   macaroonIdRange = {

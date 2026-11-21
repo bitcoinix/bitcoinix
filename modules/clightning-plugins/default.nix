@@ -9,7 +9,7 @@ let
   };
 
   cfg = config.services.clightning.plugins;
-  pluginPkgs = config.nix-bitcoin.pkgs.clightning-plugins;
+  pluginPkgs = config.bitcoinix.pkgs.clightning-plugins;
 in {
   imports = [
     ./clboss.nix

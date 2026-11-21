@@ -1,12 +1,12 @@
 { config, ... }:
 {
-  nix-bitcoin.secretsSetupMethod = "nixops";
+  bitcoinix.secretsSetupMethod = "nixops";
 
   deployment.keys = builtins.mapAttrs (n: v: {
-    keyFile = "${config.nix-bitcoin.deployment.secretsDir}/${n}";
-    destDir = config.nix-bitcoin.secretsDir;
+    keyFile = "${config.bitcoinix.deployment.secretsDir}/${n}";
+    destDir = config.bitcoinix.secretsDir;
     inherit (v) user group permissions;
-  }) config.nix-bitcoin.secrets;
+  }) config.bitcoinix.secrets;
 
   # nixops makes the secrets directory accessible only for users with group 'key'.
   # For compatibility with other deployment methods besides nixops, we forego the
@@ -16,7 +16,7 @@
   systemd.services.allowSecretsDirAccess = {
     requires = [ "keys.target" ];
     after = [ "keys.target" ];
-    script = "chmod o+x ${config.nix-bitcoin.secretsDir}";
+    script = "chmod o+x ${config.bitcoinix.secretsDir}";
     serviceConfig.Type = "oneshot";
   };
 

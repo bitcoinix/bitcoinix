@@ -46,8 +46,8 @@ def placeholder(guide, number):
         "Upgrading to config version", "upgrade notes")
     text = f"# {title} {number}\n\nTBD. The {notes} will be consolidated here for the {number} release.\n"
     if guide == "upgrading":
-        text += (f"\nWhile {number} is in development, keep `nix-bitcoin.configVersion` at the latest finalized release.\n"
-                 f"After migrating to the finalized release, set `nix-bitcoin.configVersion = \"{number}\";`.\n")
+        text += (f"\nWhile {number} is in development, keep `bitcoinix.configVersion` at the latest finalized release.\n"
+                 f"After migrating to the finalized release, set `bitcoinix.configVersion = \"{number}\";`.\n")
     url = f"https://github.com/bitcoinix/bitcoinix/tree/master/docs/{guide}"
     if any((DOCS / guide / number).glob("*.md")):
         return text + f"\nSee the [draft {notes} on GitHub]({url}/{number}).\n"
