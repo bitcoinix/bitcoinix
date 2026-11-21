@@ -14,9 +14,9 @@ nb .#modulesPkgs.mempool-backend
 nb .#nbPython3Packages.pyln-client
 
 # A pinned package from nixpkgs
-nb .#pinned.electrs
+nb .#pinned.extra-container
 # Equivalent
-nb .#modulesPkgs.electrs
+nb .#modulesPkgs.extra-container
 
 ## Eval packages
 # Check version

@@ -47,9 +47,10 @@ running bitcoinix does not require any previous experience with the Nix ecosyste
 
 Project direction
 ---
-* **Upstream first:** Most packages should move upstream to [nixpkgs](https://github.com/NixOS/nixpkgs).
-  Ideally, bitcoinix serves solely as a collection of securely cooperating service modules
-  (see [issue #7](https://github.com/bitcoinix/bitcoinix/issues/7)).
+* **Packages:** bitcoinix packages the Bitcoin and Lightning software in `pkgs/`, so that it can
+  ship their fixes on its own schedule, and sends the fixes to [nixpkgs](https://github.com/NixOS/nixpkgs)
+  too. Everything else comes from nixpkgs
+  (see [issue #309](https://github.com/bitcoinix/bitcoinix/issues/309)).
 * **New services:** To request support for a new project or package, please open an issue or PR
   so that its addition can be discussed.
 * **No inactive projects:** Projects with a long-term lack of activity, maintenance or development

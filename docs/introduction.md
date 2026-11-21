@@ -40,7 +40,8 @@ nixpkgs' package. The flake NixOS module uses the locked unstable package set by
 including for local builds. Non-flake module imports and
 `nix-bitcoin.useVersionLockedPkgs = false` use your system's unstable nixpkgs instead.
 Overriding bitcoinix's `nixpkgs` input also replaces its tested pin. In these setups,
-service versions depend on your chosen revision; review the
+the `local` packages except `hwi` keep their versions and build with your chosen
+revision, and `hwi` and the `unstable` packages follow it; review the
 [package migration guidance](upgrading/0.2.0.md) before updating it.
 
 ## Security

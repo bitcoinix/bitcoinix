@@ -76,9 +76,10 @@
 
               If `false`, the default system pkgs are used. Use an unstable nixpkgs
               for your system; release branches are not supported.
-              All nixpkgs service packages then follow your system's pin, including
-              lnd and clightning. Review their versions before updating: downgrades
-              may be incompatible with existing databases.
+              The service packages in bitcoinix's `pkgs/`, including lnd and
+              clightning, keep their versions and build with your system's nixpkgs.
+              Overlays on these packages don't apply, but overlays on their
+              dependencies do.
             '';
           };
         };

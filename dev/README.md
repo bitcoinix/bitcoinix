@@ -161,16 +161,19 @@ Run `helper/update-flake.sh` to update all flake inputs. It also regenerates
 selected `version` and nixpkgs `channel` (`unstable`). Versioned local
 packages exported by the flake are also included, with `channel` set to `local`.
 
-Nixpkgs service packages and their overrides are selected in the `pinned`
+Nixpkgs service packages are selected in the `pinned`
 attribute set in [`pkgs/default.nix`](../pkgs/default.nix). The manifest reads
 their versions directly from that selection, except for the packages in `pkgs/by-name`,
 which it lists as `local`.
 
-Some packages are copied from nixpkgs into [`pkgs/by-name`](../pkgs/by-name), like
-NBXplorer, so that bitcoinix can update them on its own schedule. Each one replaces the
-`pinned` package of the same name, and removing its directory brings the nixpkgs package
-back. Keep each one close to its nixpkgs file, so that later nixpkgs changes are easy to
-copy, and update it as nixpkgs does, with its `passthru.updateScript` where it has one.
+The Bitcoin and Lightning packages are copied from nixpkgs into
+[`pkgs/by-name`](../pkgs/by-name), so that bitcoinix can update them on its own
+schedule. Each one replaces the `pinned` package of the same name, and removing its
+directory brings the nixpkgs package back. TrustedCoin's two patches are only in
+`pkgs/by-name/trustedcoin`, so they go with it. Keep each one close to its nixpkgs file,
+so that later nixpkgs changes are easy to copy, and update it as nixpkgs does, with its
+`passthru.updateScript` where it has one. Their `passthru.tests` still run nixpkgs' NixOS
+tests with the nixpkgs packages. The VM tests in [`test/`](../test) cover these copies.
 
 The `stale-packages` check fails when nixpkgs has a newer version of a top-level package of
 `pkgs/` under the same name, or changes the package at the same version, or has the fixed
