@@ -45,6 +45,7 @@ let
       ]);
 
       tests.bitcoind = cfg.bitcoind.enable;
+      test.data.bitcoinNetwork = cfg.bitcoind.network;
       # lnd requires bitcoind and stops with it, also when test `lnd` is off
       test.data.restart-bitcoind.lnd = cfg.lnd.enable;
 
@@ -81,7 +82,10 @@ let
 
       tests.clightning = cfg.clightning.enable;
       test.data.clightning = { inherit (cfg.clightning) dataDir networkDir user group; };
-      test.data.clightning-replication = cfg.clightning.replication.enable;
+      test.data.clightning-replication = with cfg.clightning.replication; optionalAttrs enable {
+        inherit (cfg.clightning) wallet;
+        encryptedLocalDir = if encrypt then local.directory else null;
+      };
       tests.clnrest-admin-rune = with cfg.clightning.plugins.clnrest; enable && createAdminRune;
       test.data.clnrest-admin-rune = {
         file = "${cfg.clightning.networkDir}/admin-rune";
@@ -187,7 +191,6 @@ let
       '');
 
       tests.mempool = cfg.mempool.enable;
-      test.data.mempool.network = cfg.bitcoind.network;
       services.mempool = {
         electrumServer = "fulcrum";
         settings.MEMPOOL.POOLS_JSON_URL = mkIf config.test.noConnections "disable-pool-fetching";
@@ -340,6 +343,10 @@ let
         });
 
       tests.backups = cfg.backups.enable;
+      test.data.backups = {
+        inherit (cfg.backups) with-bulk-data;
+        bitcoindDir = cfg.bitcoind.dataDir;
+      };
 
       tests.setup-secrets = config.nix-bitcoin.setupSecrets;
       test.data.setup-secrets-declared = let
@@ -384,7 +391,16 @@ let
     ];
   };
 
-  scenarios = with lib; {
+  scenarios = with lib; genAttrs [ "signet" "testnet4" ] (network: {
+    services.bitcoind = { inherit network; listen = true; };
+    services.btcpayserver = { enable = true; lightningBackend = "clightning"; };
+    services.clightning.plugins = {
+      clboss.enable = network == "signet";
+      trustedcoin.enable = network == "signet";
+    };
+    services.unbeholden-wallet.enable = true; # electrs
+    services.mempool.enable = true; # Fulcrum, selected by baseConfig
+  }) // {
     # Included in all scenarios by ./lib/make-test.nix
     base = baseConfig;
 

@@ -287,11 +287,12 @@ in {
 
     # Use the packaged frontend on mainnet, whose defaults already match.
     services.mempool.frontend.settings = mkIf (bitcoind.network != "mainnet") {
-      MAINNET_ENABLED = mkDefault (bitcoind.network == "mainnet");
-      REGTEST_ENABLED = mkDefault (bitcoind.network == "regtest");
-      # Upstream represents mainnet by the empty string. Keep the selected
-      # network at / so the frontend uses the local /api and websocket routes.
-      ROOT_NETWORK = mkDefault (nbLib.networkName { mainnet = ""; });
+      MAINNET_ENABLED = mkDefault false;
+      REGTEST_ENABLED = mkIf (bitcoind.network == "regtest") (mkDefault true);
+      SIGNET_ENABLED = mkIf (bitcoind.network == "signet") (mkDefault true);
+      TESTNET4_ENABLED = mkIf (bitcoind.network == "testnet4") (mkDefault true);
+      # Keep the selected network at / so the frontend uses the local /api and websocket routes.
+      ROOT_NETWORK = mkDefault bitcoind.network;
     };
 
     # Available options:

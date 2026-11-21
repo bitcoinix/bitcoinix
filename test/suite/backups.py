@@ -8,6 +8,16 @@ def test_backups():
     def backup_files():
         return succeed(f"{run_duplicity} list-current-files file:///var/lib/localBackups")
 
+    # Leave a database, a recovery file and a block on an inactive network.
+    inactive = next(net for net in ("signet", "testnet4") if net != test_data["bitcoinNetwork"])
+    old_cln = f"{test_data['clightning']['dataDir'].lstrip('/')}/{inactive}"
+    old_blocks = f"{test_data['backups']['bitcoindDir'].lstrip('/')}/{inactive}/blocks"
+    old_db = f"{old_cln}/lightningd.sqlite3"
+    old_secret = f"{old_cln}/hsm_secret"
+    old_block = f"{old_blocks}/backup-test-block"
+    succeed(f"mkdir -p /{old_cln} /{old_blocks}",
+            f"touch /{old_db} /{old_db}-wal /{old_secret} /{old_block}")
+
     # Restoring a copy of a channel database can lose all funds in its channels.
     # Each entry has a database that exists and the path the backup must leave out.
     channel_dbs = [
@@ -43,6 +53,9 @@ def test_backups():
     live_files = backup_files()
     assert_wallet_copy(live_files)
     assert_no_channel_dbs(live_files)
+    assert old_db not in live_files, old_db  # Also matches its WAL
+    assert old_secret in live_files, old_secret
+    assert (old_block in live_files) == test_data["backups"]["with-bulk-data"], old_block
 
     # The next backup replaces the copy and keeps no copy from an earlier backup.
     # It keeps other files, like those of a wallet named `wallet-backups`.
