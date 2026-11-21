@@ -6,7 +6,7 @@
 | `btcpayserver` | [2.4.7](https://github.com/btcpayserver/btcpayserver/releases/tag/v2.4.7) | local |
 | `charge-lnd` | [0.3.2](https://github.com/accumulator/charge-lnd/releases/tag/v0.3.2) | local |
 | `clboss` | [0.17.3](https://github.com/ksedgwic/clboss/releases/tag/v0.17.3) | local |
-| `clightning` | [26.06.10](https://github.com/ElementsProject/lightning/releases/tag/v26.06.10) | unstable |
+| `clightning` | [26.06.10](https://github.com/ElementsProject/lightning/releases/tag/v26.06.10) | local |
 | `clightning-plugins/clnrest` | [0.2.0](https://github.com/ElementsProject/lightning/tree/v26.06.10/plugins/rest-plugin) | local |
 | `clightning-plugins/currencyrate` | [0.1.0](https://github.com/ElementsProject/lightning/tree/v26.06.10/plugins/currencyrate-plugin) | local |
 | `clightning-plugins/feeadjuster` | [0.1.0-f0d33fd](https://github.com/lightningd/plugins/tree/f0d33fd/feeadjuster) | local |
