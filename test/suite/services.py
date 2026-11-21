@@ -25,6 +25,70 @@ def test_bitcoind():
     )
 
 
+@test("bitcoind-group-read")
+def test_bitcoind_group_read():
+    data = test_data["bitcoind-group-read"]
+    network_dir = data["networkDir"]
+    blocks = f"{network_dir}/blocks"
+
+    def block_files():
+        return set(succeed(f"find {blocks} -type f -printf '%P\\n'").split())
+
+    def assert_group_reads_blocks():
+        unreadable = succeed(f"runuser -u operator -- find {blocks} ! -readable")
+        assert unreadable == "", f"Not readable by group members:\n{unreadable}"
+
+    machine.wait_until_succeeds("bitcoin-cli getnetworkinfo")
+    # On its first start, bitcoind created all these files after preStart, so
+    # only the ACL lets the group read them
+    assert_group_reads_blocks()
+    # After a restart, preStart covers the existing files. bitcoind creates
+    # new ones after it, like a new block index log on each start.
+    before = block_files()
+    succeed("systemctl restart bitcoind")
+    machine.wait_until_succeeds("bitcoin-cli getnetworkinfo")
+    created = block_files() - before
+    assert created, f"bitcoind created no file in {blocks}"
+    assert_group_reads_blocks()
+    machine.fail(current_run_log_has_string("bitcoind", "let the group read all files"))
+    # The group gets no access beyond the blocks dir
+    machine.fail(f"runuser -u operator -- ls {network_dir}/chainstate")
+    mainnet = data["network"] == "mainnet"
+    if not mainnet:
+        # Core creates `wallets` only in a network dir that it creates itself,
+        # and preStart creates the regtest dir first
+        succeed(f"test -d {network_dir}/wallets")
+
+    # The data dir is group-writable, so a group member can replace an entry in
+    # it with a symlink: `blocks` on mainnet, `regtest` on regtest. preStart must
+    # not follow it, and not a symlink at the blocks dir either. Each symlink here
+    # points to the real dir, without group access.
+    for planted in [blocks] if mainnet else [network_dir, blocks]:
+        target = f"{planted}.real"
+        succeed(
+            "systemctl stop bitcoind",
+            f"mv {planted} {target}",
+            f"chmod -R g-rwx {target}",
+            f"setfacl -R -b -k {target}",
+            f"ln -s {target} {planted}",
+            # Restarting this often hits the unit's start limit
+            "systemctl reset-failed bitcoind",
+            "systemctl start bitcoind",
+        )
+        assert_full_match(f"find {target} -perm /g=rwx", "")
+        assert_full_match(f"getfacl -R -s -p {target}", "")
+        machine.wait_until_succeeds(current_run_log_has_string("bitcoind", "let the group read all files"))
+        succeed(
+            "systemctl stop bitcoind",
+            f"rm {planted}",
+            f"mv {target} {planted}",
+            "systemctl reset-failed bitcoind",
+            "systemctl start bitcoind",
+        )
+    machine.wait_until_succeeds("bitcoin-cli getnetworkinfo")
+    assert_group_reads_blocks()
+
+
 @test("i2pd")
 def test_i2pd():
     assert_running("i2pd")

@@ -7,6 +7,7 @@ TEST_PHASES = (
         "security",
         "secrets-no-argv",
         "bitcoind",
+        "bitcoind-group-read",
         "i2pd",
         "bitcoind-rest",
         "rpc-whitelist",
