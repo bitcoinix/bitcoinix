@@ -69,6 +69,9 @@ nix build --no-link .#checks.x86_64-linux.module-config .#checks.x86_64-linux.te
 # Check the docs site builder and build the module option list of docs/options.md.
 nix build --no-link .#checks.x86_64-linux.docs-tools .#checks.x86_64-linux.docs-options
 
+# Check that nixpkgs hasn't caught up with a security fix.
+nix build --no-link .#checks.x86_64-linux.stale-packages
+
 # Check CVE scan/report behavior without network access or GitHub writes.
 nix build --no-link .#checks.x86_64-linux.cve-tools
 # Run the same fixtures on any host with Nix, including macOS.
@@ -98,6 +101,9 @@ and the existing CI `check_flake` job runs them through `nix flake check`.
 [lnd-macaroon-filters-tests.py](./lnd-macaroon-filters-tests.py), exposed as the
 `lnd-macaroon-filters` check, runs the jq filters of `lnd-create-macaroons` on
 valid and malformed `lncli` output.
+[stale-packages.nix](./stale-packages.nix), exposed as the `stale-packages` check,
+fails when the nixpkgs pin has the fixed version of an entry in
+[pkgs/security-fixes.nix](../pkgs/security-fixes.nix).
 [ci/cve-tests.py](./ci/cve-tests.py), exposed as the `cve-tools` check, exercises
 [ci/cve.py](./ci/cve.py) with local nix and gh stubs: scan failures, whitelist
 filtering, and issue reporting.
