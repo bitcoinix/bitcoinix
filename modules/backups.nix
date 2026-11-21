@@ -74,6 +74,9 @@ let
     else parts ++ [ part ]
   ) [] (splitString "/" path));
 
+  # duplicity reads each line as a glob. A one-char class matches the char itself.
+  escapeGlob = replaceStrings [ "[" "*" "?" ] [ "[[]" "[*]" "[?]" ];
+
   # Never back up the Lightning channel databases. The daemons write them while the
   # backup runs, and a node that runs from an outdated copy can broadcast a revoked
   # channel state. The peer can then take all funds in that channel.
@@ -87,15 +90,18 @@ let
       parts = splitString ":" (removePrefix "sqlite3://" clightning.wallet);
     in filter (path: path != "") (optionals (clightning.wallet != null && hasPrefix "sqlite3://" clightning.wallet)
       ([ (head parts) ] ++ optional (length parts > 1) (concatStringsSep ":" (tail parts))));
-    # A relative path starts in the network dir, the working dir of Core Lightning
-    absolute = path: normalisePath (if hasPrefix "/" path then path else "${clightning.networkDir}/${path}");
-    # duplicity reads each line as a glob. A one-char class matches the char itself.
-    escapeGlob = replaceStrings [ "[" "*" "?" ] [ "[[]" "[*]" "[?]" ];
-    sqliteFiles = db: let escaped = escapeGlob db; in [ escaped "${escaped}-*" ];
-  in concatMap sqliteFiles (unique (map absolute ([ "lightningd.sqlite3" ] ++ walletPaths)))
+    # Relative wallet paths start in the network dir. Match every network so a
+    # switch cannot put a previous network's database back in the archive.
+    walletGlob = path: normalisePath (
+      if hasPrefix "/" path then escapeGlob path else "${escapeGlob clightning.dataDir}/*/${escapeGlob path}"
+    );
+    localDir = replication.local.directory;
+    localReplicas = optionals (localDir != null) (map (name: "${localDir}/${name}")
+      (attrValues (import ./clightning-replica-files.nix)));
+    dbGlobs = unique (map walletGlob ([ "lightningd.sqlite3" ] ++ walletPaths ++ localReplicas));
+  in concatMap (db: [ db "${db}-*" ]) dbGlobs
     # gocryptfs keeps the encrypted replica in this dir, see ./clightning-replication.nix
-    ++ optional (replication.enable && replication.encrypt && replication.local.directory != null)
-      (escapeGlob "${normalisePath replication.local.directory}/lightningd-db")
+    ++ optional (localDir != null) (escapeGlob "${normalisePath localDir}/lightningd-db")
     # The SSHFS and gocryptfs mounts, `mountsDir` in ./clightning-replication.nix
     ++ optional (replication.enable && (replication.sshfs.destination != null || replication.encrypt))
       (escapeGlob "/var/cache/clightning-replication")
@@ -103,7 +109,7 @@ let
 
   # duplicity fails on a selection outside its root
   underBackupRoot = path:
-    hasPrefix "${removeSuffix "/" (normalisePath config.services.duplicity.root)}/" path;
+    hasPrefix "${escapeGlob (removeSuffix "/" (normalisePath config.services.duplicity.root))}/" path;
 
   # Potential backup file paths are matched against filelist
   # entries from top to bottom.
@@ -150,10 +156,9 @@ let
   # made during a write is torn. Before each backup, bitcoind writes a consistent
   # copy of each loaded wallet to this dir, which the backup includes with the data dir.
   bitcoind = config.services.bitcoind;
-  # Preserve existing backups on mainnet and regtest. The new public networks
-  # store their blockchain below the network directory.
-  bulkDataDirs = [ bitcoind.dataDir ]
-    ++ optional (elem bitcoind.network [ "signet" "testnet4" ]) bitcoind.networkDir;
+  # Inactive public chains can still occupy the data directory after a switch.
+  # Regtest blocks remain part of the backup.
+  bulkDataDirs = [ bitcoind.dataDir "${bitcoind.dataDir}/signet" "${bitcoind.dataDir}/testnet4" ];
   walletBackupDir = "${bitcoind.dataDir}/wallet-backups";
   backupWallets = bitcoind.enable && bitcoind.disablewallet != true;
   # The bitcoind-remote preset replaces the daemon with a oneshot unit, and the

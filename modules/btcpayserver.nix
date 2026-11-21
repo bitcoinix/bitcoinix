@@ -133,9 +133,6 @@ let
     btcexplorerurl=${nbExplorerUrl}
     btcexplorercookiefile=${nbExplorerCookie}
     postgres=User ID=${cfg.btcpayserver.user};Host=/run/postgresql;Database=btcpaydb
-  '' + optionalString (bitcoind.network == "testnet4") ''
-    # BTCPay defaults to a testnet3 explorer for testnet4 transactions.
-    blockexplorerlink=https://mempool.space/testnet4/tx/{0}
   '' + optionalString (cfg.btcpayserver.rootpath != null) ''
     rootpath=${cfg.btcpayserver.rootpath}
   '' + optionalString (cfg.btcpayserver.lightningBackend == "clightning") ''

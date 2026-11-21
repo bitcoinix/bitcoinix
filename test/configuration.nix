@@ -909,8 +909,9 @@ let
         inherit (bitcoind) port onionPort networkDir;
         rpcPort = bitcoind.rpc.port;
         clnDir = config.services.clightning.networkDir;
-        excludesBulkData = lib.all (dir: lib.elem "- ${bitcoind.networkDir}/${dir}" fileList)
-          [ "blocks" "chainstate" "indexes" ];
+        excludesBulkData = lib.all (net: lib.all (dir:
+          lib.elem "- ${bitcoind.dataDir}/${net}/${dir}" fileList
+        ) [ "blocks" "chainstate" "indexes" ]) publicTestNetworks;
       }) publicTestNetworks;
       expected = [
         { errors = []; port = 38333; rpcPort = 38332; onionPort = 38334;
@@ -1457,8 +1458,14 @@ let
           imports = [ module ];
           services.backups = { enable = true; extraFiles = [ "/var/lib" ]; };
         }).services.duplicity.includeFileList))));
-      cln = "/var/lib/clightning/bitcoin";
+      cln = "/var/lib/clightning";
       sqlite = db: [ "- ${db}" "- ${db}-*" ];
+      defaultDb = sqlite "${cln}/*/lightningd.sqlite3";
+      mainnetDb = sqlite "${cln}/bitcoin/lightningd.sqlite3";
+      replicaDir = "${cln}/replica";
+      localReplicas = sqlite "${replicaDir}/lightningd.sqlite3"
+        ++ sqlite "${replicaDir}/lightningd-signet.sqlite3" ++ sqlite "${replicaDir}/lightningd-testnet4.sqlite3";
+      cipherDir = "- ${replicaDir}/lightningd-db";
       lndGraph = "- /var/lib/lnd/graph";
     in {
       expr = {
@@ -1473,11 +1480,14 @@ let
         emptyWallet = exclusions { services.clightning.wallet = "sqlite3://"; };
         # duplicity reads each line as a glob
         globWallet = exclusions { services.clightning.wallet = "sqlite3://channel[1].sqlite3"; };
+        localReplica = exclusions {
+          services.clightning.replication = { enable = true; local.directory = replicaDir; };
+        };
         encryptedReplica = exclusions {
           services.clightning.replication = {
             enable = true;
             encrypt = true;
-            local.directory = "/var/lib/clightning/replica/";
+            local.directory = "${replicaDir}/";
           };
         };
         sshfsReplica = exclusions {
@@ -1490,26 +1500,27 @@ let
         # duplicity fails on a selection outside its root
         backupRoot = exclusions {
           services.duplicity.root = "/var/lib";
-          services.clightning.wallet = "sqlite3://${cln}/lightningd.sqlite3:/mnt/replica/lightningd.sqlite3";
+          services.clightning.wallet = "sqlite3://${cln}/bitcoin/lightningd.sqlite3:/mnt/replica/lightningd.sqlite3";
         };
         # duplicity normalises its root
         backupRootDot = exclusions { services.duplicity.root = "/var/lib/."; };
       };
       expected = {
-        default = sqlite "${cln}/lightningd.sqlite3" ++ [ lndGraph ];
-        customWallet = sqlite "${cln}/lightningd.sqlite3" ++ sqlite "${cln}/main.sqlite3"
-          ++ sqlite "/var/lib/clightning/replica/copy.sqlite3:" ++ [ lndGraph ];
-        emptyReplica = sqlite "${cln}/lightningd.sqlite3" ++ sqlite "${cln}/main.sqlite3" ++ [ lndGraph ];
-        emptyWallet = sqlite "${cln}/lightningd.sqlite3" ++ [ lndGraph ];
-        globWallet = sqlite "${cln}/lightningd.sqlite3" ++ sqlite "${cln}/channel[[]1].sqlite3" ++ [ lndGraph ];
-        encryptedReplica = sqlite "${cln}/lightningd.sqlite3"
+        default = defaultDb ++ [ lndGraph ];
+        customWallet = defaultDb ++ sqlite "${cln}/*/main.sqlite3"
+          ++ sqlite "${replicaDir}/copy.sqlite3:" ++ [ lndGraph ];
+        emptyReplica = defaultDb ++ sqlite "${cln}/*/main.sqlite3" ++ [ lndGraph ];
+        emptyWallet = defaultDb ++ [ lndGraph ];
+        globWallet = defaultDb ++ sqlite "${cln}/*/channel[[]1].sqlite3" ++ [ lndGraph ];
+        localReplica = defaultDb ++ mainnetDb ++ localReplicas ++ [ cipherDir lndGraph ];
+        encryptedReplica = defaultDb ++ mainnetDb
           ++ sqlite "/var/cache/clightning-replication/plaintext/lightningd.sqlite3"
-          ++ [ "- /var/lib/clightning/replica/lightningd-db" "- /var/cache/clightning-replication" lndGraph ];
-        sshfsReplica = sqlite "${cln}/lightningd.sqlite3"
+          ++ localReplicas ++ [ cipherDir "- /var/cache/clightning-replication" lndGraph ];
+        sshfsReplica = defaultDb ++ mainnetDb
           ++ sqlite "/var/cache/clightning-replication/plaintext/lightningd.sqlite3"
           ++ [ "- /var/cache/clightning-replication" lndGraph ];
-        backupRoot = sqlite "${cln}/lightningd.sqlite3" ++ [ lndGraph ];
-        backupRootDot = sqlite "${cln}/lightningd.sqlite3" ++ [ lndGraph ];
+        backupRoot = defaultDb ++ mainnetDb ++ [ lndGraph ];
+        backupRootDot = defaultDb ++ [ lndGraph ];
       };
     };
     # The wallets of a remote bitcoind live on the other node

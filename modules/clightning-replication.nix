@@ -14,9 +14,11 @@ let
         For setting the destination, you can either define option `sshfs.destination`
         or `local.directory`.
 
-        When `encrypt` is `false`, file `lightningd.sqlite3` is written to the destination.
-        When `encrypt` is `true`, directory `lightningd-db` is written to the destination.
-        It includes the encrypted database and gocryptfs metadata.
+        The replica filename is `lightningd-signet.sqlite3` on signet,
+        `lightningd-testnet4.sqlite3` on testnet4, and `lightningd.sqlite3` on
+        mainnet and regtest. Use separate destinations for mainnet and regtest.
+        With `encrypt`, the destination holds a `lightningd-db` directory
+        containing the encrypted files and gocryptfs metadata.
 
         See also: https://docs.corelightning.org/docs/backup
       '';
@@ -99,11 +101,10 @@ let
   };
 
   cfg = config.services.clightning.replication;
-  nbLib = config.nix-bitcoin.lib;
   inherit (config.services) clightning;
 
   secretsDir = config.nix-bitcoin.secretsDir;
-  network = nbLib.networkName { mainnet = "bitcoin"; };
+  replicaFiles = import ./clightning-replica-files.nix;
   user = clightning.user;
   group = clightning.group;
 
@@ -171,8 +172,8 @@ in {
       "d '${localDir}' 0770 ${user} ${group} - -";
 
     services.clightning.wallet = let
-      mainDB = "${clightning.dataDir}/${network}/lightningd.sqlite3";
-      replicaDB = "${destDir}/lightningd.sqlite3";
+      mainDB = "${clightning.networkDir}/lightningd.sqlite3";
+      replicaDB = "${destDir}/${replicaFiles.${config.services.bitcoind.network}}";
     in "sqlite3://${mainDB}:${replicaDB}";
 
     systemd.services.clightning = {

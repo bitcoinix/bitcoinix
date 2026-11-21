@@ -314,13 +314,13 @@ def test_clightning():
             # This is a one-shot service, so this command only succeeds if the service succeeds
             succeed("systemctl start clightning-feeadjuster")
 
-    if test_data["clightning-replication"]:
-        replica_db = "/var/cache/clightning-replication/plaintext/lightningd.sqlite3"
-        succeed(f"runuser -u clightning -- ls {replica_db}")
+    if replication := test_data["clightning-replication"]:
+        replica_db = shlex.quote(replication["wallet"].removeprefix("sqlite3://").split(":", 1)[1])
+        succeed(f"runuser -u clightning -- test -r {replica_db}")
         # No other user should be able to read the unencrypted files
-        machine.fail(f"runuser -u bitcoin -- ls {replica_db}")
-        # A gocryptfs has been created
-        succeed("ls /var/backup/clightning/lightningd-db/gocryptfs.conf")
+        machine.fail(f"runuser -u bitcoin -- test -r {replica_db}")
+        if directory := replication["encryptedLocalDir"]:
+            succeed(f"test -f {shlex.quote(directory + '/lightningd-db/gocryptfs.conf')}")
 
 
 @test("lnd")
