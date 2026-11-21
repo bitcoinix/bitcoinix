@@ -1,10 +1,10 @@
-{ config, options, lib, ... }:
+{ config, options, lib, pkgs, ... }:
 
 # Every change that breaks functionality from the user's point of view needs an
 # entry under ./versioning (see "Breaking changes" in ../AGENTS.md).
 # Let V be the upcoming release.
-# 1. Add ./versioning/<V>/<identifier>.nix, a function taking config, options and/or
-#    lib and returning { condition = ...; message = ...; }. The directory sets the version.
+# 1. Add ./versioning/<V>/<identifier>.nix, a function taking config, options, lib
+#    and/or pkgs and returning { condition = ...; message = ...; }. The directory sets the version.
 #    Starting at 0.1.0, refer to the drafts during development and the page after consolidation.
 # 2. Keep ../version.nix and the example configVersion at the last release during
 #    development. Advance both only in the release-preparation commit before
@@ -60,7 +60,7 @@ let
       type == "regular" && hasSuffix ".nix" name
     ) (builtins.readDir dir));
   in map (name: let
-    change = import (dir + "/${name}") { inherit config options lib; };
+    change = import (dir + "/${name}") { inherit config options lib pkgs; };
   in change // {
     inherit version;
     message = change.message
