@@ -35,6 +35,10 @@ With the packaged software, these combinations fail at evaluation time.
   enables LND, such as charge-lnd or BTCPay Server with the LND backend.
 - **CLBOSS or Trustedcoin on testnet4.** Both Core Lightning plugins support signet.
 
+BTCPay Server defaults to a testnet3 block explorer on testnet4. Sign in as a
+server administrator, open **Server Settings → Policies → Block Explorers**, set
+`BTC-CHAIN` to `https://mempool.space/testnet4/tx/{0}`, and save the policy.
+
 ## Deployment shell
 This section applies to the legacy [krops deployment](./install.md#5-alternative-deploy-with-krops-legacy).
 Run command `nix-shell` in your deployment directory.\

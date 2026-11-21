@@ -41,6 +41,16 @@ makeTestVM {
       services.clightning.replication.local.directory = "/var/backup/clightning";
     };
 
+    replicationLocalSignet = {
+      imports = [ nodes.replicationLocal ];
+      services.bitcoind.network = "signet";
+    };
+
+    replicationLocalTestnet4 = {
+      imports = [ nodes.replicationLocal ];
+      services.bitcoind.network = "testnet4";
+    };
+
     replicationLocalEncrypted = {
       imports = [ nodes.replicationLocal ];
       services.clightning.replication.encrypt = true;
@@ -166,6 +176,17 @@ makeTestVM {
           client.wait_until_succeeds("runuser -u clightning -- ls /var/backup/clightning/lightningd.sqlite3")
           # No other user should be able to read the backup directory
           client.fail("runuser -u bitcoin -- ls /var/backup/clightning")
+
+      with subtest("switching networks preserves earlier replicas"):
+          replica_dir = "/var/backup/clightning"
+          for network, system in [("signet", "replicationLocalSignet"), ("testnet4", "replicationLocalTestnet4")]:
+              # Let SQLite finish writing before recording the existing replicas.
+              client.succeed("systemctl stop clightning",
+                             f"cd {replica_dir} && sha256sum *.sqlite3 > /tmp/replica-checksums")
+              switch_to_system(system)
+              client.succeed("systemctl start clightning",
+                             f"test -s {replica_dir}/lightningd-{network}.sqlite3",
+                             f"cd {replica_dir} && sha256sum -c /tmp/replica-checksums")
 
       # If `switch_to_system` succeeds then all services, including clightning,
       # have started successfully
