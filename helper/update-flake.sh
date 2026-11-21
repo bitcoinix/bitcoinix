@@ -10,6 +10,7 @@ set -euo pipefail
 #     btcpayserver: 1.1.0 -> 1.1.2
 # - Write ../versions.json with pinned and local package versions and channels.
 # - Write ../docs/versions-table.md, the package versions table of the docs.
+# - Report whether a newer krops release is available.
 
 forceRun=
 refreshOnly=
@@ -63,3 +64,7 @@ nix eval --raw -f update-flake.nix --argstr prevVersions "$versions" showUpdates
 nix eval --json -f update-flake.nix versionsFile |
     nix shell --inputs-from .. nixpkgs#jq -c jq . > ../versions.json
 ./gen-docs-versions.sh > ../docs/versions-table.md
+
+# krops is pinned in ../pkgs/krops, outside of the flake inputs
+echo
+../pkgs/krops/update.sh --check || echo "warning: Checking for krops updates failed." >&2

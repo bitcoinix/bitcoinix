@@ -17,6 +17,7 @@
 | `extra-container` | [1.0.1](https://github.com/extra-container/extra-container/releases/tag/v1.0.1) | unstable |
 | `fulcrum` | [2.1.4](https://github.com/cculianu/Fulcrum/releases/tag/v2.1.4) | unstable |
 | `hwi` | [3.2.0](https://github.com/bitcoin-core/HWI/releases/tag/3.2.0) | local |
+| `krops` | [1.31.1](https://cgit.krebsco.de/krops/tree/CHANGELOG.md?h=v1.31.1) | local |
 | `lnd` | [0.21.8-beta](https://github.com/lightningnetwork/lnd/releases/tag/v0.21.8-beta) | unstable |
 | `lndconnect` | [0.2.1](https://github.com/LN-Zap/lndconnect/releases/tag/v0.2.1) | unstable |
 | `lndinit` | [0.1.38-beta](https://github.com/lightninglabs/lndinit/releases/tag/v0.1.38-beta) | unstable |

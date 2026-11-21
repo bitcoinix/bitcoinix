@@ -107,8 +107,11 @@ The `deployment_examples` job runs [ci/deployment-examples.sh](./ci/deployment-e
 (also `./run-tests.sh deploymentExamples`). It builds every deployment example in
 [../examples](../examples) with its own tool against the checkout, one step per example:
 `examples/flakes` with `nixos-rebuild build --flake` and `examples/colmena` with
-`colmena build`. The examples pin a release and its `configVersion`; the script locks
-them to the checkout and uses root `version.nix` for
+`colmena build`. For krops, it checks that `examples/krops/sources.nix` excludes every
+symlink in the pinned nixpkgs and in bitcoinix's tracked files, builds the deploy script
+of `examples/krops/deploy.nix` and runs [../examples/deploy-krops.sh](../examples/deploy-krops.sh),
+which deploys a node to a QEMU VM twice and requires KVM. The examples pin a release and its
+`configVersion`; the script locks them to the checkout and uses root `version.nix` for
 `configVersion`, retaining unreleased migration warnings.
 The `shellcheck` and `nixos_search` jobs run independently, so shell linting and
 fast checks can finish while package and option extraction is still running.

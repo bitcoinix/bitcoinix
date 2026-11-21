@@ -332,7 +332,6 @@ examples() {
       runExample deploy-container.sh
       runExample deploy-container-minimal.sh
       runExample deploy-qemu-vm.sh
-      runExample deploy-krops.sh
     '
     (cd "$scriptDir/../examples" && nix-shell --run "$script")
 
@@ -341,7 +340,8 @@ examples() {
     persistentContainerExample
 }
 
-# Build the deployment examples (Colmena, nixos-rebuild) against this checkout.
+# Build the deployment examples (Colmena, nixos-rebuild) against this checkout
+# and deploy the krops example to a VM.
 # These are also run on the CI server.
 deploymentExamples() {
     "$scriptDir/ci/deployment-examples.sh"

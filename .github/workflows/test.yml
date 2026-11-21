@@ -150,6 +150,8 @@ jobs:
   # Caches the flake-info build so that later runs of `nixos_search` fetch it instead
   # of compiling it. Runs only on master, builds inside the Nix sandbox and never runs
   # flake-info.
+  # Also caches the krops source, so that `deployment_examples` doesn't depend on the
+  # availability of its only upstream host.
   cache_flake_info:
     if: github.event_name == 'push' && github.ref == 'refs/heads/master'
     runs-on: ubuntu-latest
@@ -165,6 +167,10 @@ jobs:
       - name: Build and cache flake-info
         run: |
           path=$(nix build --no-link --print-out-paths ./test/nixos-search#flake-info)
+          nix shell --inputs-from . nixpkgs#cachix -c cachix push bitcoinix "$path"
+      - name: Cache the krops source
+        run: |
+          path=$(nix build --no-link --print-out-paths .#legacyPackages.x86_64-linux.krops.src)
           nix shell --inputs-from . nixpkgs#cachix -c cachix push bitcoinix "$path"
 
   # Release tooling
@@ -184,8 +190,9 @@ jobs:
 
   # Deployment examples
   # Builds every deployment example in examples/ with its deployment tool, against this
-  # checkout, one step per example. A new deployment example must be added to
-  # test/ci/deployment-examples.sh and get a step here.
+  # checkout, one step per example. The krops example is also deployed to a VM.
+  # A new deployment example must be added to test/ci/deployment-examples.sh and
+  # get a step here.
   deployment_examples:
     needs: changes
     if: needs.changes.outputs.docs_only == 'false'
@@ -201,6 +208,9 @@ jobs:
       - name: Build examples/colmena (Colmena)
         if: ${{ !cancelled() }}
         run: ./test/ci/deployment-examples.sh colmena
+      - name: Deploy examples/krops to a VM (krops)
+        if: ${{ !cancelled() }}
+        run: ./test/ci/deployment-examples.sh krops
 
   # Required CI gate
   # Job `ci_gate` is the status check that the rulesets on master and on release tags

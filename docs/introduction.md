@@ -36,7 +36,8 @@ release notes, tag or source directory:
 
 All nixpkgs packages come from the single `nixpkgs` input, which tracks `nixos-unstable`.
 Channel `local` packages are built by bitcoinix from pinned sources, except `hwi`, which wraps
-nixpkgs' package. The flake NixOS module uses the locked unstable package set by default,
+nixpkgs' package. `krops` is the tool of the
+[legacy krops deployment](install.md#5-alternative-deploy-with-krops-legacy). The flake NixOS module uses the locked unstable package set by default,
 including for local builds. Non-flake module imports and
 `nix-bitcoin.useVersionLockedPkgs = false` use your system's unstable nixpkgs instead.
 Overriding bitcoinix's `nixpkgs` input also replaces its tested pin. In these setups,
