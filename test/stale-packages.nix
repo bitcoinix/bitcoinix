@@ -7,7 +7,7 @@ let
   inherit (pkgs) lib;
 
   # Packages that bitcoinix changes on purpose at the pin's version
-  changedOnPurpose = [ ];
+  changedOnPurpose = [ "trustedcoin" ];
 
   staleFixes = lib.concatMap (name: let
     inherit (pkgs.${name}) version;

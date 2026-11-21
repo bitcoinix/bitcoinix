@@ -92,7 +92,7 @@
     "version": "0.15.17"
   },
   "trustedcoin": {
-    "channel": "unstable",
+    "channel": "local",
     "version": "0.8.7"
   },
   "unbeholden-lnurl": {
