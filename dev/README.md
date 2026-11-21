@@ -163,7 +163,20 @@ packages exported by the flake are also included, with `channel` set to `local`.
 
 Nixpkgs service packages and their overrides are selected in the `pinned`
 attribute set in [`pkgs/default.nix`](../pkgs/default.nix). The manifest reads
-their versions directly from that selection.
+their versions directly from that selection, except for the packages in `pkgs/by-name`,
+which it lists as `local`.
+
+Some packages are copied from nixpkgs into [`pkgs/by-name`](../pkgs/by-name), like
+NBXplorer, so that bitcoinix can update them on its own schedule. Each one replaces the
+`pinned` package of the same name, and removing its directory brings the nixpkgs package
+back. Keep each one close to its nixpkgs file, so that later nixpkgs changes are easy to
+copy, and update it as nixpkgs does, with its `passthru.updateScript` where it has one.
+
+The `stale-packages` check fails when nixpkgs has a newer version of a top-level package of
+`pkgs/` under the same name, or changes the package at the same version, or has the fixed
+version of an entry in [`pkgs/security-fixes.nix`](../pkgs/security-fixes.nix). Update or
+remove the package or the entry then. The check expects the packages in its
+`changedOnPurpose` list to differ from nixpkgs. See [security fixes](../docs/configuration.md#security-fixes-for-nixpkgs-packages).
 
 `nbPython3Packages` uses `pkgs.python3Packages` from the single unstable package set, including `pyln-bolt7`,
 `pyln-client`, `pyln-proto` and `pylightning`. Python Core Lightning plugins use

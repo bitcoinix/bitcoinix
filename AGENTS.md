@@ -114,6 +114,8 @@ sudo ./test/run-tests.sh container          # fast container; needs systemd + ro
   `versions.json` and `docs/versions-table.md` in sync with the locked inputs.
 - `pkgs/default.nix` selects nixpkgs service packages in its `pinned` attribute set
   and applies local overrides. The version manifest reads this selection directly.
+  A package copied into `pkgs/by-name/<name>` replaces the `pinned` one of the same
+  name, so change the copy, not `pinned`.
 - `pkgs/security-fixes.nix` patches nixpkgs packages until the pin has the fix; see
   `modules/security-fixes.nix` and `docs/configuration.md`.
 - Only `x86_64-linux` and `aarch64-linux` are supported and tested.

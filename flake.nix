@@ -142,6 +142,13 @@
           '';
           docs-options = legacyPackages.docsOptions;
           stale-packages = import ./test/stale-packages.nix { inherit pkgs nbPkgs; };
+          # `overlays.default` evaluates and has the packages of pkgs/
+          overlays = let
+            withOverlay = pkgs.appendOverlays [ self.overlays.default ];
+            names = builtins.attrNames (pkgs.lib.filterAttrs (_: pkgs.lib.isDerivation) nbPkgs);
+            missing = builtins.filter (name: withOverlay.${name}.name != nbPkgs.${name}.name) names;
+          in if missing != [] then throw "overlays.default lacks ${toString missing}"
+          else pkgs.writeText "nix-bitcoin-overlays" (toString names);
           cve-tools = pkgs.runCommand "nix-bitcoin-cve-tools" {
             nativeBuildInputs = [ pkgs.python3 ];
           } ''

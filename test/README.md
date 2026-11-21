@@ -105,7 +105,8 @@ valid and malformed `lncli` output.
 fails when the nixpkgs pin has the fixed version of an entry in
 [pkgs/security-fixes.nix](../pkgs/security-fixes.nix), or a newer version of a
 top-level package of [pkgs/](../pkgs) under the same name, or the same version with
-a different derivation.
+a different derivation. The `overlays` check
+applies the flake's `overlays.default`.
 [ci/cve-tests.py](./ci/cve-tests.py), exposed as the `cve-tools` check, exercises
 [ci/cve.py](./ci/cve.py) with local nix and gh stubs: scan failures, whitelist
 filtering, and issue reporting.

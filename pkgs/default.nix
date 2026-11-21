@@ -4,10 +4,25 @@ in
 # Set default values for use without flakes
 { pkgs ? import nixpkgsPinned.nixpkgs { config = {}; overlays = []; }
 }:
-let self = {
+let
+  # Packages copied from nixpkgs into ./by-name/<name>, so that bitcoinix can update them on
+  # its own schedule. Each one replaces the `pinned` package of the same name. The
+  # stale-packages check fails when nixpkgs has a newer version.
+  # The names come from builtins only, as `overlays.default` calls this file with its own
+  # result as `pkgs`.
+  byNameDirs = let
+    entries = if builtins.pathExists ./by-name then builtins.readDir ./by-name else { };
+  in
+    builtins.filter (name: entries.${name} == "directory") (builtins.attrNames entries);
+  byName = builtins.listToAttrs (map (name: {
+    inherit name;
+    value = pkgs.callPackage ./by-name/${name}/package.nix { };
+  }) byNameDirs);
+in
+let self = byName // {
   clightning-plugins = pkgs.lib.recurseIntoAttrs (
     (import ./clightning-plugins/python.nix pkgs self.nbPython3Packages) // {
-      inherit (pkgs.callPackage ./clightning-plugins/rust.nix { inherit (self.pinned) clightning; })
+      inherit (pkgs.callPackage ./clightning-plugins/rust.nix { inherit (self.modulesPkgs) clightning; })
         clnrest currencyrate;
     }
   );
@@ -64,5 +79,5 @@ let self = {
     });
   };
 
-  modulesPkgs = self // self.pinned;
+  modulesPkgs = self.pinned // self;
 }; in self

@@ -84,8 +84,8 @@
     "version": "3.3.2"
   },
   "nbxplorer": {
-    "channel": "unstable",
-    "version": "2.6.17"
+    "channel": "local",
+    "version": "2.6.23"
   },
   "rtl": {
     "channel": "unstable",
