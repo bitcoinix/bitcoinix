@@ -7,6 +7,8 @@ lnd and clightning.
 Review any security patches or other customizations supplied through overlays:
 set `nix-bitcoin.useVersionLockedPkgs = false` to use your system's customized
 unstable package set, or explicitly override the affected service's package.
+Overlays on the packages that bitcoinix copies into `pkgs/by-name`, like nbxplorer,
+don't reach them with either setting, so set the service's `package` option for those.
 
 The formerly separate unstable service packages (including lnd and clightning)
 now also follow your system's nixpkgs when you set this option to `false` or

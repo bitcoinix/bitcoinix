@@ -114,6 +114,10 @@ sudo ./test/run-tests.sh container          # fast container; needs systemd + ro
   `versions.json` and `docs/versions-table.md` in sync with the locked inputs.
 - `pkgs/default.nix` selects nixpkgs service packages in its `pinned` attribute set
   and applies local overrides. The version manifest reads this selection directly.
+  A package copied into `pkgs/by-name/<name>` replaces the `pinned` one of the same
+  name, so change the copy, not `pinned`.
+- `pkgs/security-fixes.nix` patches nixpkgs packages until the pin has the fix; see
+  `modules/security-fixes.nix` and `docs/configuration.md`.
 - Only `x86_64-linux` and `aarch64-linux` are supported and tested.
 - No Nix formatter/linter is set up; `nix flake check` and `./test/shellcheck.sh`
   are the static checks. Shellcheck also covers shebang'd extensionless files.
@@ -192,7 +196,7 @@ For each entry:
   (0.1.6 → 0.2.0). The maintainers decide this by creating the milestone, so don't
   derive the version from the latest tag alone. Choose a short,
   descriptive `<identifier>` for each change; several files per version are fine.
-  Each file is a function taking `{ config, options, lib, ... }` (only declare the
+  Each file is a function taking `{ config, options, lib, pkgs, ... }` (only declare the
   arguments it uses) and returning `{ condition = ...; message = ...; }`.
   `modules/versioning.nix` supplies the version from the directory name and loads
   notices in increasing version order, then alphabetically by filename. It appends

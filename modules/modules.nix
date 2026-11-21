@@ -29,6 +29,7 @@
     # Support features
     ./versioning.nix
     ./security.nix
+    ./security-fixes.nix
     ./onion-addresses.nix
     ./onion-services.nix
     ./netns-isolation.nix
