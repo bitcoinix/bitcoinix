@@ -316,6 +316,30 @@ def test_btcpayserver():
     )
 
 
+def rtl_url(address, port):
+    host = f"[{address}]" if ":" in address else address
+    return f"http://{host}:{port}/rtl"
+
+
+def assert_rtl_ui(url):
+    """RTL's login page, a login, and an API call that needs the login"""
+    jar = "/tmp/rtl-cookies"
+    curl = f"curl -fsS -b {jar} -c {jar}"
+    # The page sets the session cookie and the CSRF token that the login needs
+    assert_matches(f"rm -f {jar} && {curl} {url}/", "<title>RTL</title>")
+    csrf = succeed(f"awk '$6 == \"XSRF-TOKEN\" {{ print $7 }}' {jar}").strip()
+    password_hash = succeed("printf %s \"$(cat /secrets/rtl-password)\" | sha256sum").split()[0]
+    login = json.dumps({"authenticateWith": "PASSWORD", "authenticationValue": password_hash})
+    token = succeed_json(
+        f"{curl} -H 'Content-Type: application/json' -H 'X-XSRF-TOKEN: {csrf}'"
+        f" -d {shlex.quote(login)} {url}/api/authenticate"
+    )["token"]
+    rtl_config = f"curl -sS -b {jar} -o /dev/null -w '%{{http_code}}' {url}/api/conf/config/rtl"
+    assert_full_match(rtl_config, "401")
+    assert_full_match(f"{rtl_config} -H 'Authorization: Bearer {token}'", "200")
+    succeed(f"rm {jar}")
+
+
 @test("rtl")
 def test_rtl():
     assert_running("rtl")
@@ -323,15 +347,54 @@ def test_rtl():
         log_has_string("rtl", "Server is up and running")
     )
 
-    # The 2FA secret set up in the UI survives a restart
-    conf = f"{test_data['rtl-credentials']['dataDir']}/RTL-Config.json"
-
     def restart_rtl():
         succeed("systemctl restart rtl")
         assert_running("rtl")
         machine.wait_until_succeeds(
             current_run_log_has_string("rtl", "Server is up and running")
         )
+
+    data = test_data["rtl"]
+    address, port = data["address"], data["port"]
+    url = rtl_url(address, port)
+    assert_rtl_ui(url)
+    if onion := data["onionTarget"]:
+        assert_rtl_ui(rtl_url(onion["addr"], onion["port"]))
+
+    # While RTL is stopped, for example during a backend's maintenance, no other
+    # local user can take its address and port and collect the password
+    succeed("systemctl stop rtl")
+
+    def assert_port_held():
+        status, out = machine.execute(f"runuser -u nobody -- timeout 3 nc -l {address} {port} 2>&1")
+        assert re.search("Address already in use|Cannot assign requested address", out), \
+            f"An unprivileged user took RTL's port (status {status}): {out!r}"
+
+    assert_port_held()
+    # A connection gets no answer
+    machine.fail(f"curl -sS --max-time 10 {url}/")
+    if data["proxy"]:
+        # Connections that the proxy can't forward stop neither it nor the socket
+        proxy_pid = "systemctl show -P MainPID rtl-proxy"
+        pid = succeed(proxy_pid).strip()
+        assert pid != "0", "rtl-proxy isn't running"
+        succeed(f"for i in $(seq 20); do curl -sS --max-time 2 {url}/ || true; done")
+        assert succeed(proxy_pid).strip() == pid, "rtl-proxy restarted"
+        # A crashing proxy doesn't make systemd close the socket
+        for _ in range(6):
+            succeed("systemctl kill -s KILL rtl-proxy")
+            machine.execute(f"curl -sS --max-time 2 {url}/")
+            # The next kill must hit a new proxy, not the restart delay
+            machine.wait_until_succeeds(f"pid=$({proxy_pid}); [[ $pid != 0 && $pid != {pid} ]]", timeout=60)
+            pid = succeed(proxy_pid).strip()
+        # systemd holds the port
+        assert_matches(f"ss -Htlnp 'sport = :{port}'", r'\("systemd",pid=1,')
+        assert_port_held()
+    restart_rtl()
+    assert_rtl_ui(url)
+
+    # The 2FA secret set up in the UI survives a restart
+    conf = f"{test_data['rtl-credentials']['dataDir']}/RTL-Config.json"
 
     def restart_with_secret_2fa(secret):
         # `cat` writes in place, which keeps the file's owner and mode
@@ -342,7 +405,7 @@ def test_rtl():
         restart_rtl()
 
     # RTL reports `enable2FA` to clients before login
-    enable_2fa = f"curl -fsS {ip('rtl')}:3000/rtl/api/conf | jq .enable2FA"
+    enable_2fa = f"curl -fsS {url}/api/conf | jq .enable2FA"
 
     restart_with_secret_2fa("JBSWY3DPEHPK3PXP")
     assert_full_match(f"jq -r .secret2FA {conf}", "JBSWY3DPEHPK3PXP\n")

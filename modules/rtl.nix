@@ -7,12 +7,12 @@ let
     address = mkOption {
       type = types.str;
       default = "127.0.0.1";
-      description = "HTTP server address.";
+      description = "IP address of the web interface.";
     };
     port = mkOption {
       type = types.port;
       default = 3000;
-      description = "HTTP server port.";
+      description = "Port of the web interface.";
     };
     dataDir = mkOption {
       type = types.path;
@@ -283,11 +283,31 @@ let
   in optional (cfg.nodes.clightning.enable && overridden clightningNode false) "clightning"
      ++ optional (cfg.nodes.lnd.enable && overridden lndNode true) "lnd";
 
+  # RTL's web interface is plain HTTP with one password. In the host's network
+  # namespace, any local user could take RTL's port while RTL is stopped, serve a
+  # fake login page and collect the password. So a socket unit holds the port
+  # from boot on, also while RTL is stopped, and `rtl-proxy` forwards each
+  # connection to RTL's unix socket.
+  # With netns-isolation, RTL's address exists only in RTL's namespace, which only
+  # root can enter. So RTL keeps listening on it directly.
+  useProxy = !config.nix-bitcoin.netns-isolation.enable;
+  # In RTL's runtime dir, which systemd removes at each stop and creates for each
+  # start, accessible only to RTL's user. So no other user can take the path.
+  socketPath = "/run/rtl/rtl.sock";
+  # `ListenStream=` needs brackets around an IPv6 address
+  listenAddress = let
+    address = if hasInfix ":" cfg.address then "[${cfg.address}]" else cfg.address;
+  in "${address}:${toString cfg.port}";
+  # A switch doesn't restart a changed socket unit, but it stops a removed one and
+  # starts a new one. So each address and port gets a socket unit of its own.
+  proxySocket = "rtl-proxy-${substring 0 8 (builtins.hashString "sha256" listenAddress)}";
+
   rtlConfig = {
     # Set at service start from the secret file, see `rtl-setup-config`
     multiPass = null;
-    host = cfg.address;
-    port = cfg.port;
+    # Without `host`, RTL listens on a unix socket when `port` isn't a number
+    ${optionalAttr (!useProxy) "host"} = cfg.address;
+    port = if useProxy then socketPath else cfg.port;
     SSO.rtlSSO = 0;
     inherit nodes;
   };
@@ -330,6 +350,13 @@ in {
           RTL: Remove `Settings.lnServerUrl` from
           `services.rtl.nodes.${head urlOverrides}.extraConfig`. RTL checks the TLS
           certificates of its backends only at the URLs that bitcoinix sets.
+        '';
+      }
+      { assertion = !useProxy || cfg.port != 0;
+        message = ''
+          RTL: `services.rtl.port` must not be 0. Without netns-isolation, a socket
+          unit holds RTL's port, and systemd can't listen on port 0. RTL used to
+          take 0 as 3000, so set 3000 to keep that port.
         '';
       }
     ];
@@ -521,8 +548,95 @@ in {
         Restart = "on-failure";
         RestartSec = "10s";
         ReadWritePaths = [ cfg.dataDir ];
+      } // optionalAttrs useProxy {
+        RuntimeDirectory = "rtl";
+        RuntimeDirectoryMode = "0700";
+        # RTL prefers them to its config file, so they would move it off its unix
+        # socket. This also drops them from an `EnvironmentFile`.
+        UnsetEnvironment = [ "PORT" "HOST" ];
       } // nbLib.allowedIPAddresses cfg.tor.enforce
         // nbLib.nodejs;
+    };
+
+    systemd.sockets = mkIf useProxy {
+      ${proxySocket} = {
+        wantedBy = [ "sockets.target" ];
+        listenStreams = [ listenAddress ];
+        socketConfig = {
+          Service = "rtl-proxy.service";
+          # The socket starts before the network is up, for example before a
+          # WireGuard address exists
+          FreeBind = true;
+          # Like RTL's own listener before, which Node opens with IPV6_V6ONLY off. So
+          # `::` also holds IPv4, and a v4-mapped address binds, whatever
+          # `net.ipv6.bindv6only` says.
+          BindIPv6Only = "both";
+          # RTL's IP filter, which applied to RTL's own listener before. The
+          # proxy's filter doesn't apply to the connections that systemd passes in.
+          inherit (config.systemd.services.rtl.serviceConfig) IPAddressAllow IPAddressDeny;
+        };
+      };
+    };
+
+    # systemd skips a `ListenStream=` that it can't parse, like one with a host name
+    # or a zone ID, and refuses a socket unit without a listener. Neither the switch
+    # nor the boot fails then, and nothing holds the port. A path or a name that
+    # starts with `@` gives a unix socket, which holds no port either. So the system
+    # build fails unless the address is a numeric IP address without a zone ID.
+    # Python's parser reads no system state, so the build host doesn't matter.
+    system.checks = mkIf useProxy [
+      (pkgs.runCommand "check-rtl-address" { inherit (cfg) address; } ''
+        ${pkgs.buildPackages.python3}/bin/python3 -I -c '
+        import ipaddress, os, sys
+        address = os.environ["address"]
+        try:
+            ipaddress.ip_address(address)
+            valid = "%" not in address
+        except ValueError:
+            valid = False
+        if not valid:
+            sys.exit("Error: services.rtl.address must be a numeric IP address without "
+                     f"a zone ID, like 127.0.0.1 or ::1, not {address!r}")
+        '
+        touch $out
+      '')
+    ];
+
+    systemd.services.rtl-proxy = mkIf useProxy {
+      requires = [ "${proxySocket}.socket" ];
+      # Like RTL. The proxy fails to start while the secrets dir is missing, so a
+      # connection at boot must not start it before the secrets are set up.
+      after = [ "${proxySocket}.socket" "nix-bitcoin-secrets.target" ];
+      # A switch restarts a changed proxy after its daemon-reload. By default it
+      # would stop the proxy before the reload and start it after. The socket keeps
+      # listening, so a connection before the reload would start the old unit
+      # again, and the later start would leave it running.
+      stopIfChanged = false;
+      # A crashed proxy restarts after a delay that grows from a second to a minute,
+      # with no start limit. Otherwise each connection starts it, the starts count
+      # toward the limit, and when a socket's service hits the limit, systemd closes
+      # the socket.
+      startLimitIntervalSec = 0;
+      serviceConfig = nbLib.defaultHardening // {
+        ExecStart = "${config.systemd.package}/lib/systemd/systemd-socket-proxyd ${socketPath}";
+        # Only RTL's user can connect to RTL's socket. The proxy can't see RTL's
+        # files and has no network of its own: it gets the TCP socket from systemd.
+        # Nor can it reach the local resolvers, through which it could send what it
+        # forwards elsewhere.
+        User = cfg.user;
+        # Without a `-`, a missing dir fails the start. A proxy that started without
+        # the mask would see the dir's contents once the dir exists. The proxy
+        # retries, and the socket keeps the port meanwhile.
+        InaccessiblePaths = nbLib.localResolverPaths ++ [ cfg.dataDir secretsDir ];
+        PrivateNetwork = true;
+        RestrictAddressFamilies = "AF_UNIX";
+        # systemd-socket-proxyd needs it at start
+        SystemCallFilter = nbLib.defaultHardening.SystemCallFilter ++ [ "name_to_handle_at" ];
+        Restart = "always";
+        RestartSec = "1s";
+        RestartSteps = 5;
+        RestartMaxDelaySec = "1min";
+      };
     };
 
     systemd.services.lnd = mkIf cfg.nodes.lnd.enable startRtl;

@@ -572,6 +572,18 @@ let
       };
     }).systemd.services.bitcoind.preStart.content;
 
+  # The build check of RTL's address, run by the check below
+  rtlAddressCheck = address: lib.head (builtins.filter (check: check.name == "check-rtl-address")
+    (evaluate {
+      services.rtl = { enable = true; nodes.lnd.enable = true; inherit address; };
+    }).system.checks);
+  # systemd would skip the listener or take a unix socket
+  rtlAddressRefused = map (address: pkgs.testers.testBuildFailure' {
+    drv = rtlAddressCheck address;
+    expectedBuilderLogEntries = [ "must be a numeric IP address without a zone ID" "not '${address}'" ];
+  }) [ "localhost" "fe80::1%lo" "/run/rtl/frontend.sock" "@rtl-ui" "1.2.3" ];
+  rtlAddressAccepted = map rtlAddressCheck [ "127.0.0.1" "::1" "::ffff:127.0.0.1" "0.0.0.0" "::" ];
+
   lnurlConfig = backend: module: evaluate {
     imports = [ module ];
     services.unbeholden-lnurl = {
@@ -1531,6 +1543,111 @@ let
       };
       expected = { default = false; other = false; override = true; otherBackend = true; };
     };
+    # A socket unit holds RTL's address and port, except with netns-isolation
+    testRtlProxySocket = let
+      rtl = module: evaluate {
+        imports = [ module ];
+        services.rtl = { enable = true; nodes.lnd.enable = true; };
+      };
+      sockets = module: lib.filterAttrs (name: _: lib.hasPrefix "rtl-proxy-" name)
+        (rtl module).systemd.sockets;
+      listen = module: lib.concatMap (socket: socket.listenStreams)
+        (lib.attrValues (sockets module));
+      unset = module: (rtl module).systemd.services.rtl.serviceConfig.UnsetEnvironment or null;
+      portRejected = port: module: lib.any (lib.hasInfix "`services.rtl.port` must not be 0")
+        (failedAssertions (rtl { imports = [ module ]; services.rtl.port = port; }));
+      checked = module: lib.any (check: check.name == "check-rtl-address")
+        (rtl module).system.checks;
+      notice = hasNotice "systemd holds `services.rtl.address`";
+      rtlOnly = { services.rtl = { enable = true; nodes.lnd.enable = true; }; };
+    in {
+      expr = {
+        default = listen {};
+        ipv6 = listen { services.rtl.address = "::1"; };
+        # Like RTL's own listener before, whatever `net.ipv6.bindv6only` says
+        dualStack = map (socket: socket.socketConfig.BindIPv6Only or null)
+          (lib.attrValues (sockets { services.rtl.address = "::"; }));
+        netns = listen { nix-bitcoin.netns-isolation.enable = true; };
+        # A switch replaces the unit, as it doesn't restart a changed one
+        renamed = lib.attrNames (sockets {}) != lib.attrNames (sockets { services.rtl.port = 3001; });
+        # They would move RTL off its unix socket, also from an `EnvironmentFile`
+        unset = unset {};
+        unsetNetns = unset { nix-bitcoin.netns-isolation.enable = true; };
+        # systemd can't listen on port 0. In its namespace, RTL takes 0 as 3000.
+        portZero = portRejected 0 {};
+        portOne = portRejected 1 {};
+        portZeroNetns = portRejected 0 { nix-bitcoin.netns-isolation.enable = true; };
+        # The system build checks the address, see `rtlAddressRefused`
+        checked = checked {};
+        checkedNetns = checked { nix-bitcoin.netns-isolation.enable = true; };
+        notice = notice rtlOnly;
+        # The notice doesn't name an address that systemd refuses
+        noticeHostName = hasNotice "localhost:3000"
+          { imports = [ rtlOnly ]; services.rtl.address = "localhost"; };
+        noticeNetns = notice { imports = [ rtlOnly ]; nix-bitcoin.netns-isolation.enable = true; };
+      };
+      expected = {
+        default = [ "127.0.0.1:3000" ];
+        ipv6 = [ "[::1]:3000" ];
+        dualStack = [ "both" ];
+        netns = [];
+        renamed = true;
+        unset = [ "PORT" "HOST" ];
+        unsetNetns = null;
+        portZero = true;
+        portOne = false;
+        portZeroNetns = false;
+        checked = true;
+        checkedNetns = false;
+        notice = true;
+        noticeHostName = false;
+        noticeNetns = false;
+      };
+    };
+    # The socket unit has RTL's IP filter, which enforces Tor
+    testRtlProxySocketIPFilter = let
+      filters = enforce: let
+        config = evaluate {
+          services.rtl = { enable = true; nodes.lnd.enable = true; tor.enforce = enforce; };
+        };
+        socket = lib.head (lib.attrValues (lib.filterAttrs (name: _: lib.hasPrefix "rtl-proxy-" name)
+          config.systemd.sockets));
+        filter = unit: { allow = unit.IPAddressAllow or null; deny = unit.IPAddressDeny or null; };
+      in {
+        socket = filter socket.socketConfig;
+        rtl = filter config.systemd.services.rtl.serviceConfig;
+      };
+      local = { allow = [ "127.0.0.1/32" "::1/128" ]; deny = "any"; };
+      open = { allow = "any"; deny = "any"; };
+    in {
+      expr = { enforce = filters true; noEnforce = filters false; };
+      expected = {
+        enforce = { socket = local; rtl = local; };
+        noEnforce = { socket = open; rtl = open; };
+      };
+    };
+    # The proxy runs as RTL's user, which alone can reach RTL's socket. It has no
+    # network of its own and can't see RTL's files, the secrets or the local resolvers.
+    testRtlProxySandbox = let
+      config = evaluate { services.rtl = { enable = true; nodes.lnd.enable = true; }; };
+      proxy = config.systemd.services.rtl-proxy.serviceConfig;
+    in {
+      expr = {
+        user = proxy.User or null;
+        privateNetwork = proxy.PrivateNetwork or null;
+        addressFamilies = proxy.RestrictAddressFamilies or null;
+        # All masks fail closed, without a `-` prefix
+        visible = lib.subtractLists (proxy.InaccessiblePaths or [])
+          (config.nix-bitcoin.lib.localResolverPaths
+           ++ [ config.services.rtl.dataDir config.nix-bitcoin.secretsDir ]);
+      };
+      expected = {
+        user = "rtl";
+        privateNetwork = true;
+        addressFamilies = "AF_UNIX";
+        visible = [];
+      };
+    };
     # Earlier versions copied the admin credentials of both backends to RTL.
     # RTL's start removes the copy of a backend that RTL doesn't use, as the rtl
     # user, who owns the macaroon dir also without lnd.
@@ -2074,6 +2191,12 @@ else
         || fail "73-seat-late.rules no longer applies the uaccess tag, recheck our rules"
       $systemd/bin/udevadm verify --resolve-names=never "$rules"/71-hardware-wallets-*.rules \
         || fail "udevadm verify failed"
+    )
+
+    # RTL's address check fails for an address that systemd can't hold a port on,
+    # and passes for a numeric IP address
+    (
+      for result in ${toString (rtlAddressRefused ++ rtlAddressAccepted)}; do [[ -e $result ]]; done
     )
 
     echo '${toString (builtins.length (builtins.attrNames tests))} configuration tests passed' > "$out"

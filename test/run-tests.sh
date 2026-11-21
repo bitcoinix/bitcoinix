@@ -314,6 +314,7 @@ buildable=(
     hardened
     clightning-replication
     lndPruned
+    rtlIPv6
     lnconnectNoOperatorRole
     i2p
     i2pLocal

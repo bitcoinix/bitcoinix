@@ -134,10 +134,12 @@ let
       tests.tor-enforce = true;
       test.data.tor-enforce = let
         # Select units by either part of the restriction, so that a unit that
-        # overrides its allow list or its masks fails the test instead of dropping out
+        # overrides its allow list or its masks fails the test instead of dropping out.
+        # A unit without a network of its own, like rtl-proxy, has no IP filter to check.
         isRestricted = service: let serviceConfig = service.serviceConfig; in
-          elem "127.0.0.1/32" (toList (serviceConfig.IPAddressAllow or []))
-          || elem "/run/nscd" (toList (serviceConfig.InaccessiblePaths or []));
+          !(serviceConfig.PrivateNetwork or false)
+          && (elem "127.0.0.1/32" (toList (serviceConfig.IPAddressAllow or []))
+              || elem "/run/nscd" (toList (serviceConfig.InaccessiblePaths or [])));
         netns = config.nix-bitcoin.netns-isolation;
       in {
         selected = attrNames (filterAttrs (_: isRestricted) config.systemd.services);
@@ -176,6 +178,20 @@ let
           inherit (cfg.clightning) networkDir user;
           inherit (cfg.clightning.plugins.clnrest) port createAdminRune;
         } else null;
+      };
+      # Scenarios that set `tests = mkForce { ... }` have no `tests.rtl`
+      test.data.rtl = optionalAttrs (config.tests.rtl or false) {
+        inherit (cfg.rtl) address port;
+        proxy = !config.nix-bitcoin.netns-isolation.enable;
+        # Where RTL's onion service forwards to
+        onionTarget = let
+          mapping = head (config.services.tor.relay.onionServices.rtl.map or [ null ]);
+        in if mapping == null then null else { inherit (mapping.target) addr port; };
+      };
+      # A short, fixed restart delay. Then the crash loop in `test_rtl` is fast, and
+      # its restarts would hit systemd's default start limit if the proxy had one.
+      systemd.services.rtl-proxy = mkIf (cfg.rtl.enable && !config.nix-bitcoin.netns-isolation.enable) {
+        serviceConfig = { RestartSec = mkForce "100ms"; RestartSteps = mkForce 0; };
       };
       services.rtl = {
         nodes = {
@@ -716,6 +732,14 @@ let
     lndPruned = {
       services.lnd.enable = true;
       services.bitcoind.prune = 1000;
+    };
+
+    # Without netns-isolation, systemd listens on RTL's address. The node's kernel
+    # decides whether systemd can listen on an IPv6 address, so test one in the VM.
+    rtlIPv6.services.rtl = {
+      enable = true;
+      address = "::1";
+      nodes.clightning.enable = false;
     };
 
     trustedcoin = {
