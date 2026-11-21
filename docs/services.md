@@ -248,6 +248,19 @@ ssh -L 3000:127.0.0.1:3000 operator@bitcoin-node
 With `netns-isolation`, RTL listens in its own network namespace. Use the address from
 `nodeinfo | jq -r .rtl.local_address` instead, e.g. `169.254.1.29:3000`.
 
+RTL's web interface is plain HTTP. A local user who takes RTL's port could show you a
+fake login page and collect the password. So without `netns-isolation`, RTL listens on
+a unix socket, and systemd holds `services.rtl.address` and `port` with a socket unit,
+`rtl-proxy-*.socket`, also while RTL is stopped. The address must then be a numeric IP
+address without a zone ID. With a host name, a zone ID or a socket path, the system
+build fails. A switch that changes the address or port frees the port for a moment.
+In the tunnel, use the address and port that systemd holds.
+By default that's `127.0.0.1:3000`, as above. If you set another address or port, use
+those, with `127.0.0.1` for `0.0.0.0` and `[::1]` for `::`. With `localhost`, sshd may
+connect to `[::1]:3000`, which systemd doesn't hold with the default address.
+With `netns-isolation`, RTL's address exists only in RTL's namespace, and no process in
+the host namespace can take it.
+
 With the `secure-node.nix` or `enable-tor.nix` preset, RTL also has an onion service.
 Open `http://<onion address>` in Tor Browser, using the address from
 `nodeinfo | jq -r .rtl.onion_address`.
