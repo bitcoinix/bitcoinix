@@ -12,7 +12,7 @@
     "version": "0.3.2"
   },
   "clboss": {
-    "channel": "unstable",
+    "channel": "local",
     "version": "0.17.3"
   },
   "clightning": {
