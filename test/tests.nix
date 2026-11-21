@@ -38,6 +38,8 @@ let
         (mkIfTest "lnconnect-clnrest-cert" [ openssl ])
         # Creates the cert of a fake RTL backend
         (mkIfTest "rtl-backend-certs" [ openssl ])
+        # Calls lnd, clnrest and RTL's API with RTL's credentials
+        (mkIfTest "rtl-permissions" [ curl xxd ])
         # Needed to trace the commands run by secret generation
         (mkIfTest "secrets-no-argv" [ strace ])
         # Talks to the Electrum relay
@@ -167,11 +169,15 @@ let
       tests.rtl = cfg.rtl.enable;
       tests.rtl-credentials = cfg.rtl.enable;
       tests.rtl-backend-certs = cfg.rtl.enable;
+      tests.rtl-permissions = cfg.rtl.enable;
       tests.rtl-stops-with-backend = cfg.rtl.enable;
       test.data.rtl-credentials = {
-        inherit (cfg.rtl) dataDir user group;
-        lnd = if cfg.rtl.nodes.lnd.enable then { inherit (cfg.lnd) networkDir user; } else null;
-        clightning = if cfg.rtl.nodes.clightning.enable then { inherit (cfg.clightning) networkDir user; } else null;
+        inherit (cfg.rtl) dataDir user group port;
+        lnd = if cfg.rtl.nodes.lnd.enable then { inherit (cfg.lnd) networkDir user restPort; } else null;
+        clightning = if cfg.rtl.nodes.clightning.enable then {
+          inherit (cfg.clightning) networkDir user;
+          inherit (cfg.clightning.plugins.clnrest) port createAdminRune;
+        } else null;
       };
       # Scenarios that set `tests = mkForce { ... }` have no `tests.rtl`
       test.data.rtl = optionalAttrs (config.tests.rtl or false) {
@@ -523,6 +529,16 @@ let
       imports = with scenarios; [ netnsBase regtest ];
       services.clightning.extraConfig = "clnrest-certs=${clnrestCerts}";
       test.data.clnrest-certs = clnrestCerts;
+    };
+
+    # lnd without the `walletrpc` build tag lacks the RPCs of `walletrpc.WalletKit`.
+    # RTL still starts, and its macaroon gets only its other permissions.
+    lndWithoutWalletrpc = { config, ... }: {
+      imports = [ scenarios.regtestBase ];
+      services.lnd.package = let inherit (config.nix-bitcoin.pkgs) lnd; in
+        lnd.override { tags = remove "walletrpc" lnd.tags; };
+      services.rtl = { enable = true; nodes.lnd.enable = true; nodes.clightning.enable = false; };
+      test.data.lnd-missing-services = [ "walletrpc.WalletKit" ];
     };
 
     hardened = {

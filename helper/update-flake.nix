@@ -24,6 +24,8 @@ in rec {
     # Skip the demo VM outputs to avoid evaluating a NixOS system for the manifest.
     packages = builtins.removeAttrs flake.packages.x86_64-linux [ "runVM" "vm" ];
     localPkgs = lib.filterAttrs (_: pkg: pkg ? version) packages;
+    # krops is excluded from the flake packages, which hold only Nix packages
+    krops = { inherit (flake.legacyPackages.x86_64-linux.krops) version; };
   in
     lib.mapAttrs (_: version: {
       inherit version;
@@ -32,5 +34,5 @@ in rec {
     // lib.mapAttrs (_: pkg: {
       inherit (pkg) version;
       channel = "local";
-    }) localPkgs;
+    }) (localPkgs // { inherit krops; });
 }

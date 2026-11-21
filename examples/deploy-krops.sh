@@ -69,7 +69,6 @@ krops.pkgs.krops.writeCommand "krops-deploy" {
     extraOptions = [
       "-i" (toString <qemu-vm/id-vm>) "-oConnectTimeout=1"
       "-oStrictHostKeyChecking=no" "-oUserKnownHostsFile=/dev/null" "-oLogLevel=ERROR"
-      "-oControlMaster=auto" "-oControlPath=${builtins.getEnv "tmpDir"}/ssh-connection" "-oControlPersist=60"
     ];
   };
 
@@ -104,6 +103,21 @@ nix-shell --run generate-secrets
 echo
 echo "Deploy with krops"
 "$tmpDir/krops-deploy"
+
+secretsPermissions() { c 'stat -c "%n %U %G %a" /var/src/secrets/*'; }
+permissions=$(secretsPermissions)
+
+echo
+echo "Deploy again, updating the existing node"
+"$tmpDir/krops-deploy"
+
+# krops resets the permissions of the secrets it copies.
+# setup-secrets must have set them up again.
+if [[ $(secretsPermissions) != "$permissions" ]]; then
+    >&2 echo "error: the secrets permissions changed after redeploying:"
+    >&2 diff <(echo "$permissions") <(secretsPermissions) || :
+    exit 1
+fi
 
 echo
 echo "Bitcoin Core service:"

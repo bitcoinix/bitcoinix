@@ -108,7 +108,77 @@ let
   nbLib = config.nix-bitcoin.lib;
   nbPkgs = config.nix-bitcoin.pkgs;
   secretsDir = config.nix-bitcoin.secretsDir;
+  # RTL reads `admin.macaroon` in `macaroonPath`. Earlier versions copied the admin
+  # credentials to these paths, so keeping them overwrites those copies.
+  macaroonCopy = "${cfg.dataDir}/macaroons/admin.macaroon";
   runePath = "${cfg.dataDir}/clightning-admin-rune";
+  unusedCopies = optional (!cfg.nodes.lnd.enable) macaroonCopy
+                 ++ optional (!cfg.nodes.clightning.enable) runePath;
+
+  # RTL's lnd macaroon allows only the RPCs of the lnd REST routes in RTL's
+  # `backend/controllers/lnd`, as `uri` permissions. lnd's wallet unlocker RPCs
+  # need no macaroon. Entity permissions would allow more, like `offchain:write`
+  # for `DeleteAllPayments`. So when an RTL update calls another RPC, add it here.
+  lndRpcs = map (rpc: "/lnrpc.Lightning/${rpc}") [
+    "AddInvoice" "ClosedChannels" "CloseChannel" "ConnectPeer" "DecodePayReq"
+    "DescribeGraph" "DisconnectPeer" "ExportAllChannelBackups" "ExportChannelBackup"
+    "FeeReport" "ForwardingHistory" "GetChanInfo" "GetInfo" "GetNetworkInfo"
+    "GetNodeInfo" "GetTransactions" "ListChannels" "ListInvoices" "ListPayments"
+    "ListPeers" "NewAddress" "OpenChannelSync" "PendingChannels" "QueryRoutes"
+    "RestoreChannelBackups" "SendCoins" "SignMessage" "UpdateChannelPolicy"
+    "VerifyChanBackup" "VerifyMessage" "WalletBalance"
+  ] ++ [ "/routerrpc.Router/SendPaymentV2" "/routerrpc.Router/TrackPaymentV2" ];
+  # lnd has these RPCs only when its package has the build tags `invoicesrpc` and
+  # `walletrpc`. bitcoinix's lnd has both. Without them, RTL still starts, but its
+  # features that use these RPCs fail.
+  optionalLndRpcs = [
+    "/invoicesrpc.Invoices/LookupInvoiceV2" "/invoicesrpc.Invoices/SubscribeSingleInvoice"
+  ] ++ map (rpc: "/walletrpc.WalletKit/${rpc}") [
+    "BumpFee" "LabelTransaction" "LeaseOutput" "ListUnspent" "ReleaseOutput"
+  ];
+  uriPermissions = concatMapStringsSep ",\n"
+    (rpc: builtins.toJSON { entity = "uri"; action = rpc; });
+
+  # RTL's clightning rune allows only the methods in RTL's `backend/controllers/cln`.
+  # clnrest checks `listclnrest-notifications` for RTL's websocket connection.
+  clightningMethods = [
+    "autoclean-once" "checkmessage" "close" "connect" "decode" "disableoffer"
+    "disconnect" "feerates" "fetchinvoice" "fundchannel" "funderupdate" "getinfo"
+    "getroute" "invoice" "keysend" "listchannels" "listclnrest-notifications"
+    "listconfigs" "listforwards" "listfunds" "listinvoices" "listnodes" "listoffers"
+    "listpeerchannels" "listpeers" "listsendpays" "newaddr" "offer" "pay"
+    "setchannel" "signmessage" "withdraw"
+  ];
+  # A comment restriction, which clightning ignores when it checks the rune.
+  # It marks the runes that `rtl-create-clnrest-rune-file` creates.
+  runeMarker = "bitcoinix-rtl#";
+  runeRestrictions = builtins.toJSON [
+    (map (method: "method=${method}") clightningMethods)
+    [ runeMarker ]
+  ];
+  # In clightning's network dir, which RTL can't write. RTL had the admin rune
+  # before, so a file that RTL can change must not decide which rune is revoked.
+  clightningRune = "${clightning.networkDir}/rtl-rune";
+  # clightning gives a new rune the next unique ID, also when this ID is
+  # blacklisted. So RTL's start creates up to this many runes in a row.
+  maxRuneAttempts = 10;
+  # Reads the output of `showrunes`, which lists the runes that clightning stored.
+  # Prints "keep" while the stored rune in `rtl-rune` has RTL's restrictions and
+  # isn't blacklisted, else "create". Then it prints the unique IDs of all other
+  # runes with the marker that aren't blacklisted, one per line. These are RTL's
+  # earlier runes, for example ones with other restrictions or ones that a lost
+  # `rtl-rune` left behind. Blacklisting an ID revokes every rune with this ID.
+  # clightning gives each new rune its own ID, but it counts them in its database.
+  # So after a start on a new database, a new rune can get the ID of an older rune
+  # that clightning doesn't list, see `docs/services.md`.
+  runeAction = pkgs.writeText "rtl-rune-action.jq" ''
+    def restrictions: [.restrictions[] | [.alternatives[] | .fieldname + .condition + .value]];
+    [.runes[] | select(.blacklisted | not)] as $valid
+    | (first($valid[] | select(.rune == $rune and restrictions == $want)) // null) as $kept
+    | (if $kept then "keep" else "create" end),
+      ($valid[] | select((restrictions | any(. == [$marker])) and .unique_id != $kept.unique_id)
+       | .unique_id)
+  '';
 
   runuser = "${pkgs.util-linux}/bin/runuser";
 
@@ -291,7 +361,14 @@ in {
       }
     ];
 
-    services.lnd.enable = mkIf cfg.nodes.lnd.enable true;
+    services.lnd = mkIf cfg.nodes.lnd.enable {
+      enable = true;
+      macaroons.rtl = {
+        inherit (cfg) user;
+        permissions = uriPermissions lndRpcs;
+        optionalPermissions = uriPermissions optionalLndRpcs;
+      };
+    };
     services.clightning = mkIf cfg.nodes.clightning.enable {
       enable = true;
       plugins.clnrest.enable = true;
@@ -299,16 +376,17 @@ in {
 
     systemd.tmpfiles.rules = [
       "d '${cfg.dataDir}' 0770 ${cfg.user} ${cfg.group} - -"
-    ] ++ optional cfg.nodes.lnd.enable
-      # `rtl-copy-macaroon` installs the macaroon as the rtl user, which needs write
+      # `rtl-copy-macaroon` installs the macaroon as the rtl user, and RTL's start
+      # removes it as that user when RTL doesn't use lnd. So the rtl user needs write
       # access to this dir. Older versions created it as root, so fix its owner.
-      "d '${cfg.dataDir}/macaroons' 0770 ${cfg.user} ${cfg.group} - -";
+      "d '${cfg.dataDir}/macaroons' 0770 ${cfg.user} ${cfg.group} - -"
+    ];
 
     services.rtl.tor.enforce = mkIf (cfg.extraCurrency != null) false;
 
     systemd.services.rtl = rec {
-      # RTL sends the lnd admin macaroon and the clightning admin rune to its
-      # backends, but doesn't check their TLS certificates. So Node preloads
+      # RTL sends its lnd macaroon and its clightning rune to its backends, but
+      # doesn't check their TLS certificates. So Node preloads
       # `pin-backend-certs.cjs` (`NODE_OPTIONS`): a connection to a backend must
       # present the backend's pinned cert, and every other connection gets the
       # normal checks against the system CAs.
@@ -362,26 +440,84 @@ in {
             mv -f "$tmp" "$conf"
           '')
         ]
+        ++ optional (unusedCopies != [])
+          # Earlier versions copied the admin credentials of both backends to RTL.
+          # Remove the copy of a backend that RTL doesn't use. Runs as the rtl user.
+          "${pkgs.coreutils}/bin/rm -f ${escapeShellArgs unusedCopies}"
         ++ optional cfg.nodes.lnd.enable
-          # The lnd admin macaroon is not readable by group `lnd`, so copy it
+          # Copy the macaroon that lnd creates for RTL (`services.lnd.macaroons.rtl`)
+          # to the file that RTL reads. Read it as the rtl user, who owns it.
+          # The lnd user can write `/run/lnd`. So don't follow a symlink, which could
+          # make this copy a file of the rtl user, and RTL send it to lnd.
           (nbLib.rootScript "rtl-copy-macaroon" ''
             ${installAsRtl}
-            ${runuser} -u ${lnd.user} -- head -c 65536 '${lnd.networkDir}/admin.macaroon' > "$tmpFile"
+            ${runuser} -u ${cfg.user} -- \
+              dd if=/run/lnd/rtl.macaroon iflag=nofollow,fullblock bs=65536 count=1 status=none > "$tmpFile"
             if [[ ! -s $tmpFile ]]; then
-              echo "Error: '${lnd.networkDir}/admin.macaroon' is empty" >&2
+              echo "Error: '/run/lnd/rtl.macaroon' is empty" >&2
               exit 1
             fi
-            installAsRtl '${cfg.dataDir}/macaroons/admin.macaroon'
+            installAsRtl '${macaroonCopy}'
           '')
         ++ optional cfg.nodes.clightning.enable
           (nbLib.rootScript "rtl-create-clnrest-rune-file" ''
             ${installAsRtl}
-            rune=$(${runuser} -u ${clightning.user} -- head -c 65536 '${clightning.networkDir}/admin-rune')
-            # Earlier versions installed an empty or `null` rune when `createrune` failed.
-            # clightning replaces it on its next start, and `Restart=on-failure` tries again.
-            if [[ ! $rune || $rune == null ]]; then
-              echo "Error: '${clightning.networkDir}/admin-rune' is empty or null" >&2
-              exit 1
+            asClightning() {
+              ${runuser} -u ${clightning.user} -- "$@"
+            }
+            cli() {
+              asClightning ${clightning.cli}/bin/lightning-cli "$@"
+            }
+            jq=${pkgs.jq}/bin/jq
+            restrictions=${escapeShellArg runeRestrictions}
+
+            # Create RTL's rune once and keep it, see `runeAction`.
+            # Pass the rune to jq in a file: arguments are visible to all local users.
+            checkRune() {
+              local actions
+              if ! actions=$(cli showrunes | $jq -r --rawfile rune <(printf '%s' "$rune") \
+                               --argjson want "$restrictions" --arg marker ${escapeShellArg runeMarker} \
+                               -f ${runeAction}); then
+                echo "Error: Can't check RTL's rune" >&2
+                exit 1
+              fi
+              { read -r action; mapfile -t earlierRunes; } <<< "$actions"
+            }
+            rune=$(asClightning head -c 65536 '${clightningRune}' 2>/dev/null || true)
+            checkRune
+            # Revoke RTL's earlier runes before it creates a new one, so that a failed
+            # start revokes them too
+            for id in "''${earlierRunes[@]}"; do
+              echo "Revoke RTL's earlier rune with unique ID $id"
+              cli blacklistrune "$id" "$id" > /dev/null
+            done
+            if [[ $action != keep ]]; then
+              if [[ $rune ]]; then
+                echo "'${clightningRune}' holds no stored rune with RTL's restrictions. Create a new one."
+              fi
+              # Check each new rune too, see `maxRuneAttempts`
+              for (( attempt = 1; ; attempt++ )); do
+                if ! response=$(cli createrune restrictions="$restrictions") ||
+                   ! rune=$($jq -er .rune <<< "$response") || [[ ! $rune ]]; then
+                  echo "Error: Can't create RTL's rune: $response" >&2
+                  exit 1
+                fi
+                checkRune
+                if [[ $action == keep ]]; then
+                  break
+                fi
+                id=$($jq -r .unique_id <<< "$response")
+                if (( attempt == ${toString maxRuneAttempts} )); then
+                  echo "Error: The unique IDs of RTL's last $attempt new runes, up to $id, are" \
+                       "blacklisted. RTL's next start tries the next IDs." >&2
+                  exit 1
+                fi
+                echo "RTL's new rune has the blacklisted unique ID $id. Create another one."
+              done
+              # Replace the file in one step, so that a crash can't leave a partial rune
+              tmp=$(asClightning mktemp '${clightningRune}.XXXXXX')
+              asClightning tee "$tmp" <<< "$rune" > /dev/null
+              asClightning mv -fT "$tmp" '${clightningRune}'
             fi
             printf 'LIGHTNING_RUNE="%s"\n' "$rune" > "$tmpFile"
             installAsRtl '${runePath}'

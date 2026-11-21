@@ -37,7 +37,7 @@ By default, [`./configuration.nix`](configuration.nix) enables Bitcoin Core and 
   Requires: [Nix](https://nixos.org/nix/), Linux
 
 - [`./deploy-krops.sh`](deploy-krops.sh) creates a QEMU VM and deploys a
-  bitcoinix configuration to it using [krops](https://github.com/krebs/krops).\
+  bitcoinix configuration to it using [krops](https://cgit.krebsco.de/krops).\
   Requires: [Nix](https://nixos.org/nix/), Linux
 
 - [`./deploy-container-minimal.sh`](deploy-container-minimal.sh) creates a
@@ -62,7 +62,8 @@ The [bitcoinix test suite](../test/README.md) is also useful for exploring featu
 - [`./colmena`](colmena/README.md): a full node with the secure-node preset, deployed with
   [Colmena](https://github.com/nix-community/colmena).
 
-CI builds both on every pull request (see
+CI builds both on every pull request and deploys the legacy krops example with
+[`./deploy-krops.sh`](deploy-krops.sh) (see
 [deployment-examples.sh](../test/ci/deployment-examples.sh)).
 The [installation guide](../docs/install.md) walks through a deployment.
 
