@@ -4,7 +4,8 @@
 `book` builds the documentation of a source tree, by default the current checkout.
 `site` builds the documentation site of all releases from FIRST_RELEASE on, as
 published at docs.bitcoinix.net: the latest release at `/`, every release at
-`/v/<version>/`, `/v/index.html` and `/versions.json` for the version selector.
+`/v/<version>/`, `/v/index.html` and `/versions.json` for the version selector, and
+`/sitemap.xml` and `/robots.txt` for search engines.
 Every release tag is verified with helper/fetch-release.sh before it is published.
 
 Requires git, mdbook and nix on PATH, and for `site` the tools of fetch-release.sh.
@@ -13,9 +14,11 @@ Requires git, mdbook and nix on PATH, and for `site` the tools of fetch-release.
 import argparse
 from dataclasses import dataclass
 import html
+from html.parser import HTMLParser
 import json
 import os
 from pathlib import Path
+import posixpath
 import re
 import shutil
 import subprocess
@@ -37,6 +40,18 @@ VERIFIED_VERSION = re.compile(r"# bitcoinix release (v[0-9]+\.[0-9]+\.[0-9]+)")
 VERIFIED_COMMIT = re.compile(r'\s*url = ".*/archive/([0-9a-f]{40}|[0-9a-f]{64})\.tar\.gz";')
 # The systems of the flake outputs
 SYSTEMS = ["x86_64-linux", "aarch64-linux"]
+# The published site
+SITE_URL = "https://docs.bitcoinix.net"
+SITE_NAME = "bitcoinix docs"
+HOME_TITLE = "bitcoinix: security-focused Bitcoin and Lightning nodes on NixOS"
+# The image of link previews, from the latest release, as in the repository settings
+SOCIAL_IMAGE = Path("assets/logo.png")
+SOCIAL_IMAGE_PATH = "social.png"
+DESCRIPTION_LENGTH = 160
+# Pages that mdBook generates besides the chapters
+GENERATED_PAGES = {"404.html", "print.html", "toc.html"}
+# Paths of the site outside of the documentation of the latest release
+SITE_PATHS = ["v", "versions.json", "versions.js", "sitemap.xml", "robots.txt", SOCIAL_IMAGE_PATH]
 
 
 class Error(Exception):
@@ -217,21 +232,149 @@ def add_to_head(page, tags):
 
 
 NOINDEX = '<meta name="robots" content="noindex">'
+TITLE = re.compile(r"<title>(.*?)</title>", re.S)
+DESCRIPTION = re.compile(r'<meta name="description" content="([^"]*)">')
+# The pages of `[output.html.redirect]`, whose canonical URL is already their target
+REDIRECT = re.compile(r'<meta http-equiv="refresh"', re.I)
 
 
-def add_site_tags(book, archived):
-    """Add the version selector to the pages of a book. Archived copies are not indexed,
-    so that search engines show the pages of the latest release."""
-    for path in sorted(book.rglob("*.html")):
-        page = path.read_text()
-        tags = '<script src="/versions.js" defer></script>\n'
+class FirstParagraph(HTMLParser):
+    """The text of the first paragraph in the main content of an mdBook page, outside of
+    block quotes such as the note on pages inherited from nix-bitcoin."""
+
+    def __init__(self):
+        super().__init__()
+        self.main = self.quote = 0
+        self.parts = None
+        self.text = None
+
+    def handle_starttag(self, tag, attrs):
+        if tag == "main":
+            self.main += 1
+        elif tag == "blockquote":
+            self.quote += 1
+        elif tag == "p" and self.main and not self.quote and self.text is None:
+            self.parts = []
+
+    def handle_endtag(self, tag):
+        if tag == "main":
+            self.main -= 1
+        elif tag == "blockquote":
+            self.quote -= 1
+        elif tag == "p" and self.parts is not None:
+            self.text = " ".join("".join(self.parts).split())
+            self.parts = None
+
+    def handle_data(self, data):
+        if self.parts is not None:
+            self.parts.append(data)
+
+
+def page_description(page, fallback):
+    """A description of a page for search results and link previews: the start of its
+    first paragraph."""
+    parser = FirstParagraph()
+    parser.feed(page)
+    text = parser.text or fallback
+    if len(text) > DESCRIPTION_LENGTH:
+        text = text[:DESCRIPTION_LENGTH - 1].rsplit(" ", 1)[0].rstrip(" ,.:;") + "…"
+    return text
+
+
+def chapter_names(pages, book_title):
+    """The chapter name of each page, from the titles `<chapter> - <book title>` that
+    mdBook generates, or "" for print.html, whose title is the book title. Its toc.html
+    has no title. Redirect pages have no chapter name."""
+    names = {}
+    for path, page in pages.items():
+        if REDIRECT.search(page):
+            continue
+        match = TITLE.search(page)
+        if match:
+            title = html.unescape(match[1])
+            names[path] = "" if title == book_title else title.removesuffix(f" - {book_title}")
+        elif path not in GENERATED_PAGES:
+            raise Error(f"{path} has no title")
+    return names
+
+
+def page_url(base, path):
+    return f"{base}/" if path == "index.html" else f"{base}/{path}"
+
+
+def add_site_tags(book, base, book_title, site_title, archived, image=None):
+    """Add the version selector, titles, descriptions and link preview tags to the pages
+    of a book published at the URL `base`, and return the URLs of its indexed pages.
+
+    Archived copies are not indexed, so that search engines show the pages of the latest
+    release. The latest release has canonical URLs, and index.html and the first chapter,
+    which mdBook generates from the same chapter, share the URL of the site root.
+    Redirect pages get no chapter metadata and are not in the sitemap.
+    """
+    paths = sorted(book.rglob("*.html"))
+    pages = {path.relative_to(book).as_posix(): path.read_text() for path in paths}
+    names = chapter_names(pages, book_title)
+    home = {path for path, page in pages.items() if page == pages.get("index.html")}
+    description = DESCRIPTION.search(pages.get("index.html", ""))
+    fallback = html.unescape(description[1]) if description else ""
+    urls = {}
+    for path, page in pages.items():
+        tags = ""
         # mdBook already excludes its print and toc pages
         if archived and NOINDEX not in page:
-            tags = NOINDEX + "\n" + tags
+            tags += NOINDEX + "\n"
+        redirect = REDIRECT.search(page)
+        name = names.get(path)
+        if path not in GENERATED_PAGES and NOINDEX not in page and not redirect:
+            # A nested chapter, e.g. `Version 0.2.0` under `Upgrading` and `Release notes`
+            parent = posixpath.dirname(path)
+            if parent and f"{parent}.html" in names:
+                name = f"{name} - {names[parent + '.html']}"
+            if path in home and not archived:
+                name = title = HOME_TITLE
+            else:
+                title = f"{name} - {site_title}"
+            url = page_url(base, "index.html" if path in home else path)
+            text = page_description(page, fallback)
+            if not archived:
+                tags += f'<link rel="canonical" href="{html.escape(url)}">\n'
+                urls[url] = path in home
+            tags += "".join(f'<meta property="og:{key}" content="{html.escape(value)}">\n'
+                            for key, value in [("type", "website"), ("site_name", SITE_NAME),
+                                               ("title", name), ("description", text),
+                                               ("url", url)])
+            if image:
+                tags += (f'<meta property="og:image" content="{html.escape(image)}">\n'
+                         '<meta property="og:image:alt" content="The bitcoinix logo">\n')
+            tags += '<meta name="twitter:card" content="summary">\n'
+            meta = f'<meta name="description" content="{html.escape(text)}">'
+            if DESCRIPTION.search(page):
+                page = DESCRIPTION.sub(lambda _: meta, page, count=1)
+            else:
+                tags = meta + "\n" + tags
+        else:
+            title = f"{name} - {site_title}" if name else site_title
+        if name is not None:
+            page = TITLE.sub(lambda _: f"<title>{html.escape(title, quote=False)}</title>", page,
+                             count=1)
+        tags += '<script src="/versions.js" defer></script>\n'
         try:
-            path.write_text(add_to_head(page, tags))
+            (book / path).write_text(add_to_head(page, tags))
         except Error as error:
-            raise Error(f"{path.relative_to(book)}: {error}") from None
+            raise Error(f"{path}: {error}") from None
+    # The home page first
+    return sorted(urls, key=lambda url: not urls[url])
+
+
+def sitemap(urls):
+    entries = "".join(f"  <url><loc>{html.escape(url)}</loc></url>\n" for url in urls)
+    return ('<?xml version="1.0" encoding="UTF-8"?>\n'
+            '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
+            f"{entries}</urlset>\n")
+
+
+def robots(base):
+    return f"User-agent: *\nDisallow:\n\nSitemap: {base}/sitemap.xml\n"
 
 
 def version_index(releases, latest):
@@ -270,21 +413,35 @@ def build_site(repo, latest, out, system, fetch_release):
         tmp = Path(tmp)
         site = tmp / "site"
         books = {}
+        titles = {}
+        image = None
         for release, commit in verified.items():
             log(f"Building the documentation of {release.tag}")
             src = tmp / "src" / release.name
             src.mkdir(parents=True)
             extract_commit(repo, commit, src)
             books[release.name] = tmp / "book" / release.name
+            titles[release.name] = f"bitcoinix {release.tag}"
             build_book(src, books[release.name], release_flake(repo, release, commit), system,
-                       title=f"bitcoinix {release.tag}")
-        if any((books[latest] / name).exists() for name in ["v", "versions.json", "versions.js"]):
+                       title=titles[release.name])
+            social_image = src / SOCIAL_IMAGE
+            if release.name == latest and social_image.is_file() and not social_image.is_symlink():
+                image = tmp / SOCIAL_IMAGE_PATH
+                shutil.copyfile(social_image, image)
+        if any((books[latest] / name).exists() for name in SITE_PATHS):
             raise Error(f"The documentation of v{latest} contains a path that the site uses")
+        image_url = f"{SITE_URL}/{SOCIAL_IMAGE_PATH}" if image else None
         shutil.copytree(books[latest], site)
-        add_site_tags(site, archived=False)
+        urls = add_site_tags(site, SITE_URL, titles[latest], SITE_NAME, archived=False,
+                             image=image_url)
         for name, book in books.items():
-            add_site_tags(book, archived=True)
+            add_site_tags(book, f"{SITE_URL}/v/{name}", titles[name], titles[name],
+                          archived=True, image=image_url)
             shutil.copytree(book, site / "v" / name)
+        if image:
+            shutil.copyfile(image, site / SOCIAL_IMAGE_PATH)
+        (site / "sitemap.xml").write_text(sitemap(urls))
+        (site / "robots.txt").write_text(robots(SITE_URL))
         (site / "v" / "index.html").write_text(version_index(releases, latest))
         (site / "versions.json").write_text(json.dumps(
             {"latest": latest, "versions": [r.name for r in releases]}, indent=2) + "\n")
