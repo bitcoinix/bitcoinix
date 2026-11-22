@@ -1922,6 +1922,24 @@ let
       ];
       expected = [ true true false ];
     };
+    # Before 0.2.0, bitcoind had a sysperms option, which Bitcoin Core ignores,
+    # and dataDirReadableByGroup followed a blocks dir symlink
+    testVersioningBitcoindGroupRead = {
+      expr = {
+        sysperms = map (hasNotice "`services.bitcoind.sysperms` has been removed") [
+          { services.bitcoind.sysperms = true; }
+          { services.bitcoind.enable = true; }
+        ];
+        removed = lib.any (lib.hasInfix "services.bitcoind.sysperms")
+          (failedAssertions (evaluate { services.bitcoind.sysperms = false; }));
+        symlink = map (hasNotice "of a blocks dir that is a symlink") [
+          { services.bitcoind = { enable = true; dataDirReadableByGroup = true; }; }
+          { services.bitcoind = { enable = true; dataDirReadableByGroup = true; network = "regtest"; }; }
+          { services.bitcoind.enable = true; }
+        ];
+      };
+      expected = { sysperms = [ true false ]; removed = true; symlink = [ true false false ]; };
+    };
     testLndMacaroonRootKeyIds = let
       info = ''{"entity":"info","action":"read"}'';
       onchain = ''{"entity":"onchain","action":"read"}'';

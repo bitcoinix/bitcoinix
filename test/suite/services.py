@@ -25,6 +25,143 @@ def test_bitcoind():
     )
 
 
+@test("bitcoind-group-read")
+def test_bitcoind_group_read():
+    data = test_data["bitcoind-group-read"]
+    network_dir = data["networkDir"]
+    blocks = f"{network_dir}/blocks"
+
+    def block_files():
+        return set(succeed(f"find {blocks} -type f -printf '%P\\n'").split())
+
+    # Logged by the unit that sets up the group's access before each start of bitcoind
+    warning = "let the group read all files"
+
+    def assert_group_reads_blocks():
+        unreadable = succeed(f"runuser -u operator -- find {blocks} ! -readable")
+        assert unreadable == "", f"Not readable by group members:\n{unreadable}"
+
+    machine.wait_until_succeeds("bitcoin-cli getnetworkinfo")
+    # On its first start, bitcoind created all these files after the setup, so
+    # only the ACL lets the group read them
+    assert_group_reads_blocks()
+    # After a restart, the setup covers the existing files. bitcoind creates
+    # new ones after it, like a new block index log on each start.
+    before = block_files()
+    setup_run = succeed("systemctl show -P InvocationID bitcoind-group-read")
+    succeed("systemctl restart bitcoind")
+    machine.wait_until_succeeds("bitcoin-cli getnetworkinfo")
+    # The setup runs again before each start of bitcoind
+    assert succeed("systemctl show -P InvocationID bitcoind-group-read") != setup_run
+    created = block_files() - before
+    assert created, f"bitcoind created no file in {blocks}"
+    assert_group_reads_blocks()
+    machine.fail(current_run_log_has_string("bitcoind-group-read", warning))
+    # Also when systemd restarts bitcoind after a crash
+    setup_run = succeed("systemctl show -P InvocationID bitcoind-group-read")
+    bitcoind_run = succeed("systemctl show -P InvocationID bitcoind").strip()
+    succeed("systemctl kill -s KILL bitcoind")
+    machine.wait_until_succeeds(
+        f"systemctl show -P InvocationID bitcoind | grep -Ex '[0-9a-f]{{32}}' | grep -vx {bitcoind_run}"
+    )
+    machine.wait_until_succeeds("bitcoin-cli getnetworkinfo")
+    assert succeed("systemctl show -P InvocationID bitcoind-group-read") != setup_run
+    succeed("systemctl reset-failed bitcoind")
+    # The group gets no access beyond the blocks dir
+    machine.fail(f"runuser -u operator -- ls {network_dir}/chainstate")
+    mainnet = data["network"] == "mainnet"
+    if not mainnet:
+        # Core creates `wallets` only in a network dir that it creates itself,
+        # and the setup creates the regtest dir first
+        succeed(f"test -d {network_dir}/wallets")
+
+    # The data dir is group-writable, so a group member can replace an entry in
+    # it with a symlink: `blocks` on mainnet, `regtest` on regtest. The setup must
+    # not follow it, and not a symlink at the blocks dir either. Each symlink here
+    # points to the real dir, without group access.
+    for planted in [blocks] if mainnet else [network_dir, blocks]:
+        target = f"{planted}.real"
+        succeed(
+            "systemctl stop bitcoind",
+            f"mv {planted} {target}",
+            f"chmod -R g-rwx {target}",
+            f"setfacl -R -b -k {target}",
+            f"ln -s {target} {planted}",
+            # Restarting this often hits the unit's start limit
+            "systemctl reset-failed bitcoind",
+            "systemctl start bitcoind",
+        )
+        assert_full_match(f"find {target} -perm /g=rwx", "")
+        assert_full_match(f"getfacl -R -s -p {target}", "")
+        machine.wait_until_succeeds(current_run_log_has_string("bitcoind-group-read", warning))
+        succeed(
+            "systemctl stop bitcoind",
+            f"rm {planted}",
+            f"mv {target} {planted}",
+            "systemctl reset-failed bitcoind",
+            "systemctl start bitcoind",
+        )
+    machine.wait_until_succeeds("bitcoin-cli getnetworkinfo")
+    assert_group_reads_blocks()
+
+    # An ACL that the admin set before, for example for a backup tool. The owning
+    # group has no rights, and the mask limits a named group's write right. Below
+    # the block index dir and on the network dir, the masks hide all rights of the
+    # named groups. The setup must let the owning group read the blocks dir without
+    # changing the effective rights of the named groups, also not on the files that
+    # bitcoind creates later.
+    def named_rights():
+        """The effective rights of each named ACL entry, by path and entry"""
+        acls = succeed(f"getfacl -p {network_dir}", f"getfacl -R -p {blocks}")
+        rights = {}
+        path = ""
+        for line in acls.splitlines():
+            if line.startswith("# file: "):
+                path = line.removeprefix("# file: ")
+            elif m := re.fullmatch(r"((?:default:)?(?:user|group):[^:]+):(\S+)(?:\s+#effective:(\S+))?", line):
+                rights[(path, m[1])] = m[3] or m[2]
+        return rights
+
+    succeed(
+        "systemctl stop bitcoind",
+        f"setfacl -R -m g::-,g:blockbackup:rX,g:blockwriter:rwX,m::rX {blocks}",
+        f"setfacl -R -d -m u::rwx,g::-,g:blockbackup:rx,g:blockwriter:rwx,m::rx,o::- {blocks}",
+        f"setfacl -R -m m::- {blocks}/index",
+        f"setfacl -m d:m::- {blocks}/index",
+        f"setfacl -m g::-,g:blockwriter:rwx,m::- {network_dir}",
+    )
+    before = named_rights()
+    paths = {path for path, _ in before}
+    succeed("systemctl reset-failed bitcoind", "systemctl start bitcoind")
+    machine.wait_until_succeeds("bitcoin-cli getnetworkinfo")
+    assert_group_reads_blocks()
+    machine.fail(current_run_log_has_string("bitcoind-group-read", warning))
+    after = named_rights()
+    # bitcoind deletes some old block index files when it starts
+    kept = paths & {path for path, _ in after}
+    assert {network_dir, blocks} <= kept, kept
+    changed = {entry: (rights, after.get(entry)) for entry, rights in before.items()
+               if entry[0] in kept and after.get(entry) != rights}
+    assert not changed, f"Named entries with changed effective rights: {changed}"
+    new_writer = {path: rights for (path, entry), rights in after.items()
+                  if path not in paths and entry == "group:blockwriter"}
+    assert new_writer, "No file that bitcoind created has the default ACL's entry for blockwriter"
+    assert not any("w" in rights for rights in new_writer.values()), new_writer
+
+    # The setup gives rights to the owning group of each entry, so it must leave
+    # an entry of another group alone, warn, and still cover the other entries
+    other = f"{blocks}/other-group"
+    succeed(
+        f"install -o bitcoin -g blockbackup -m 600 /dev/null {other}",
+        f"install -o bitcoin -g bitcoin -m 600 /dev/null {blocks}/zz-own-group",
+        "systemctl start bitcoind-group-read",
+    )
+    machine.wait_until_succeeds(current_run_log_has_string("bitcoind-group-read", warning))
+    assert_full_match(f"stat -c %a {other}", "600\n")
+    assert_full_match(f"runuser -u operator -- find {blocks} ! -readable", f"{other}\n")
+    succeed(f"rm {other} {blocks}/zz-own-group")
+
+
 @test("i2pd")
 def test_i2pd():
     assert_running("i2pd")

@@ -57,6 +57,11 @@ let
         netns = config.nix-bitcoin.netns-isolation.enable;
       };
 
+      test.data.bitcoind-group-read = with cfg.bitcoind; {
+        inherit dataDir network;
+        networkDir = dataDir + optionalString (network != "mainnet") "/${network}";
+      };
+
       tests.secrets-no-argv = cfg.bitcoind.enable;
       test.data.secrets-no-argv.generator = "${config.nix-bitcoin.generateSecretsScript}";
 
@@ -740,6 +745,23 @@ let
       enable = true;
       address = "::1";
       nodes.clightning.enable = false;
+    };
+
+    # The bitcoind group can read the blocks dir. This disables the bitcoind
+    # wallet, which the regtest scenarios and the backups test need.
+    # The test restarts bitcoind often, which would also stop the services that
+    # depend on it, so this scenario runs only bitcoind and its tests.
+    bitcoindGroupRead = {
+      services.bitcoind = {
+        network = "regtest";
+        dataDirReadableByGroup = true;
+      };
+      # Groups with ACL entries on the blocks dir, like those of a backup tool
+      users.groups = { blockbackup = {}; blockwriter = {}; };
+      tests = mkForce {
+        bitcoind = true;
+        bitcoind-group-read = true;
+      };
     };
 
     trustedcoin = {

@@ -175,16 +175,27 @@ let
         type = types.bool;
         default = false;
         description = ''
-          If enabled, data dir content is readable by the bitcoind service group.
+          If enabled, the bitcoind service group can read the blocks dir with the
+          block files and the block index, including the files that bitcoind
+          creates while it runs. To reach it, the group can search the data dir
+          and, on regtest, the network dir. Where these have an ACL, the group's
+          rights are added to it, and all other users and groups keep their
+          effective rights. The blocks dir and the dirs between it and the data
+          dir must not be symlinks, and symlinks in the blocks dir aren't followed.
+          A custom `blocksdir` in `extraConfig` isn't covered.
+          The `bitcoind-group-read` service sets this up before each start of bitcoind.
+          It sets a default ACL, which needs POSIX ACL support on the filesystem of
+          the blocks dir (on ZFS, `acltype=posixacl`). Without it, the service logs a
+          warning, and the group can read only the files that exist when bitcoind starts.
+          Disabling this option doesn't revoke the access that it granted, and the
+          group can still read the files that bitcoind creates later. To revoke it,
+          run `setfacl -P -R -n -m g::-,d:g::-` on the blocks dir, and on regtest
+          `setfacl -P -n -m g::-` on the network dir, as the bitcoind user, for
+          example with `runuser -u bitcoin --`. A group member can put a symlink
+          in the data dir. `-P` keeps setfacl from following one at the end of the
+          path, and as the bitcoind user, one before it can only lead to that
+          user's own files.
           Warning: This disables bitcoind's wallet support.
-        '';
-      };
-      sysperms = mkOption {
-        type = types.nullOr types.bool;
-        default = null;
-        description = ''
-          Create new files with system default permissions, instead of umask 077
-          (only effective with disabled wallet functionality)
         '';
       };
       disablewallet = mkOption {
@@ -328,6 +339,85 @@ let
   # while bitcoind sets its mode by path. This directory is a RuntimeDirectory
   # with mode 0750: only the bitcoin user writes it, group members read it.
   rpcCookieDir = "/run/bitcoind";
+  # Bitcoin Core keeps mainnet data in the data dir and other networks in a subdir
+  networkDir = cfg.dataDir + optionalString (cfg.network != "mainnet") "/${cfg.network}";
+
+  # Keep the mount path one systemd argument and escape literal % specifiers.
+  unitPath = path: ''"${replaceStrings [ "\\" "\"" "%" ] [ "\\\\" "\\\"" "%%" ] path}"'';
+
+  # Lets the bitcoind group read the blocks dir, see `dataDirReadableByGroup`.
+  # Bitcoin Core sets umask 077, so it creates files with mode 0600. Below a
+  # dir with a default ACL, the ACL takes the place of the umask, so the group
+  # can also read the files that bitcoind creates while it runs.
+  groupReadScript = let
+    getfacl = "${pkgs.acl}/bin/getfacl -P -n -E --";
+  in ''
+    # Group members can rename and replace the entries of the data dir, also
+    # between two commands. So enter each dir only after checking it, and work
+    # only on the current dir and the names in it. `setfacl -P` follows no
+    # symlink at such a name. For a path with a dir part, it needs openat2(),
+    # which systemd's `RestrictSUIDSGID` blocks.
+    #
+    # Enters the dir $1 in the current dir. $1 must be a dir of ours when we
+    # check it, and the dir we end up in must be that same dir.
+    enterDir() {
+      local before
+      before=$(LC_ALL=C stat -c '%F %d:%i' -- "$1") && [[ $before == "directory "* ]] &&
+        cd -- "./$1" && [[ -O . && $before == "directory $(stat -c '%d:%i' .)" ]]
+    }
+    # Gives the owning group at least the rights $1 on the entries in the getfacl
+    # output on stdin, and $2 in their default ACLs. All other users and groups
+    # keep their effective rights. Leaves alone the entries of other groups.
+    grantGroup() {
+      ${pkgs.gawk}/bin/awk -v access="$1" -v defaults="$2" -v gid="$(id -g)" \
+        -f ${./bitcoind/grant-group.awk} |
+        ${pkgs.acl}/bin/setfacl -P --restore=/dev/stdin
+    }
+    # Prints the entries of type $1 in the current dir as `./name`. getfacl reads
+    # a list of files from stdin for the name `-`.
+    entries() { find . -mindepth 1 -maxdepth 1 -type "$1" -print0; }
+    # Lets the group read the current dir and everything below it. Goes on after
+    # a failure, so an entry of another user doesn't stop the rest.
+    grantTree() {
+      local failed="" dir
+      ${getfacl} . | grantGroup r-x r-x || failed=1
+      entries f | xargs -0r ${getfacl} | grantGroup r-- "" || failed=1
+      while IFS= read -r -d "" dir; do
+        (enterDir "$dir" && grantTree) || failed=1
+      done < <(entries d)
+      wait $! || failed=1
+      [[ ! $failed ]]
+    }
+    setUpGroupRead() (
+      set -o pipefail
+      umask 077
+      failed=""
+      cd '${cfg.dataDir}' || exit
+      ${getfacl} . | grantGroup --x "" || failed=1
+      ${optionalString (cfg.network != "mainnet") ''
+        newNetworkDir=""
+        if [[ ! -e ${cfg.network} && ! -L ${cfg.network} ]]; then
+          mkdir ${cfg.network} || exit
+          newNetworkDir=1
+        fi
+        enterDir ${cfg.network} || exit
+        # Core creates `wallets` only in a network dir that it creates itself
+        if [[ $newNetworkDir ]]; then mkdir wallets || exit; fi
+        ${getfacl} . | grantGroup --x "" || failed=1
+      ''}
+      # Create the dir before bitcoind does, so the ACL covers its first files
+      if [[ ! -e blocks && ! -L blocks ]]; then mkdir blocks || exit; fi
+      enterDir blocks && grantTree && [[ ! $failed ]]
+    )
+    # A failure only costs the group read access, which is better than a node
+    # without bitcoind
+    if ! setUpGroupRead; then
+      echo "Warning: Can't let the group read all files in ${networkDir}/blocks." \
+        "It and the dirs between it and the data dir must be dirs of user ${cfg.user}" \
+        "and group ${cfg.group}," \
+        "not symlinks, on a filesystem with POSIX ACLs." >&2
+    fi
+  '';
 
   i2pSAM = config.services.i2pd.settings.sam;
 
@@ -346,7 +436,6 @@ let
     prune=${toString cfg.prune}
     ${optionalString cfg.txindex "txindex=1"}
     ${optionalString cfg.rest.enable "rest=1"}
-    ${optionalString (cfg.sysperms != null) "sysperms=${if cfg.sysperms then "1" else "0"}"}
     ${optionalString (cfg.disablewallet != null) "disablewallet=${if cfg.disablewallet then "1" else "0"}"}
     ${optionalString (cfg.assumevalid != null) "assumevalid=${cfg.assumevalid}"}
 
@@ -441,7 +530,6 @@ in {
     services.bitcoind = mkMerge [
       (mkIf cfg.dataDirReadableByGroup {
         disablewallet = true;
-        sysperms = true;
       })
       {
         rpc.users.privileged = {
@@ -487,7 +575,7 @@ in {
         # TODO-EXTERNAL: Instead of `wants`, use a future systemd dependency type
         # that propagates initial start failures but no restarts
         "nix-bitcoin-secrets.target"
-      ];
+      ] ++ optional cfg.dataDirReadableByGroup "bitcoind-group-read.service";
       after = wants;
       wantedBy = [ "multi-user.target" ];
 
@@ -499,12 +587,6 @@ in {
           ''
         ) (builtins.attrNames cfg.rpc.users);
       in ''
-        ${optionalString cfg.dataDirReadableByGroup ''
-          if [[ -e '${cfg.dataDir}/blocks' ]]; then
-            chmod -R g+rX '${cfg.dataDir}/blocks'
-          fi
-        ''}
-
         cfg=$(
           cat ${configFile}
           ${extraRpcauth}
@@ -529,10 +611,28 @@ in {
         TimeoutStopSec = "30min";
         ExecStart = "${bitcoind}/bin/bitcoind -datadir='${cfg.dataDir}'";
         Restart = "on-failure";
-        UMask = mkIf cfg.dataDirReadableByGroup "0027";
         ReadWritePaths = [ cfg.dataDir ];
       } // nbLib.allowedIPAddresses cfg.tor.enforce
         // optionalAttrs zmqServerEnabled nbLib.allowNetlink;
+    };
+
+    # Runs before each start of bitcoind, which wants it. It's a unit of its
+    # own, because bitcoind runs with `PrivateUsers`, which hides the users and
+    # groups that an ACL names, so it can't change an ACL that names others.
+    systemd.services.bitcoind-group-read = mkIf cfg.dataDirReadableByGroup {
+      # Covers a mount at blocks/index, at blocks and at each dir above them
+      unitConfig.RequiresMountsFor = [ (unitPath "${networkDir}/blocks/index") ];
+      # bitcoind's start limit covers this unit too
+      startLimitIntervalSec = 0;
+      serviceConfig = nbLib.defaultHardening // {
+        Type = "oneshot";
+        User = cfg.user;
+        Group = cfg.group;
+        PrivateUsers = false;
+        PrivateNetwork = true;
+        ReadWritePaths = [ cfg.dataDir ];
+      };
+      script = groupReadScript;
     };
 
     users.users.${cfg.user} = {
