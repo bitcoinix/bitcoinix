@@ -715,6 +715,40 @@ def test_nodeinfo():
     assert_full_match("runuser -u operator -- nodeinfo --version", f'"{revision}"\n')
     assert list(succeed_json("runuser -u operator -- nodeinfo bitcoind")) == ["bitcoind"]
     machine.fail("runuser -u operator -- nodeinfo no-such-service")
+    if status == 0:
+        check_nodeinfo_onion_files(info)
+
+
+def check_nodeinfo_onion_files(info):
+    """Root runs nodeinfo too. It reads the onion addresses in the operator's dir,
+    but only from regular files that the operator owns."""
+    # (service, output field, address file)
+    fixtures = [(name, "onion_address", name) for name in info]
+    fixtures.append(("lnd", "onion_rest_address", "lnd-rest"))
+    name, field, file_name = next(
+        (fixture for fixture in fixtures
+         if isinstance(info.get(fixture[0]), dict) and info[fixture[0]].get(fixture[1])),
+        (None, None, None))
+    assert name, f"nodeinfo shows no onion address: {info}"
+    file = f"/var/lib/onion-addresses/operator/{file_name}"
+    canary = "/run/nodeinfo-test-canary"
+    assert succeed_json(f"nodeinfo {name}")[name] == info[name]
+    succeed(f"install -m 600 <(echo {'c' * 56}.onion) {canary}",
+            f"runuser -u operator -- mv -T {file} {file}.orig")
+    replacements = {
+        "symlink": f"runuser -u operator -- ln -s {canary} {file}",
+        # Like a hard link to a file of root
+        "file of root": f"cp {canary} {file}",
+        "FIFO": f"runuser -u operator -- mkfifo {file}",
+    }
+    for kind, plant in replacements.items():
+        with machine.nested(f"onion address file is a {kind}"):
+            succeed(plant)
+            # The timeout stops a read that blocks on the FIFO
+            status, output = machine.execute(f"timeout 30 nodeinfo {name}")
+            succeed(f"rm {file}")
+            assert status == 0 and json.loads(output)[name][field] is None, output
+    succeed(f"runuser -u operator -- mv -T {file}.orig {file}", f"rm {canary}")
 
 
 @test("secure-node")
