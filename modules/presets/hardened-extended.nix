@@ -8,6 +8,11 @@
 # https://madaidans-insecurities.github.io/guides/linux-hardening.html
 
 {
+  imports = [{
+    # Used by ../versioning/0.2.0/hardened-extended-accept-ra.nix
+    options.nix-bitcoin.hardened-extended-preset-enabled = {};
+  }];
+
   boot.kernel.sysctl = {
     # Prevent boot console kernel log information leaks
     "kernel.printk" = "3 3 3 3";

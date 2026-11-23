@@ -1556,6 +1556,38 @@ let
       ];
       expected = [ true false ];
     };
+    # The hardened-extended preset's default accept_ra now applies. dhcpcd and
+    # networkd skip interfaces in too many ways to tell which configs depend on
+    # it, so every config with the preset and IPv6 is notified.
+    testVersioningHardenedExtendedAcceptRa = let
+      node = extra: {
+        imports = [ extra ];
+        boot.isContainer = lib.mkForce false;
+        fileSystems."/" = { device = "/dev/null"; fsType = "ext4"; };
+        boot.loader.grub.enable = false;
+      };
+      preset = ../modules/presets/hardened-extended.nix;
+      hardened = extra: node { imports = [ preset extra ]; };
+    in {
+      expr = map (hasNotice "It now sets `net.ipv6.conf.default.accept_ra = 0`") [
+        (hardened {})
+        (hardened { networking.useDHCP = true; networking.interfaces.vlan10.useDHCP = false; })
+        (hardened { networking.useNetworkd = true; })
+        (hardened { boot.kernel.sysctl."net.ipv6.conf.default.accept_ra" = lib.mkForce "1"; })
+        (hardened { networking.enableIPv6 = false; })
+        (hardened { boot.isContainer = lib.mkOverride 0 true; })
+        # The preset imported as a module value
+        (node {
+          imports = [ (import preset) ];
+          networking.useDHCP = true;
+          networking.interfaces.vlan10.useDHCP = false;
+        })
+        # Without the preset
+        (node { boot.kernel.sysctl."net.ipv6.conf.default.accept_ra" = "0"; })
+        (node {})
+      ];
+      expected = [ true true true false false false true false false ];
+    };
     testLndconnectWithoutOperator = {
       expr = {
         failed = failedAssertions lndconnectNoOperator;
