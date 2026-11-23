@@ -336,6 +336,7 @@ def test_clightning():
         as_member = f"runuser -u {shlex.quote(member)} --"
         succeed(f"{as_member} lightning-cli getinfo >/dev/null")
         machine.fail(f"{as_member} touch {probe}")
+    check_lightning_cli_config(data_dir, user)
 
     enabled_plugins = test_data["clightning-plugins"]
     if enabled_plugins:
@@ -369,6 +370,20 @@ def test_clightning():
         machine.fail(f"runuser -u bitcoin -- test -r {replica_db}")
         if directory := replication["encryptedLocalDir"]:
             succeed(f"test -f {shlex.quote(directory + '/lightningd-db/gocryptfs.conf')}")
+
+
+def check_lightning_cli_config(data_dir, user):
+    """Root runs lightning-cli as the clightning user, which owns the config that
+    lightning-cli reads. So an include in that config can't open a file of root."""
+    config = f"{data_dir}/config"
+    canary = "/run/lightning-cli-test-canary"
+    succeed(
+        f"install -m 600 <(echo '# lightning-cli-test-canary') {canary}",
+        f"runuser -u {user} -- sh -c 'cp -p {config} {config}.orig && echo include {canary} >> {config}'",
+    )
+    status, output = machine.execute("lightning-cli getinfo 2>&1")
+    succeed(f"runuser -u {user} -- mv -T {config}.orig {config}", f"rm {canary}")
+    assert status != 0 and f"Opening and reading {canary}: Permission denied" in output, output
 
 
 @test("lnd")

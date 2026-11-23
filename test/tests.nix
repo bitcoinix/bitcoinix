@@ -280,6 +280,8 @@ let
       tests.lnconnect-onion-clnrest = with cfg.clightning.plugins.clnrest.lnconnect; enable && onion;
       tests.lnconnect-clnrest-cert = with cfg.clightning.plugins.clnrest;
         enable && lnconnect.enable && !lnconnect.onion;
+      tests.lnconnect-clnrest-files = with cfg.clightning.plugins.clnrest; enable && lnconnect.enable;
+      test.data.lnconnect-clnrest-files.onion = cfg.clightning.plugins.clnrest.lnconnect.onion;
 
       # lndconnect without onion must leave the REST servers on localhost.
       # With netns-isolation, the addresses are set by netns-isolation.

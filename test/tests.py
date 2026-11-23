@@ -19,6 +19,7 @@ TEST_PHASES = (
         "lndconnect-onion-lnd",
         "lnconnect-onion-clnrest",
         "lnconnect-clnrest-cert",
+        "lnconnect-clnrest-files",
         "lndconnect-local-bind",
         "charge-lnd",
         "btcpayserver",

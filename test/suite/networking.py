@@ -29,6 +29,61 @@ def test_lnconnect_clnrest_cert():
     assert url_cert == base64.b64decode(server_cert), "Connection URL contains the wrong TLS certificate"
 
 
+@test("lnconnect-clnrest-files")
+def test_lnconnect_clnrest_files():
+    # lnconnect-clnrest reads the admin rune and clnrest's cert only from regular
+    # files of the clightning user. Root runs it as that user.
+    assert_running("clightning")
+    data = test_data["clnrest-admin-rune"]
+    rune_file, user = data["file"], data["user"]
+    onion = test_data["lnconnect-clnrest-files"]["onion"]
+    if onion:
+        machine.wait_for_unit("onion-addresses")
+        args, host = "--url", r"[a-z2-7]{56}\.onion"
+    else:
+        args, host = f"--host {ip('clightning')} --url", re.escape(ip("clightning"))
+    # The cert is only in URLs without onion
+    files = [rune_file] + ([] if onion else [clnrest_cert_file(test_data["clightning"], "server.pem")])
+    rune = succeed(f"cat {rune_file}").strip()
+    canary = "/run/lnconnect-clnrest-test-canary"
+    canary_body = base64.b64encode(b"lnconnect-clnrest-test-canary").decode()
+    pem = f"-----BEGIN CERTIFICATE-----\n{canary_body}\n-----END CERTIFICATE-----\n"
+    for caller in ("root", "operator"):
+        command = f"runuser -u {caller} -- lnconnect-clnrest {args}"
+        url = urlparse(succeed(command).strip())
+        assert re.fullmatch(host, url.hostname) and parse_qs(url.query)["rune"] == [rune], url
+        # A file that the caller can read and the clightning user can't
+        succeed(f"printf %s {shlex.quote(pem)} | install -o {caller} -m 600 /dev/stdin {canary}")
+        for file in files:
+            with machine.nested(f"{caller}: {file} links to a file of {caller}"):
+                succeed(f"runuser -u {user} -- sh -c 'mv -T {file} {file}.orig && ln -s {canary} {file}'")
+                status, output = machine.execute(f"{command} 2>&1")
+                succeed(f"runuser -u {user} -- mv -T {file}.orig {file}")
+                assert status != 0 and canary_body not in output, output
+                assert f"'{file}' isn't a regular file of user {user}" in output, output
+                if caller == "root":
+                    # As the clightning user, root can't open its own file
+                    assert f"{file}: Permission denied" in output, output
+        succeed(f"rm {canary}")
+
+    if onion:
+        # Root reads the onion address as the clightning user, from that user's copy
+        # and not from the operator's
+        owners = [user, "operator"]
+        onion_file = "/var/lib/onion-addresses/{}/clnrest".format
+        fake = "c" * 56 + ".onion"
+        succeed(f"install -m 600 <(echo {fake}) {canary}")
+        for owner in owners:
+            succeed(f"runuser -u {owner} -- sh -c 'mv -T {onion_file(owner)} {onion_file(owner)}.orig && ln -s {canary} {onion_file(owner)}'")
+        # Without an address, lndconnect looks up the public IP, which fails in the VM
+        output = machine.execute("timeout 120 lnconnect-clnrest --url 2>&1")[1]
+        for owner in owners:
+            succeed(f"runuser -u {owner} -- mv -T {onion_file(owner)}.orig {onion_file(owner)}")
+        succeed(f"rm {canary}")
+        assert fake not in output, output
+        assert f"{onion_file(user)}: Permission denied" in output, output
+
+
 @test("lndconnect-local-bind")
 def test_lndconnect_local_bind():
     for service in test_data["lndconnect-local-bind"]:

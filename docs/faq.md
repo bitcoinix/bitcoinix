@@ -64,4 +64,4 @@ These commands work as root and as the operator user. Enable it with
 `nix-bitcoin.operator.enable = true;` (the `secure-node.nix` preset does). To use your
 existing user, also set `nix-bitcoin.operator.name = "<your user>";`. The operator joins the
 groups of the enabled services, and runs `lncli` as the `lnd` user through `doas` or `sudo`.
-Root runs `bitcoin-cli` as the `bitcoin` user.
+Root runs `bitcoin-cli` as the `bitcoin` user and `lightning-cli` as the `clightning` user.

@@ -570,8 +570,10 @@ devices. Run the proxy in the host network namespace instead, and point it at th
    ```
    lnconnect-clnrest
    ```
-   `lnconnect-clnrest` reads the onion address from the operator user's directory.
-   The operator user gets access to it when the operator role is enabled
+   `lnconnect-clnrest` reads the onion address from the directory of the user that runs
+   it. Root can always run it, because then it runs as the `clightning` user, which has
+   its own copy. The operator user needs access to the onion address only to run
+   `lnconnect-clnrest` as itself. It gets this access when the operator role is enabled
    (`nix-bitcoin.operator.enable = true;`, which the secure-node preset sets).
    With the role disabled, grant the access explicitly:
    ```nix

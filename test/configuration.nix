@@ -380,15 +380,6 @@ let
     };
   };
   operatorAccountRoleDisabled = evaluate operatorAccountOnion;
-  # The same, with the account defined under an attribute that isn't its login name
-  operatorRenamedAccountRoleDisabled = evaluate {
-    imports = [ lndconnectOnion ];
-    users.users.account = { name = "alice"; isNormalUser = true; };
-    nix-bitcoin.operator.name = "alice";
-    services.clightning = {
-      inherit (operatorAccountOnion.services.clightning) enable port plugins;
-    };
-  };
   # The migration that docs/upgrading/0.1.6.md describes for a disabled role
   operatorAccountGrant = {
     imports = [ operatorAccountOnion ];
@@ -1655,20 +1646,23 @@ let
       expected = with lndconnectWithOperator;
         lib.sort lib.lessThan [ services.lnd.user nix-bitcoin.operator.name ];
     };
-    testLnconnectOnionRequiresOperator = {
-      expr = map (lib.hasInfix "nix-bitcoin.operator.enable")
-        (failedAssertions lnconnectNoOperator);
-      expected = [ true ];
+    testLnconnectOnionWithoutOperator = {
+      expr = {
+        failed = failedAssertions lnconnectNoOperator;
+        users = getOnionAccessUsers lnconnectNoOperator;
+      };
+      expected = { failed = []; users = [ lnconnectNoOperator.services.clightning.user ]; };
     };
     testOperatorAccountGetsNoAutomaticAccess = {
       expr = {
+        failed = failedAssertions operatorAccountRoleDisabled;
         users = getOnionAccessUsers operatorAccountRoleDisabled;
-        lnconnectFails = map (lib.hasInfix "lnconnect.onion")
-          (failedAssertions operatorAccountRoleDisabled);
       };
       expected = {
-        users = [ operatorAccountRoleDisabled.services.lnd.user ];
-        lnconnectFails = [ true ];
+        failed = [];
+        # The service users get their own copies
+        users = with operatorAccountRoleDisabled.services;
+          lib.sort lib.lessThan [ clightning.user lnd.user ];
       };
     };
     testOperatorAccountExplicitAccess = {
@@ -1677,25 +1671,6 @@ let
         alice = nix-bitcoin.onionAddresses.access.alice;
       };
       expected = { failed = []; alice = [ "clnrest" ]; };
-    };
-    # Offer the access hint only when the operator user exists
-    testLnconnectAssertionHints = let
-      hints = config: map (message: {
-        grant = lib.hasInfix "extraGroups" message;
-        defineUser = lib.hasInfix "define the user" message;
-      }) (failedAssertions config);
-    in {
-      expr = {
-        noUser = hints lnconnectNoOperator;
-        existingUser = hints operatorAccountRoleDisabled;
-        renamedAccount = map (lib.hasInfix "users.users.account.extraGroups")
-          (failedAssertions operatorRenamedAccountRoleDisabled);
-      };
-      expected = {
-        noUser = [ { grant = false; defineUser = true; } ];
-        existingUser = [ { grant = true; defineUser = false; } ];
-        renamedAccount = [ true ];
-      };
     };
     # A `mkForce` on `NODE_OPTIONS` must not drop RTL's preload unnoticed
     testRtlNodeOptions = let
@@ -1916,19 +1891,31 @@ let
       };
       expected = { preset = true; noPreset = false; before = true; acknowledged = false; };
     };
-    # Before 0.2.1, root ran bitcoin-cli as root
+    # Before 0.2.1, root ran bitcoin-cli and lightning-cli as root
     testVersioningCliRunsAsServiceUser = let
-      phrase = "When root runs `bitcoin-cli`, it now runs as user";
+      bitcoinCli = "When root runs `bitcoin-cli`, it now runs as user";
+      # Only configs with clightning get the sentences about its commands
+      phrasesIn = module: map (phrase: hasNoticeAt "0.1.6" phrase module) [
+        bitcoinCli
+        "When root runs `lightning-cli` or `lnconnect-clnrest`, they run as user"
+        "`lnconnect-clnrest` reads the admin rune and clnrest's cert only"
+      ];
     in {
       expr = {
-        bitcoind = hasNoticeAt "0.1.6" phrase { services.bitcoind.enable = true; };
-        noBitcoind = hasNoticeAt "0.1.6" phrase { };
-        acknowledged = hasNoticeAt "0.2.1" phrase {
+        bitcoind = phrasesIn { services.bitcoind.enable = true; };
+        clightning = phrasesIn { services.clightning.enable = true; };
+        noBitcoind = hasNoticeAt "0.1.6" bitcoinCli { };
+        acknowledged = hasNoticeAt "0.2.1" bitcoinCli {
           services.bitcoind.enable = true;
           nix-bitcoin.versioning.releasedVersion = "0.2.1";
         };
       };
-      expected = { bitcoind = true; noBitcoind = false; acknowledged = false; };
+      expected = {
+        bitcoind = [ true false false ];
+        clightning = [ true true true ];
+        noBitcoind = false;
+        acknowledged = false;
+      };
     };
     testOnionAccessRejectsUnknownUser = {
       expr = map (lib.hasInfix "no-such-user") (failedAssertions onionAccessUnknownUser);
