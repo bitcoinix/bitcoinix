@@ -103,13 +103,19 @@ EOF
 
     def make_book(self, root, options=False):
         write(root / "book.toml", '[book]\ntitle = "bitcoinix"\nsrc = "docs"\n'
-              '[build]\ncreate-missing = false\n')
+              'description = "Nodes & more"\n[build]\ncreate-missing = false\n'
+              '[output.html.redirect]\n"/old-intro.html" = "introduction.html"\n')
         summary = "# Summary\n\n[Introduction](introduction.md)\n"
         if options:
-            summary += "- [Module options](options.md)\n"
+            summary += ("- [Module options](options.md)\n- [Upgrading](upgrading.md)\n"
+                        "  - [Version 0.2.0](upgrading/0.2.0.md)\n")
             write(root / "docs/options.md", OPTIONS_PAGE)
+            write(root / "docs/upgrading.md", "# Upgrading\n\n> A note\n\n" + " ".join(
+                ["Words"] * 40) + "\n")
+            write(root / "docs/upgrading/0.2.0.md", "# Upgrading to 0.2.0\n")
+            write(root / "assets/logo.png", "logo")
         write(root / "docs/SUMMARY.md", summary)
-        write(root / "docs/introduction.md", "# Introduction\n\nText\n")
+        write(root / "docs/introduction.md", "# Introduction\n\nText with `code` & more\n")
         write(root / "docs/install.md", "# Install\n")
 
 
@@ -184,10 +190,14 @@ class Site(Tmp):
         self.build_site("0.2.0")
         out = self.out
 
-        self.assertIn("<title>Introduction - bitcoinix v0.2.0</title>", (out / "index.html").read_text())
+        self.assertIn(f"<title>{docs_site.HOME_TITLE}</title>", (out / "index.html").read_text())
         self.assertIn('id="opt-foo.bar"', (out / "options.html").read_text())
         self.assertNotIn("Placeholder", (out / "options.html").read_text())
         self.assertEqual(sorted(p.name for p in (out / "v").iterdir()), ["0.1.6", "0.2.0", "index.html"])
+        self.assertIn("<title>Version 0.2.0 - Upgrading - bitcoinix docs</title>",
+                      (out / "upgrading/0.2.0.html").read_text())
+        self.assertIn("<title>Version 0.2.0 - Upgrading - bitcoinix v0.2.0</title>",
+                      (out / "v/0.2.0/upgrading/0.2.0.html").read_text())
         self.assertIn('id="opt-foo.bar"', (out / "v/0.2.0/options.html").read_text())
         old = (out / "v/0.1.6/index.html").read_text()
         self.assertIn("<title>Introduction - bitcoinix v0.1.6</title>", old)
@@ -227,6 +237,63 @@ class Site(Tmp):
             f"git+file://{self.repo.resolve()}?ref=refs%2Ftags%2Fv0.2.0&rev={commit}"
             "#legacyPackages.x86_64-linux.docsOptions"
         ])
+
+    def test_adds_a_sitemap_and_search_and_link_preview_tags(self):
+        self.build_site("0.2.0")
+        out = self.out
+        site = docs_site.SITE_URL
+        self.assertEqual(re.findall(r"<loc>([^<]*)</loc>", (out / "sitemap.xml").read_text()), [
+            f"{site}/", f"{site}/options.html", f"{site}/upgrading/0.2.0.html",
+            f"{site}/upgrading.html",
+        ])
+        self.assertEqual((out / "robots.txt").read_text(),
+                         f"User-agent: *\nDisallow:\n\nSitemap: {site}/sitemap.xml\n")
+        self.assertEqual((out / docs_site.SOCIAL_IMAGE_PATH).read_text(), "logo")
+        # Redirect pages keep the canonical URL of their target
+        redirect = (out / "old-intro.html").read_text()
+        self.assertEqual(re.findall(r'<link rel="canonical" href="([^"]*)">', redirect),
+                         ["introduction.html"])
+        self.assertIn("<title>Redirecting...</title>", redirect)
+        self.assertNotIn("og:", redirect)
+        self.assertIn(docs_site.NOINDEX, (out / "v/0.1.6/old-intro.html").read_text())
+
+        def tags(path):
+            text = (out / path).read_text()
+            head = text[:text.index("</head>")]
+            return {
+                "canonical": re.findall(r'<link rel="canonical" href="([^"]*)">', head),
+                "description": re.findall(r'<meta name="description" content="([^"]*)">', head),
+                **{key: re.findall(rf'<meta property="og:{key}" content="([^"]*)">', head)
+                   for key in ["title", "url", "image"]},
+            }
+
+        # The first chapter has the URL of the site root
+        for path in ["index.html", "introduction.html"]:
+            self.assertEqual(tags(path), {
+                "canonical": [f"{site}/"], "description": ["Text with code &amp; more"],
+                "title": [docs_site.HOME_TITLE], "url": [f"{site}/"],
+                "image": [f"{site}/{docs_site.SOCIAL_IMAGE_PATH}"],
+            }, path)
+        # The description skips block quotes and is shortened
+        upgrading = tags("upgrading.html")
+        self.assertEqual(upgrading["canonical"], [f"{site}/upgrading.html"])
+        self.assertTrue(upgrading["description"][0].startswith("Words Words"))
+        self.assertTrue(upgrading["description"][0].endswith("Words…"))
+        self.assertLessEqual(len(upgrading["description"][0]), docs_site.DESCRIPTION_LENGTH)
+        # Without a paragraph, the description of the book
+        self.assertEqual(tags("upgrading/0.2.0.html")["description"], ["Nodes &amp; more"])
+        self.assertEqual(tags("upgrading/0.2.0.html")["title"], ["Version 0.2.0 - Upgrading"])
+        self.assertIn("<title>bitcoinix docs</title>", (out / "print.html").read_text())
+        # Pages that are not indexed have no tags
+        for path in ["print.html", "toc.html", "404.html"]:
+            self.assertEqual(tags(path)["canonical"] + tags(path)["url"], [], path)
+        # Archived pages link to themselves, but not as canonical pages
+        self.assertEqual(tags("v/0.1.6/index.html"), {
+            "canonical": [], "description": ["Release 0.1.6"],
+            "title": ["Introduction"], "url": [f"{site}/v/0.1.6/"],
+            "image": [f"{site}/{docs_site.SOCIAL_IMAGE_PATH}"],
+        })
+        self.assertEqual(tags("v/0.2.0/upgrading.html")["url"], [f"{site}/v/0.2.0/upgrading.html"])
 
     def test_fails_when_the_latest_release_is_not_the_newest_tag(self):
         git(self.repo, "tag", "-am", "v0.2.1", "v0.2.1")

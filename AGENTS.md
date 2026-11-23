@@ -95,7 +95,9 @@ sudo ./test/run-tests.sh container          # fast container; needs systemd + ro
   succeeds for a pushed tag (or manually), never from `master`. Docs changes on `master`
   go live with the next release, so `docs/` must describe the upcoming release.
   `helper/docs/build.py site` serves the latest release at `/` and each release from
-  0.1.6 on at `/v/<version>/`; keep page URLs at `/` stable, code and old docs link
+  0.1.6 on at `/v/<version>/` (not indexed), and generates `sitemap.xml`, `robots.txt`,
+  canonical URLs, per-page descriptions and link preview tags for the pages at `/`.
+  Keep page URLs at `/` stable, code and old docs link
   to them. Releases build with the master tooling, so keep it compatible with them.
 - `dev/` holds debugging helpers (`dev.sh`, `dev-features.sh`, `topics/`); see `dev/README.md`.
 
