@@ -1556,6 +1556,39 @@ let
       ];
       expected = [ true false ];
     };
+    # PostgreSQL 14 is removed. The notice must show although the package throws.
+    # A config fails only through the default for 22.05 through 23.05, or
+    # through a package of its own.
+    testVersioningPostgresql14Removed = let
+      btcpay = extra: { imports = [ extra ]; services.btcpayserver.enable = true; };
+      stateVersion = v: btcpay { system.stateVersion = lib.mkForce v; };
+      package = p: btcpay { services.postgresql.package = p; };
+      notice = config: {
+        default = hasNotice "NixOS selects by default for" config;
+        set = hasNotice "If it selects PostgreSQL 14" config;
+      };
+    in {
+      expr = map notice [
+        (stateVersion "22.05")
+        (stateVersion "23.05")
+        (stateVersion "23.11")
+        (stateVersion "21.11")
+        (package pkgs.postgresql_14)
+        (package (assert false; pkgs.postgresql_17))
+        (btcpay {})
+        (btcpay { system.stateVersion = lib.mkForce "22.05"; services.postgresql.package = pkgs.postgresql_17; })
+      ];
+      expected = [
+        { default = true; set = false; }
+        { default = true; set = false; }
+        { default = false; set = false; }
+        { default = false; set = false; }
+        { default = false; set = true; }
+        { default = false; set = true; }
+        { default = false; set = false; }
+        { default = false; set = false; }
+      ];
+    };
     # The hardened-extended preset's default accept_ra now applies. dhcpcd and
     # networkd skip interfaces in too many ways to tell which configs depend on
     # it, so every config with the preset and IPv6 is notified.
