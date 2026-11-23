@@ -4,6 +4,14 @@ def test_bitcoind():
     machine.wait_until_succeeds("bitcoin-cli getnetworkinfo")
     info = succeed_json("runuser -u operator -- bitcoin-cli getnetworkinfo")
     assert isinstance(info["version"], int) and info["version"] > 0, info
+    network = test_data["bitcoinNetwork"]
+    genesis = {
+        "mainnet": "000000000019d6689c085ae165831e934ff763ae46a2a6c172b3f1b60a8ce26f",
+        "regtest": "0f9188f13cb7b2c71f2a335e3a4fc328bf5beb436012afca590b1a11466e2206",
+        "signet": "00000008819873e925422c1ff0f99f7cc9bbb232af63a077a480a3633bee1ef6",
+        "testnet4": "00000000da84f2bafbbc53dee25a72ae507ff4914b867c565be350b0da8bf043",
+    }[network]
+    assert succeed("bitcoin-cli getblockhash 0").strip() == genesis
 
     # The cookie lives in a runtime directory that only the bitcoin user can write
     cookie = "/run/bitcoind/.cookie"
@@ -14,7 +22,7 @@ def test_bitcoind():
     # Group members cannot replace it
     machine.fail(f"runuser -u operator -- mv {cookie} {cookie}.moved")
     # No cookie is left in the group-writable data directory
-    succeed("! test -e /var/lib/bitcoind/.cookie", "! test -e /var/lib/bitcoind/regtest/.cookie")
+    assert not succeed("find /var/lib/bitcoind -name .cookie").strip()
 
     # RPC access for user 'public' should be restricted
     machine.fail(
@@ -261,6 +269,8 @@ def test_clightning():
     assert_running("clightning")
     info = succeed_json("runuser -u operator -- lightning-cli getinfo")
     assert info["id"], info
+    network = test_data["bitcoinNetwork"]
+    assert info["network"] == ("bitcoin" if network == "mainnet" else network), info
 
     # Group members, like the operator and BTCPay Server, use the RPC socket.
     # They must not write the data dir, which holds the config that lightningd
@@ -304,13 +314,13 @@ def test_clightning():
             # This is a one-shot service, so this command only succeeds if the service succeeds
             succeed("systemctl start clightning-feeadjuster")
 
-    if test_data["clightning-replication"]:
-        replica_db = "/var/cache/clightning-replication/plaintext/lightningd.sqlite3"
-        succeed(f"runuser -u clightning -- ls {replica_db}")
+    if replication := test_data["clightning-replication"]:
+        replica_db = shlex.quote(replication["wallet"].removeprefix("sqlite3://").split(":", 1)[1])
+        succeed(f"runuser -u clightning -- test -r {replica_db}")
         # No other user should be able to read the unencrypted files
-        machine.fail(f"runuser -u bitcoin -- ls {replica_db}")
-        # A gocryptfs has been created
-        succeed("ls /var/backup/clightning/lightningd-db/gocryptfs.conf")
+        machine.fail(f"runuser -u bitcoin -- test -r {replica_db}")
+        if directory := replication["encryptedLocalDir"]:
+            succeed(f"test -f {shlex.quote(directory + '/lightningd-db/gocryptfs.conf')}")
 
 
 @test("lnd")
@@ -408,7 +418,11 @@ def test_btcpayserver():
     rpc_password = "/secrets/bitcoin-rpcpassword-btcpayserver"
     assert_file_metadata(rpc_password, owner="nbxplorer", mode="400")
     machine.fail(f"runuser -u btcpayserver -- cat {rpc_password}")
-    succeed("runuser -u btcpayserver -- cat /var/lib/nbxplorer/*/.cookie")
+    conf = succeed("systemctl show -P ExecStart btcpayserver")
+    config_file = re.search(r"--conf=(/nix/store/[^ ]+)", conf)
+    assert config_file, conf
+    cookie = succeed(f"sed -n 's/^btcexplorercookiefile=//p' {config_file[1]}").strip()
+    succeed(f"runuser -u btcpayserver -- cat {shlex.quote(cookie)} >/dev/null")
     # Regression guard: NBXplorer's .NET host takes its content root from the
     # working directory and (by default) watches it recursively. With no
     # WorkingDirectory that was `/`, i.e. an inotify watch per directory of the
@@ -576,17 +590,17 @@ def test_mempool():
     machine.wait_until_succeeds(
         current_run_log_has_string("mempool", "Mempool Server is running on port 8999")
     )
-    network = test_data["mempool"]["network"]
+    network = test_data["bitcoinNetwork"]
     assert succeed_json(f"cat {conf}")["MEMPOOL"]["NETWORK"] == network
     frontend_config = succeed(f"curl -fsSL {ip('nginx')}:60845/resources/config.js")
     if network == "mainnet":
         # The packaged frontend uses compiled defaults without runtime overrides.
-        for setting in ("ROOT_NETWORK", "MAINNET_ENABLED", "REGTEST_ENABLED"):
+        for setting in ("ROOT_NETWORK", "MAINNET_ENABLED", "REGTEST_ENABLED", "SIGNET_ENABLED", "TESTNET4_ENABLED"):
             assert f"window.__env.{setting} =" not in frontend_config
     else:
         assert f"window.__env.ROOT_NETWORK = '{network}';" in frontend_config
         assert "window.__env.MAINNET_ENABLED = false;" in frontend_config
-        assert f"window.__env.REGTEST_ENABLED = {str(network == 'regtest').lower()};" in frontend_config
+        assert f"window.__env.{network.upper()}_ENABLED = true;" in frontend_config
     assert_matches(f"curl -L {ip('nginx')}:60845", "mempool - Bitcoin Explorer")
     # No cache validators, and no 304 for the store's 1970 timestamp
     headers = succeed(f"curl -sI -H 'If-Modified-Since: Thu, 01 Jan 1970 00:00:01 GMT' {ip('nginx')}:60845")

@@ -7,7 +7,8 @@ symlink to other files of the bitcoind user and make bitcoind give the group acc
 them. The new `bitcoind-group-read` service, which sets up the group's access before
 each start of bitcoind, now logs a warning and leaves the target alone. On regtest, the
 blocks dir wasn't covered before. Now it is, if neither `regtest` nor `regtest/blocks`
-is a symlink.
+is a symlink. On signet and testnet4, the network subdirectory and its `blocks`
+subdirectory must also be real directories or mount points.
 
 If your blocks dir is a symlink, for example to a dir on a second disk, the group can't
 read the block files that bitcoind creates from now on. Replace the symlink with a dir,

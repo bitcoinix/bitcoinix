@@ -12,15 +12,16 @@ let
       };
       port = mkOption {
         type = types.port;
-        default = { mainnet = 8333; regtest = 18444; }.${cfg.network};
-        defaultText = literalMD "8333 on mainnet, 18444 on regtest";
+        default = ports.p2p;
+        defaultText = literalMD (describePorts "p2p");
         description = "Port to listen for peer connections.";
       };
       onionPort = mkOption {
         type = types.nullOr types.port;
         # When the bitcoind onion service is enabled, add an onion-tagged socket
         # to distinguish local connections from Tor connections
-        default = if (config.nix-bitcoin.onionServices.bitcoind.enable or false) then 8334 else null;
+        default = if (config.nix-bitcoin.onionServices.bitcoind.enable or false) then ports.onion else null;
+        defaultText = literalMD "`null` when the bitcoind onion service is disabled, otherwise ${describePorts "onion"}.";
         description = ''
           Port to listen for Tor peer connections.
           If set, inbound connections to this port are tagged as onion peers.
@@ -83,8 +84,8 @@ let
         };
         port = mkOption {
           type = types.port;
-          default = { mainnet = 8332; regtest = 18443; }.${cfg.network};
-          defaultText = literalMD "8332 on mainnet, 18443 on regtest";
+          default = ports.rpc;
+          defaultText = literalMD (describePorts "rpc");
           description = "Port to listen for JSON-RPC connections.";
         };
         threads = mkOption {
@@ -151,12 +152,21 @@ let
         };
       };
       network = mkOption {
-        type = types.enum [ "mainnet" "regtest" ];
+        type = types.enum (attrNames networkPorts);
         default = "mainnet";
         description = ''
           Bitcoin network used by the deployment's services.
+          Use signet or testnet4 for a public test network.
           Use regtest for a local regression testing network.
+          Evaluation fails if an enabled service is incompatible with the network.
         '';
+      };
+      networkDir = mkOption {
+        type = types.path;
+        readOnly = true;
+        default = cfg.dataDir + optionalString (cfg.network != "mainnet") "/${cfg.network}";
+        defaultText = literalMD "`dataDir` on mainnet, `dataDir/network` on other networks.";
+        description = "The directory where Bitcoin Core stores data for the selected network.";
       };
       proxy = mkOption {
         type = types.nullOr types.str;
@@ -178,8 +188,8 @@ let
           If enabled, the bitcoind service group can read the blocks dir with the
           block files and the block index, including the files that bitcoind
           creates while it runs. To reach it, the group can search the data dir
-          and, on regtest, the network dir. Where these have an ACL, the group's
-          rights are added to it, and all other users and groups keep their
+          and the selected network's subdirectory. Where these have an ACL,
+          the group's rights are added to it, and all other users and groups keep their
           effective rights. The blocks dir and the dirs between it and the data
           dir must not be symlinks, and symlinks in the blocks dir aren't followed.
           A custom `blocksdir` in `extraConfig` isn't covered.
@@ -189,9 +199,10 @@ let
           warning, and the group can read only the files that exist when bitcoind starts.
           Disabling this option doesn't revoke the access that it granted, and the
           group can still read the files that bitcoind creates later. To revoke it,
-          run `setfacl -P -R -n -m g::-,d:g::-` on the blocks dir, and on regtest
-          `setfacl -P -n -m g::-` on the network dir, as the bitcoind user, for
-          example with `runuser -u bitcoin --`. A group member can put a symlink
+          run `setfacl -P -R -n -m g::-,d:g::-` on the blocks dir. On regtest,
+          signet and testnet4, also run `setfacl -P -n -m g::-` on the network
+          subdirectory. Run these commands as the bitcoind user, for example
+          with `runuser -u bitcoin --`. A group member can put a symlink
           in the data dir. `-P` keeps setfacl from following one at the end of the
           path, and as the bitcoind user, one before it can only lead to that
           user's own files.
@@ -331,6 +342,15 @@ let
   };
 
   cfg = config.services.bitcoind;
+  networkPorts = {
+    mainnet  = { p2p =  8333; rpc =  8332; onion =  8334; };
+    regtest  = { p2p = 18444; rpc = 18443; onion = 18445; };
+    signet   = { p2p = 38333; rpc = 38332; onion = 38334; };
+    testnet4 = { p2p = 48333; rpc = 48332; onion = 48334; };
+  };
+  ports = networkPorts.${cfg.network};
+  describePorts = name: concatStringsSep ", " (mapAttrsToList
+    (network: values: "${toString values.${name}} on ${network}") networkPorts);
   bitcoind = config.nix-bitcoin.pkgs.bitcoind;
   nbLib = config.nix-bitcoin.lib;
   secretsDir = config.nix-bitcoin.secretsDir;
@@ -339,8 +359,6 @@ let
   # while bitcoind sets its mode by path. This directory is a RuntimeDirectory
   # with mode 0750: only the bitcoin user writes it, group members read it.
   rpcCookieDir = "/run/bitcoind";
-  # Bitcoin Core keeps mainnet data in the data dir and other networks in a subdir
-  networkDir = cfg.dataDir + optionalString (cfg.network != "mainnet") "/${cfg.network}";
 
   # Keep the mount path one systemd argument and escape literal % specifiers.
   unitPath = path: ''"${replaceStrings [ "\\" "\"" "%" ] [ "\\\\" "\\\"" "%%" ] path}"'';
@@ -412,7 +430,7 @@ let
     # A failure only costs the group read access, which is better than a node
     # without bitcoind
     if ! setUpGroupRead; then
-      echo "Warning: Can't let the group read all files in ${networkDir}/blocks." \
+      echo "Warning: Can't let the group read all files in ${cfg.networkDir}/blocks." \
         "It and the dirs between it and the data dir must be dirs of user ${cfg.user}" \
         "and group ${cfg.group}," \
         "not symlinks, on a filesystem with POSIX ACLs." >&2
@@ -428,9 +446,9 @@ let
 
     startupnotify=/run/current-system/systemd/bin/systemd-notify --ready
 
-    ${optionalString (cfg.network == "regtest") ''
-      regtest=1
-      [regtest]
+    ${optionalString (cfg.network != "mainnet") ''
+      ${cfg.network}=1
+      [${cfg.network}]
     ''}
     ${optionalString (cfg.dbCache != null) "dbcache=${toString cfg.dbCache}"}
     prune=${toString cfg.prune}
@@ -621,7 +639,7 @@ in {
     # groups that an ACL names, so it can't change an ACL that names others.
     systemd.services.bitcoind-group-read = mkIf cfg.dataDirReadableByGroup {
       # Covers a mount at blocks/index, at blocks and at each dir above them
-      unitConfig.RequiresMountsFor = [ (unitPath "${networkDir}/blocks/index") ];
+      unitConfig.RequiresMountsFor = [ (unitPath "${cfg.networkDir}/blocks/index") ];
       # bitcoind's start limit covers this unit too
       startLimitIntervalSec = 0;
       serviceConfig = nbLib.defaultHardening // {

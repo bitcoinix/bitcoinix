@@ -139,14 +139,16 @@ for the options.
 The backup includes the data directories of bitcoind, lnd, Core Lightning, NBXplorer
 and BTCPay Server, dumps of the BTCPay Server databases, `/var/lib/tor`,
 `/var/lib/nixos` and, with `nix-bitcoin.generateSecrets`, the secrets directory.
-It leaves out the blockchain and its indexes, unless `with-bulk-data` is set.
+It leaves out the mainnet, signet and testnet4 blockchains and their indexes
+unless `with-bulk-data` is set. This also covers networks previously used on the node.
 
 #### Lightning channel databases
 
 The backup never includes lnd's `graph` directory, which holds `channel.db`, or
-Core Lightning's `lightningd.sqlite3` and the SQLite files that
-`services.clightning.wallet` sets. The daemons write these files while the backup
-runs, so a copy can be torn. A copy is also outdated as soon as a channel changes.
+Core Lightning's `lightningd.sqlite3` in any network directory. It also excludes
+the SQLite files set by `services.clightning.wallet` and each network's replica
+at the configured replication destination. The daemons write these files while
+the backup runs, so a copy can be torn. A copy is also outdated as soon as a channel changes.
 A node that runs from an outdated channel database can broadcast a revoked channel
 state, and the peer can then take all funds in that channel. Never restore a copied
 channel database. Backups made before bitcoinix 0.2.0 contain them.
@@ -1041,6 +1043,11 @@ or to a remote SSH target (mounted via SSHFS).
 Optionally, the copy can be encrypted with `gocryptfs`.
 See the [module](https://github.com/bitcoinix/bitcoinix/blob/master/modules/clightning-replication.nix)
 for all options.
+
+The replica filename is `lightningd-signet.sqlite3` on signet and
+`lightningd-testnet4.sqlite3` on testnet4. Mainnet and regtest both use
+`lightningd.sqlite3`. Give those two networks separate replication destinations
+to keep one from overwriting the other's replica.
 
 `clightning` requires the replication target: it doesn't start while the target is
 unavailable, e.g. when the SSHFS mount fails. For a local directory, this works only

@@ -1,7 +1,10 @@
 { config, lib, pkgs, ... }:
 
 with lib;
-let cfg = config.services.clightning.plugins.clboss; in
+let
+  cfg = config.services.clightning.plugins.clboss;
+  network = config.services.bitcoind.network;
+in
 {
   options.services.clightning.plugins.clboss = {
     enable = mkOption {
@@ -49,6 +52,12 @@ let cfg = config.services.clightning.plugins.clboss; in
   };
 
   config = mkIf cfg.enable {
+    # TODO-EXTERNAL: CLBOSS recognizes chain names in Boss/Mod/Initiator.cpp.
+    assertions = [{
+      assertion = !config.services.clightning.enable || elem network [ "mainnet" "regtest" "signet" ];
+      message = "services.clightning.plugins.clboss does not support ${network}.";
+    }];
+
     services.clightning.pluginsConfig = ''
       plugin=${cfg.package}/bin/clboss
       clboss-min-onchain=${toString cfg.min-onchain}
