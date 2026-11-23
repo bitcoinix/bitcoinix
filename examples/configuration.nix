@@ -299,5 +299,5 @@
   # error and provide instructions for migrating your config to the new release.
   # On master, unreleased migrations warn; keep this at the latest released version.
   # Keep this explicit: importing version.nix would automatically acknowledge migrations.
-  nix-bitcoin.configVersion = "0.1.6";
+  nix-bitcoin.configVersion = "0.2.0";
 }
