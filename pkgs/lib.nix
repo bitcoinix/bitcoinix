@@ -128,6 +128,19 @@ let self = {
     ${src}
   '';
 
+  # A program that runs its arguments as `user` when root starts it, and as the
+  # caller otherwise. CLI wrappers use it to access a service's files with the
+  # rights of the service user, which owns the dirs that hold them.
+  # runuser keeps the environment, which `user` can read in /proc while the
+  # command runs. So pass on only PATH and TERM.
+  runAsUserIfRoot = user: pkgs.writers.writeBash "run-as-user-if-root" ''
+    if [[ $EUID == 0 ]]; then
+      exec ${pkgs.coreutils}/bin/env -i PATH="$PATH" ''${TERM:+"TERM=$TERM"} \
+        ${pkgs.util-linux}/bin/runuser -u ${escapeShellArg user} -- "$@"
+    fi
+    exec "$@"
+  '';
+
   # Used for ExecStart*
   # systemd sets HOME to the home of `User=` also for `+` commands. The service
   # user can write there, so tools like curl or jq would load config files from it

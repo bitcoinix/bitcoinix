@@ -532,9 +532,10 @@ let
         };
       in {
         warnings = extraConfigWarnings "services.bitcoind.extraConfig" config;
-        rpcuser = lib.hasInfix "rpcuser=privileged" config.systemd.services.bitcoind.preStart;
+        cookie = lib.hasInfix "/run/bitcoind/.cookie" config.systemd.services.bitcoind.preStart;
+        keepCookie = config.systemd.services.bitcoind.serviceConfig.RuntimeDirectoryPreserve;
       };
-      expected = { warnings = []; rpcuser = true; };
+      expected = { warnings = []; cookie = true; keepCookie = true; };
     };
   };
   pluginMigrationTests = lib.listToAttrs (map (plugin:
@@ -562,13 +563,13 @@ let
     };
   }).nix-bitcoin.generateSecretsScript;
 
-  # The preset's preStart lines, run by the check below against a scratch data dir
+  # The preset's preStart lines, run by the check below against scratch dirs
   remoteRpcUser = "rpc$USER'$(id)";
   remotePresetPreStart = pkgs.writeText "bitcoind-remote-prestart"
     (import ../modules/presets/bitcoind-remote.nix {
       inherit lib pkgs;
       config = {
-        services.bitcoind = { dataDir = "@dataDir@"; rpc.users.privileged.name = remoteRpcUser; };
+        services.bitcoind.rpc.users.privileged.name = remoteRpcUser;
         nix-bitcoin.secretsDir = "@secretsDir@";
       };
     }).systemd.services.bitcoind.preStart.content;
@@ -1915,6 +1916,20 @@ let
       };
       expected = { preset = true; noPreset = false; before = true; acknowledged = false; };
     };
+    # Before 0.2.1, root ran bitcoin-cli as root
+    testVersioningCliRunsAsServiceUser = let
+      phrase = "When root runs `bitcoin-cli`, it now runs as user";
+    in {
+      expr = {
+        bitcoind = hasNoticeAt "0.1.6" phrase { services.bitcoind.enable = true; };
+        noBitcoind = hasNoticeAt "0.1.6" phrase { };
+        acknowledged = hasNoticeAt "0.2.1" phrase {
+          services.bitcoind.enable = true;
+          nix-bitcoin.versioning.releasedVersion = "0.2.1";
+        };
+      };
+      expected = { bitcoind = true; noBitcoind = false; acknowledged = false; };
+    };
     testOnionAccessRejectsUnknownUser = {
       expr = map (lib.hasInfix "no-such-user") (failedAssertions onionAccessUnknownUser);
       expected = [ true ];
@@ -2371,13 +2386,22 @@ else
   pkgs.runCommand "nix-bitcoin-configuration-tests" {
     passthru.testCount = builtins.length (builtins.attrNames tests);
   } ''
-    mkdir data secrets
+    mkdir secrets run
     echo secret > secrets/bitcoin-rpcpassword-privileged
-    sed -e "s|@dataDir@|$PWD/data|g; s|@secretsDir@|$PWD/secrets|g" ${remotePresetPreStart} > prestart.sh
+    sed -e "s|@secretsDir@|$PWD/secrets|g; s|/run/bitcoind/|$PWD/run/|g" ${remotePresetPreStart} > prestart.sh
     USER=bitcoin bash -eu prestart.sh
-    if ! grep -qFx ${lib.escapeShellArg "rpcuser=${remoteRpcUser}"} data/bitcoin.conf; then
-      echo "bitcoind-remote preset doesn't preserve the RPC username:" >&2
-      cat data/bitcoin.conf >&2
+    if [[ $(< run/.cookie) != ${lib.escapeShellArg "${remoteRpcUser}:secret"} ]]; then
+      echo "bitcoind-remote preset doesn't write the RPC credentials to the cookie file:" >&2
+      cat run/.cookie >&2
+      exit 1
+    fi
+    if [[ $(stat -c %a run/.cookie) != 640 ]]; then
+      echo "bitcoind-remote preset gives the cookie file mode $(stat -c %a run/.cookie)" >&2
+      exit 1
+    fi
+    rm secrets/bitcoin-rpcpassword-privileged
+    if USER=bitcoin bash -eu prestart.sh 2>/dev/null; then
+      echo "bitcoind-remote preset doesn't fail without the RPC password" >&2
       exit 1
     fi
 
