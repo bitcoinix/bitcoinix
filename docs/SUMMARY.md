@@ -4,6 +4,7 @@
 
 - [Hardware requirements](hardware.md)
 - [Installation](install.md)
+- [Migrate from nix-bitcoin](migrate-from-nix-bitcoin.md)
 - [Configuration and maintenance](configuration.md)
 - [Upgrading](upgrading.md)
   - [Version 0.2.0](upgrading/0.2.0.md)

@@ -11,7 +11,8 @@ experience with Nix. bitcoinix is used in production.
 
 bitcoinix is a community fork of [nix-bitcoin](https://github.com/fort-nix/nix-bitcoin), which
 was archived in August 2026. The NixOS options keep the `nix-bitcoin.*` prefix, so existing
-configurations keep working.
+configurations keep working. See [Migrate from nix-bitcoin](migrate-from-nix-bitcoin.md) to switch a
+nix-bitcoin node to bitcoinix.
 
 ## Features
 
