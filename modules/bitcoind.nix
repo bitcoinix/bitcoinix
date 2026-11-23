@@ -202,9 +202,9 @@ let
           run `setfacl -P -R -n -m g::-,d:g::-` on the blocks dir. On regtest,
           signet and testnet4, also run `setfacl -P -n -m g::-` on the network
           subdirectory. Run these commands as the bitcoind user, for example
-          with `runuser -u bitcoin --`. A group member can put a symlink
-          in the data dir. `-P` keeps setfacl from following one at the end of the
-          path, and as the bitcoind user, one before it can only lead to that
+          with `runuser -u bitcoin --`. Older versions let group members put a
+          symlink in the data dir. `-P` keeps setfacl from following one at the end
+          of the path, and as the bitcoind user, one before it can only lead to that
           user's own files.
           Warning: This disables bitcoind's wallet support.
         '';
@@ -354,10 +354,11 @@ let
   bitcoind = config.nix-bitcoin.pkgs.bitcoind;
   nbLib = config.nix-bitcoin.lib;
   secretsDir = config.nix-bitcoin.secretsDir;
-  # The RPC cookie lives outside the data directory. The data directory is
-  # group-writable, so a group member could swap the cookie for a symlink
-  # while bitcoind sets its mode by path. This directory is a RuntimeDirectory
-  # with mode 0750: only the bitcoin user writes it, group members read it.
+  # The RPC cookie lives outside the data directory. Older versions let group
+  # members write the data directory, so a group member could swap the cookie
+  # for a symlink while bitcoind sets its mode by path. This directory is a
+  # RuntimeDirectory with mode 0750: only the bitcoin user writes it, group
+  # members read it.
   rpcCookieDir = "/run/bitcoind";
 
   # Keep the mount path one systemd argument and escape literal % specifiers.
@@ -370,11 +371,11 @@ let
   groupReadScript = let
     getfacl = "${pkgs.acl}/bin/getfacl -P -n -E --";
   in ''
-    # Group members can rename and replace the entries of the data dir, also
-    # between two commands. So enter each dir only after checking it, and work
-    # only on the current dir and the names in it. `setfacl -P` follows no
-    # symlink at such a name. For a path with a dir part, it needs openat2(),
-    # which systemd's `RestrictSUIDSGID` blocks.
+    # Older versions let group members rename and replace the entries of the data
+    # dir at any time, so such an entry can be left from then. So enter each dir
+    # only after checking it, and work only on the current dir and the names in
+    # it. `setfacl -P` follows no symlink at such a name. For a path with a dir
+    # part, it needs openat2(), which systemd's `RestrictSUIDSGID` blocks.
     #
     # Enters the dir $1 in the current dir. $1 must be a dir of ours when we
     # check it, and the dir we end up in must be that same dir.
@@ -577,8 +578,10 @@ in {
       };
     };
 
+    # Group members, like the operator, read `bitcoin.conf` here, and with
+    # `dataDirReadableByGroup` the blocks dir. Nothing in the group writes here.
     systemd.tmpfiles.rules = [
-      "d '${cfg.dataDir}' 0770 ${cfg.user} ${cfg.group} - -"
+      "d '${cfg.dataDir}' 0750 ${cfg.user} ${cfg.group} - -"
     ];
 
     systemd.services.bitcoind = rec {
@@ -613,8 +616,8 @@ in {
             echo "externalip=$(${cfg.getPublicAddressCmd})"
           ''}
         )
-        # Always replace the file. The data dir is writable by the operator, which
-        # could plant an operator-owned file with identical content to skip the update.
+        # Always replace the file. Older versions let the operator write the data
+        # dir, so the file can belong to the operator.
         install -T -o '${cfg.user}' -g '${cfg.group}' -m 640 <(echo "$cfg") '${cfg.dataDir}/bitcoin.conf'
       '';
 

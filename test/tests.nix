@@ -296,19 +296,20 @@ let
           port = cfg.clightning.plugins.clnrest.port;
         };
 
-      # Config files in dirs writable by the operator or service user.
+      # Config files in dirs writable by the service user.
       # `planter` is the user that plants the replacement file.
       tests.config-replace = config.test.data.config-replace != [];
       test.data.config-replace =
+        # Only the service user can write the bitcoind and clightning data dirs.
+        # Older versions let group members write them, so a symlink can be left
+        # from then.
         optional cfg.bitcoind.enable {
           unit = "bitcoind";
           file = "${cfg.bitcoind.dataDir}/bitcoin.conf";
           mode = "640";
           inherit (cfg.bitcoind) user;
-          planter = config.nix-bitcoin.operator.name;
+          planter = cfg.bitcoind.user;
         }
-        # Only clightning can write its data dir. Older versions let group
-        # members write it, so a symlink can be left from then.
         ++ optional cfg.clightning.enable {
           unit = "clightning";
           file = "${cfg.clightning.dataDir}/config";

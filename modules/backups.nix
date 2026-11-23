@@ -166,8 +166,8 @@ let
   # `systemd.services` attribute exists, which would recurse.
   localBitcoind = config.systemd.services.bitcoind.serviceConfig.Type == "notify";
   backupWalletsScript = let
-    # Skip `bitcoin.conf`. The operator can replace that file in the data dir and make
-    # bitcoin-cli send any file it reads as credentials to any address.
+    # Skip `bitcoin.conf`. Older versions let the operator replace that file in the
+    # data dir.
     # bitcoind writes its cookie to /run/bitcoind, see ./bitcoind.nix.
     cli = concatStringsSep " " [
       "${config.nix-bitcoin.pkgs.bitcoind}/bin/bitcoin-cli -noconf"
