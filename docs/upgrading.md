@@ -43,6 +43,7 @@ See [Cutting a release](https://github.com/bitcoinix/bitcoinix/blob/master/dev/R
 
 ## Versions
 
+- [0.2.1](upgrading/0.2.1.md) (upcoming)
 - [0.2.0](upgrading/0.2.0.md)
 - <a id="upgrading-to-config-version-016"></a>[0.1.6](upgrading/0.1.6.md)
 - <a id="upgrading-to-config-version-015"></a>[0.1.5](upgrading/0.1.5.md)
