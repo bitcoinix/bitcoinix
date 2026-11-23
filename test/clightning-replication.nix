@@ -19,6 +19,8 @@ let
     nixpkgs.pkgs = pkgs;
 
     nix-bitcoin.generateSecrets = true;
+    # A member of group clightning
+    nix-bitcoin.operator.enable = true;
 
     services.clightning = {
       enable = true;
@@ -136,6 +138,15 @@ makeTestVM {
         cmd = f"{systems[system]}/bin/switch-to-configuration test >&2"
         client.succeed(cmd)
 
+    # Only clightning writes the replication dirs. Group members, like the
+    # operator, can read them and use lightning-cli.
+    def check_dir_modes(*dirs):
+        for dir in dirs:
+            metadata = client.succeed(f"stat -c '%U %G %a' {dir}").strip()
+            assert metadata == "clightning clightning 750", f"{dir}: {metadata}"
+            client.succeed(f"runuser -u operator -- ls {dir}")
+            client.fail(f"runuser -u operator -- touch {dir}/group-write-probe")
+
     def check_mount_lifecycle(*mountpoints):
         with subtest("the mounts stop cleanly and stop clightning"):
             client.succeed("systemctl stop clightning-replication-mounts")
@@ -143,6 +154,12 @@ makeTestVM {
                 client.succeed(f"test $(systemctl show -P ActiveState {unit}) = inactive")
             for mountpoint in mountpoints:
                 client.fail(f"findmnt --mountpoint {mountpoint}")
+            # tmpfiles sets the mode of the mount points' dir while the mounts are stopped
+            client.succeed(
+                "chmod 770 /var/cache/clightning-replication",
+                "systemctl restart systemd-tmpfiles-resetup",
+            )
+            check_dir_modes("/var/cache/clightning-replication")
             client.succeed("systemctl start clightning")
             client.wait_for_unit("clightning.service")
             client.succeed("runuser -u clightning -- lightning-cli getinfo")
@@ -176,6 +193,13 @@ makeTestVM {
           client.wait_until_succeeds("runuser -u clightning -- ls /var/backup/clightning/lightningd.sqlite3")
           # No other user should be able to read the backup directory
           client.fail("runuser -u bitcoin -- ls /var/backup/clightning")
+          client.succeed("runuser -u operator -- lightning-cli getinfo")
+          check_dir_modes("/var/backup/clightning")
+          # clightning sets the dir's mode again when it starts, after the dir's mount,
+          # also for a setgid dir, which its sandbox can't keep setgid
+          client.succeed("chmod 2770 /var/backup/clightning", "systemctl restart clightning")
+          client.wait_for_unit("clightning.service")
+          check_dir_modes("/var/backup/clightning")
 
       with subtest("switching networks preserves earlier replicas"):
           replica_dir = "/var/backup/clightning"
@@ -198,6 +222,15 @@ makeTestVM {
           client.fail(f"runuser -u bitcoin -- ls {replica_db}")
           # A gocryptfs has been created
           client.succeed("ls /var/backup/clightning/lightningd-db/gocryptfs.conf")
+          check_dir_modes("/var/backup/clightning", "/var/cache/clightning-replication")
+          # With `encrypt`, clightning-replication-mounts sets the dir's mode again
+          client.succeed(
+              "systemctl stop clightning-replication-mounts",
+              "chmod 2770 /var/backup/clightning",
+              "systemctl start clightning",
+          )
+          client.wait_for_unit("clightning.service")
+          check_dir_modes("/var/backup/clightning")
           check_mount_lifecycle("/var/cache/clightning-replication/plaintext")
 
       switch_to_system("replicationRemote")
@@ -209,6 +242,7 @@ makeTestVM {
           client.fail(f"runuser -u bitcoin -- ls {replica_db}")
           # A clighting db exists on the server
           server.succeed("ls /var/backup/nb-replication/writable/lightningd.sqlite3")
+          check_dir_modes("/var/cache/clightning-replication")
           check_mount_lifecycle("/var/cache/clightning-replication/sshfs")
 
       switch_to_system("replicationRemoteEncrypted")

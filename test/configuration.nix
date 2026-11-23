@@ -2233,6 +2233,25 @@ let
       ];
       expected = [ 0 1 1 0 ];
     };
+    # Before 0.2.1, group clightning could write the replication dirs
+    testVersioningClightningReplicationDirs = let
+      phrase = "can no longer write the Core Lightning replication";
+      dirsNotice = dirs: hasNotice "dirs ${dirs}. Only clightning writes there.";
+      local = "`services.clightning.replication.local.directory`";
+      cache = "`/var/cache/clightning-replication`";
+      localDir.local.directory = "/var/backup/clightning";
+    in {
+      expr = {
+        local = dirsNotice local (clightningReplication localDir);
+        localEncrypted = dirsNotice "${local} and ${cache}"
+          (clightningReplication (localDir // { encrypt = true; }));
+        sshfs = dirsNotice cache (clightningReplication { sshfs.destination = "user@host:dir"; });
+        noSetup = hasNotice phrase
+          (clightningReplication { local = localDir.local // { setupDirectory = false; }; });
+        replicationOff = hasNotice phrase { services.clightning.enable = true; };
+      };
+      expected = { local = true; localEncrypted = true; sshfs = true; noSetup = false; replicationOff = false; };
+    };
     # Each rule gives the device to the group and takes the `uaccess` tag away,
     # which would give it to the active local session too
     # The Ledger rules match every product of vendor 2c97 and the HW.1 IDs of
@@ -2311,16 +2330,20 @@ let
         { clightning = null; clightning-replication-mounts = null; }
       ];
     };
-    # systemd splits these paths at whitespace and expands `%` specifiers
+    # systemd splits these paths at whitespace and expands `%` specifiers, and `$`
+    # in commands
     testReplicationQuotesLocalDirectory = let
-      clightning = (replicationUnits { local.directory = ''/mnt/backup disk/"a" \b %c''; }).clightning;
-      quoted = ''"/mnt/backup disk/\"a\" \\b %%c"'';
+      clightning = (replicationUnits { local.directory = ''/mnt/backup disk/"a" \b %c $d''; }).clightning;
+      quoted = ''"/mnt/backup disk/\"a\" \\b %%c $d"'';
+      # Runs first, without `$` expansion
+      localDirMode = builtins.head clightning.serviceConfig.ExecStartPre;
     in {
       expr = {
         requiresMountsFor = clightning.unitConfig.RequiresMountsFor;
         readWritePaths = lib.elem quoted clightning.serviceConfig.ReadWritePaths;
+        localDirMode = lib.hasPrefix "-:" localDirMode && lib.hasSuffix "/bin/chmod ug-s,go-w ${quoted}" localDirMode;
       };
-      expected = { requiresMountsFor = [ quoted ]; readWritePaths = true; };
+      expected = { requiresMountsFor = [ quoted ]; readWritePaths = true; localDirMode = true; };
     };
     # Before 0.2.0, clightning started without the mount of its local replica
     testVersioningReplicationLocalMounts = let
