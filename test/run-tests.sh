@@ -315,6 +315,7 @@ buildable=(
     clightning-replication
     lndPruned
     rtlIPv6
+    bitcoindGroupRead
     lnconnectNoOperatorRole
     i2p
     i2pLocal

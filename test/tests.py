@@ -39,6 +39,7 @@ TEST_PHASES = (
         "hardening-ro-paths",
     )),
     ("disruptive", (
+        "bitcoind-group-read",
         "backups",
         "restart-bitcoind",
         "config-replace",
