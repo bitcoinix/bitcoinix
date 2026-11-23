@@ -1589,6 +1589,18 @@ let
         { default = false; set = false; }
       ];
     };
+    # The unversioned pkgs.postgresql moves from 17 to 18
+    testVersioningPostgresql18 = {
+      expr = map (hasNotice "`pkgs.postgresql` has moved from PostgreSQL 17 to 18") [
+        { services.postgresql.enable = true; services.postgresql.package = pkgs.postgresql; }
+        { services.postgresql.enable = true; services.postgresql.package = pkgs.postgresql_18; }
+        { services.postgresql.enable = true; services.postgresql.package = pkgs.postgresql_17; }
+        { services.postgresql.enable = true; }
+        { services.postgresql.enable = true; system.stateVersion = lib.mkForce "26.11"; }
+        { services.postgresql.package = pkgs.postgresql; }
+      ];
+      expected = [ true true false false false false ];
+    };
     # The hardened-extended preset's default accept_ra now applies. dhcpcd and
     # networkd skip interfaces in too many ways to tell which configs depend on
     # it, so every config with the preset and IPv6 is notified.
