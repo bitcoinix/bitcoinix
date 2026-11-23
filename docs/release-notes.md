@@ -9,6 +9,6 @@ See [Cutting a release](https://github.com/bitcoinix/bitcoinix/blob/master/dev/R
 
 ## Versions
 
-- [0.2.0](release-notes/0.2.0.md) (upcoming)
+- [0.2.0](release-notes/0.2.0.md)
 - <a id="016"></a>[0.1.6](release-notes/0.1.6.md)
 - <a id="015"></a>[0.1.5](release-notes/0.1.5.md)

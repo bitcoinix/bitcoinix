@@ -1556,6 +1556,83 @@ let
       ];
       expected = [ true false ];
     };
+    # PostgreSQL 14 is removed. The notice must show although the package throws.
+    # A config fails only through the default for 22.05 through 23.05, or
+    # through a package of its own.
+    testVersioningPostgresql14Removed = let
+      btcpay = extra: { imports = [ extra ]; services.btcpayserver.enable = true; };
+      stateVersion = v: btcpay { system.stateVersion = lib.mkForce v; };
+      package = p: btcpay { services.postgresql.package = p; };
+      notice = config: {
+        default = hasNotice "NixOS selects by default for" config;
+        set = hasNotice "If it selects PostgreSQL 14" config;
+      };
+    in {
+      expr = map notice [
+        (stateVersion "22.05")
+        (stateVersion "23.05")
+        (stateVersion "23.11")
+        (stateVersion "21.11")
+        (package pkgs.postgresql_14)
+        (package (assert false; pkgs.postgresql_17))
+        (btcpay {})
+        (btcpay { system.stateVersion = lib.mkForce "22.05"; services.postgresql.package = pkgs.postgresql_17; })
+      ];
+      expected = [
+        { default = true; set = false; }
+        { default = true; set = false; }
+        { default = false; set = false; }
+        { default = false; set = false; }
+        { default = false; set = true; }
+        { default = false; set = true; }
+        { default = false; set = false; }
+        { default = false; set = false; }
+      ];
+    };
+    # The unversioned pkgs.postgresql moves from 17 to 18
+    testVersioningPostgresql18 = {
+      expr = map (hasNotice "`pkgs.postgresql` has moved from PostgreSQL 17 to 18") [
+        { services.postgresql.enable = true; services.postgresql.package = pkgs.postgresql; }
+        { services.postgresql.enable = true; services.postgresql.package = pkgs.postgresql_18; }
+        { services.postgresql.enable = true; services.postgresql.package = pkgs.postgresql_17; }
+        { services.postgresql.enable = true; }
+        { services.postgresql.enable = true; system.stateVersion = lib.mkForce "26.11"; }
+        { services.postgresql.package = pkgs.postgresql; }
+      ];
+      expected = [ true true false false false false ];
+    };
+    # The hardened-extended preset's default accept_ra now applies. dhcpcd and
+    # networkd skip interfaces in too many ways to tell which configs depend on
+    # it, so every config with the preset and IPv6 is notified.
+    testVersioningHardenedExtendedAcceptRa = let
+      node = extra: {
+        imports = [ extra ];
+        boot.isContainer = lib.mkForce false;
+        fileSystems."/" = { device = "/dev/null"; fsType = "ext4"; };
+        boot.loader.grub.enable = false;
+      };
+      preset = ../modules/presets/hardened-extended.nix;
+      hardened = extra: node { imports = [ preset extra ]; };
+    in {
+      expr = map (hasNotice "It now sets `net.ipv6.conf.default.accept_ra = 0`") [
+        (hardened {})
+        (hardened { networking.useDHCP = true; networking.interfaces.vlan10.useDHCP = false; })
+        (hardened { networking.useNetworkd = true; })
+        (hardened { boot.kernel.sysctl."net.ipv6.conf.default.accept_ra" = lib.mkForce "1"; })
+        (hardened { networking.enableIPv6 = false; })
+        (hardened { boot.isContainer = lib.mkOverride 0 true; })
+        # The preset imported as a module value
+        (node {
+          imports = [ (import preset) ];
+          networking.useDHCP = true;
+          networking.interfaces.vlan10.useDHCP = false;
+        })
+        # Without the preset
+        (node { boot.kernel.sysctl."net.ipv6.conf.default.accept_ra" = "0"; })
+        (node {})
+      ];
+      expected = [ true true true false false false true false false ];
+    };
     testLndconnectWithoutOperator = {
       expr = {
         failed = failedAssertions lndconnectNoOperator;
