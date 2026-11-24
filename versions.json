@@ -7,6 +7,10 @@
     "channel": "unstable",
     "version": "2.4.7"
   },
+  "cashu-cdk": {
+    "channel": "unstable",
+    "version": "0.18.3"
+  },
   "charge-lnd": {
     "channel": "unstable",
     "version": "0.3.2"

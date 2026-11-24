@@ -194,6 +194,14 @@
   # accessible via Tor.
   # nix-bitcoin.onionServices.btcpayserver.enable = true;
 
+  # Cashu mint (see https://docs.bitcoinix.net/cdk-mintd.html)
+  # services.cdk-mintd = {
+  #   enable = true;
+  #   backend = "lnd"; # or "clightning"
+  #   url = "https://mint.example.org";
+  #   onchain.enable = false;
+  # };
+
   ### Hardware wallets
   # Enable the following to allow using hardware wallets.
   # See https://github.com/bitcoin-core/HWI for more information.

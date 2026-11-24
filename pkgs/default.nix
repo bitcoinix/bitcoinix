@@ -34,6 +34,7 @@ let self = {
     inherit (pkgs)
       bitcoind
       btcpayserver
+      cashu-cdk
       charge-lnd
       clboss
       clightning

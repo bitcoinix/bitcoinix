@@ -14,7 +14,7 @@ def test_restart_bitcoind():
     # back. An explicit stop must keep everything down.
     # unbeholden-lnurl `requires` its backend, which starts it again.
     dependents = [
-        unit for unit in ["lnd", "clightning", "electrs", "unbeholden-lnurl"] if unit in enabled_tests
+        unit for unit in ["lnd", "clightning", "electrs", "unbeholden-lnurl", "cdk-mintd"] if unit in enabled_tests
     ]
 
     def state(unit):

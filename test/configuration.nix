@@ -752,10 +752,12 @@ let
     };
   };
 
+  cdkMintdTests = import ./cdk-mintd-configuration.nix { inherit lib evaluate failedAssertions; };
+
   tests = lib.mapAttrs' (name: case: lib.nameValuePair "testREST-${name}" {
     expr = restAllowed case.args;
     inherit (case) expected;
-  }) restCases // lnurlTests // extraConfigTests // pluginsConfigTests // pluginMigrationTests // {
+  }) restCases // cdkMintdTests // lnurlTests // extraConfigTests // pluginsConfigTests // pluginMigrationTests // {
     testLockedPackagesDefault = {
       expr = bitcoin.nix-bitcoin.useVersionLockedPkgs;
       expected = true;

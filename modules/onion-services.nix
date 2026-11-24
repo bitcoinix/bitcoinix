@@ -114,6 +114,7 @@ in {
         btcpayserver = {
           externalPort = 80;
         };
+        cdk-mintd.externalPort = 80;
         unbeholden-lnurl.externalPort = 80;
         rtl = {
           externalPort = 80;

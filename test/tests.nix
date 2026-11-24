@@ -164,7 +164,7 @@ let
           ++ optional cfg.unbeholden-wallet.enable "unbeholden-wallet"
           ++ optional (cfg.btcpayserver.enable && cfg.nbxplorer.tor.enforce) "nbxplorer"
           ++ filter (service: cfg.${service}.enable && cfg.${service}.tor.enforce) [
-            "bitcoind" "btcpayserver" "clightning" "electrs" "fulcrum" "lnd" "mempool" "rtl" "unbeholden-lnurl"
+            "bitcoind" "btcpayserver" "clightning" "electrs" "fulcrum" "lnd" "mempool" "rtl" "unbeholden-lnurl" "cdk-mintd"
           ];
         # The complete allow list of each restricted unit
         allow = [ "127.0.0.1/32" "::1/128" ]
@@ -227,6 +227,14 @@ let
       services.mempool = {
         electrumServer = "fulcrum";
         settings.MEMPOOL.POOLS_JSON_URL = mkIf config.test.noConnections "disable-pool-fetching";
+      };
+
+      tests.cdk-mintd = cfg.cdk-mintd.enable;
+      tests.cdk-mintd-onchain = cfg.cdk-mintd.enable && cfg.cdk-mintd.onchain.enable;
+      test.data.cdk-mintd = optionalAttrs cfg.cdk-mintd.enable {
+        inherit (cfg.cdk-mintd) port backend dataDir user seedFile;
+        onchain = cfg.cdk-mintd.onchain.enable;
+        cli = "${cfg.cdk-mintd.package}/bin/cdk-mintd --work-dir ${cfg.cdk-mintd.dataDir}";
       };
 
       tests.unbeholden-lnurl = cfg.unbeholden-lnurl.enable;
@@ -675,6 +683,34 @@ let
         clightning = true;
         lnconnect-onion-clnrest = true;
       };
+    };
+
+    cdk-mintd-lnd = {
+      imports = [ scenarios.regtestBase ];
+      services.cdk-mintd = {
+        enable = true;
+        url = "https://mint.example.org";
+        settings.mint_info.name = "Bitcoinix test mint";
+      };
+    };
+
+    cdk-mintd-cln = {
+      imports = [ scenarios.cdk-mintd-lnd ];
+      services.cdk-mintd.backend = "clightning";
+    };
+
+    cdk-mintd-lnd-netns = {
+      imports = with scenarios; [ cdk-mintd-lnd netnsBase ];
+    };
+
+    cdk-mintd-cln-netns = {
+      imports = with scenarios; [ cdk-mintd-cln netnsBase ];
+    };
+
+    cdk-mintd-onchain = {
+      imports = with scenarios; [ cdk-mintd-cln netnsBase ];
+      services.cdk-mintd.onchain.enable = true;
+      services.cdk-mintd.settings.bdk.num_confs = 1;
     };
 
     unbeholden-lnurl-lnd = { config, ... }: {

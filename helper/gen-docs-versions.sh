@@ -27,6 +27,7 @@ jq -r '
   {
     "bitcoind": "https://bitcoincore.org/en/releases/@VERSION@/",
     "btcpayserver": gh("btcpayserver/btcpayserver"; "v"),
+    "cashu-cdk": gh("cashubtc/cdk"; "v"),
     "charge-lnd": gh("accumulator/charge-lnd"; "v"),
     "clboss": gh("ksedgwic/clboss"; "v"),
     "clightning": gh("ElementsProject/lightning"; "v"),
