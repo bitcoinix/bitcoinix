@@ -1,0 +1,108 @@
+name: PR size
+
+on:
+  pull_request_target:
+    types: [opened, reopened, synchronize, edited, ready_for_review, converted_to_draft]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: pr-size-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  label:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fetch PR history
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          # A bare repository keeps fork PR contents out of the runner's working tree.
+          git init --bare --quiet .
+          git -c credential.helper='!gh auth git-credential' fetch --quiet --no-tags \
+            "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY.git" \
+            "refs/heads/$BASE_REF:refs/pr-size/base" "refs/pull/$PR_NUMBER/head:refs/pr-size/head"
+
+      - name: Count changed lines
+        id: diff
+        shell: python
+        run: |
+          import os
+          import subprocess
+
+          stats = subprocess.check_output([
+              "git", "diff", "--numstat", "-z", "--ignore-all-space", "--ignore-blank-lines",
+              "refs/pr-size/base...refs/pr-size/head",
+          ])
+          entries = iter(stats.split(b"\0")[:-1])
+          test_scenarios = {b"dev/dev-scenarios.nix", b"dev/dev-env/template-scenarios.nix"}
+          total = non_test = 0
+          for entry in entries:
+              added, deleted, path = entry.split(b"\t", 2)
+              if not path:
+                  # A rename has separate old and new paths. Classify it by its destination.
+                  next(entries)
+                  path = next(entries)
+              if added == b"-":  # Binary files have no line counts.
+                  continue
+              changed = int(added) + int(deleted)
+              total += changed
+              if not path.startswith(b"test/") and path not in test_scenarios:
+                  non_test += changed
+
+          head = subprocess.check_output(["git", "rev-parse", "refs/pr-size/head"], text=True).strip()
+          with open(os.environ["GITHUB_OUTPUT"], "a") as output:
+              print(f"lines={non_test or total}", file=output)
+              print(f"head={head}", file=output)
+
+      - name: Apply size label
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          CHANGED_LINES: ${{ steps.diff.outputs.lines }}
+          SIZED_HEAD: ${{ steps.diff.outputs.head }}
+        with:
+          script: |
+            const sizes = new Map([
+              ['size: XXL', 1000],
+              ['size: XL', 500],
+              ['size: L', 100],
+              ['size: M', 30],
+              ['size: S', 10],
+              ['size: XS', 0]
+            ]);
+            const lines = Number(process.env.CHANGED_LINES);
+            const [target] = [...sizes].find(([, minimum]) => lines >= minimum);
+            const number = context.issue.number;
+            const {data: pr} = await github.rest.pulls.get({...context.repo, pull_number: number});
+            if (pr.state !== 'open' || pr.head.sha !== process.env.SIZED_HEAD ||
+                pr.base.ref !== context.payload.pull_request.base.ref) {
+              core.info('The PR changed while its diff was being measured.');
+              return;
+            }
+
+            core.info(`PR #${number}: ${lines} effective changed lines, ${target}`);
+            const issue = {...context.repo, issue_number: number};
+            if (!pr.labels.some(label => label.name === target)) {
+              try {
+                await github.rest.issues.getLabel({...context.repo, name: target});
+              } catch (error) {
+                if (error.status !== 404) throw error;
+                core.notice(`Create ${target} in the repository to enable it on pull requests.`);
+                return;
+              }
+              await github.rest.issues.addLabels({...issue, labels: [target]});
+            }
+            for (const {name} of pr.labels) {
+              if (name === target || !sizes.has(name)) continue;
+              try {
+                await github.rest.issues.removeLabel({...issue, name});
+              } catch (error) {
+                if (error.status !== 404) throw error;
+              }
+            }
