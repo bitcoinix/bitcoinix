@@ -17,12 +17,21 @@ let
     rpcAddress = mkOption {
       type = types.str;
       default = "127.0.0.1";
-      description = "Address to listen for RPC connections.";
+      description = "Address to listen for RPC connections. IPv6 addresses may be given with or without brackets.";
     };
     rpcPort = mkOption {
       type = types.port;
       default = 10009;
       description = "Port to listen for gRPC connections.";
+    };
+    rpcEndpoint = mkOption {
+      type = types.str;
+      internal = true;
+      readOnly = true;
+      # Use the address in the TLS certificate, including wildcard addresses.
+      default = let
+        host = if hasInfix ":" rpcHost then "[${rpcHost}]" else rpcHost;
+      in "${host}:${toString cfg.rpcPort}";
     };
     restAddress = mkOption {
       type = types.str;
@@ -95,7 +104,7 @@ let
         # Switch user because lnd makes datadir contents readable by user only
         ''
           ${runAsUser} ${cfg.user} ${cfg.package}/bin/lncli \
-            --rpcserver ${cfg.rpcAddress}:${toString cfg.rpcPort} \
+            --rpcserver ${escapeShellArg cfg.rpcEndpoint} \
             --tlscertpath '${cfg.certPath}' \
             --macaroonpath '${networkDir}/admin.macaroon' "$@"
         '';
@@ -129,6 +138,8 @@ let
   };
 
   cfg = config.services.lnd;
+  # The TLS certificate needs the bare IP when rpcAddress is given in brackets.
+  rpcHost = removePrefix "[" (removeSuffix "]" cfg.rpcAddress);
   nbLib = config.nix-bitcoin.lib;
   secretsDir = config.nix-bitcoin.secretsDir;
   runAsUser = config.nix-bitcoin.runAsUserCmd;
@@ -148,7 +159,7 @@ let
     logging.console.no-timestamps=1
 
     listen=${toString cfg.address}:${toString cfg.port}
-    rpclisten=${cfg.rpcAddress}:${toString cfg.rpcPort}
+    rpclisten=${cfg.rpcEndpoint}
     restlisten=${cfg.restAddress}:${toString cfg.restPort}
 
     bitcoin.${bitcoind.network}=1
@@ -223,7 +234,7 @@ in {
       "d '${cfg.dataDir}' 0770 ${cfg.user} ${cfg.group} - -"
     ];
 
-    services.lnd.certificate.extraIPs = mkIf (cfg.rpcAddress != "127.0.0.1") [ "${cfg.rpcAddress}" ];
+    services.lnd.certificate.extraIPs = mkIf (rpcHost != "127.0.0.1") [ rpcHost ];
 
     systemd.services.lnd = {
       # `wantedBy` bitcoind: a deploy that changes the bitcoind unit stops and

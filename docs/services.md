@@ -374,9 +374,10 @@ under `services.thunderhub.dataDir`. [Secrets directory](./configuration.md#secr
 
 ThunderHub verifies LND's TLS certificate and uses its own revocable macaroon.
 **A dashboard login can spend funds**, including sending on-chain payments and
-opening or closing channels. LND denies macaroon administration and signer RPCs,
-including the one used for LNURL-auth. The configured backend is LND. ThunderHub's
-Taproot Assets features require Lightning Terminal (`litd`).
+opening or closing channels. It can also sign messages with the node key.
+LND denies macaroon administration and access to the signer service, including
+the `DeriveSharedKey` RPC used for LNURL-auth. The configured backend is LND.
+ThunderHub's Taproot Assets features require Lightning Terminal (`litd`).
 [Custom macaroons](#custom-macaroons)
 
 By default the service can only reach local addresses. Features requiring an

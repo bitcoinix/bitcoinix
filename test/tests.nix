@@ -178,6 +178,7 @@ let
       tests.thunderhub = cfg.thunderhub.enable;
       test.data.thunderhub = optionalAttrs (config.tests.thunderhub or false) {
         inherit (cfg.thunderhub) address port user dataDir;
+        proxy = !config.nix-bitcoin.netns-isolation.enable;
         lncli = "${cfg.lnd.package}/bin/lncli";
         inherit (cfg.lnd) networkDir;
       };

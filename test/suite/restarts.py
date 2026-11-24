@@ -59,6 +59,14 @@ def test_restart_bitcoind():
         assert re.fullmatch(stopped, state(unit)), f"{unit} came back after an explicit stop"
         assert inactive_since(unit) == since, f"{unit} was restarted after an explicit stop"
 
+    if "thunderhub" in dependents and test_data["thunderhub"]["proxy"]:
+        # A connection must activate the proxy even while LND's runtime directory is gone.
+        data = test_data["thunderhub"]
+        succeed("test ! -e /run/lnd", "systemctl stop thunderhub-proxy",
+                f"nc -w 5 {data['address']} {data['port']} </dev/null")
+        succeed("systemctl is-active --quiet thunderhub-proxy")
+        assert_no_failure("thunderhub-proxy")
+
     # 2. The start half of a deploy brings the dependents back.
     # `wait_for_unit` raises on `failed` even with a start job queued, so clear
     # that state first. `inactive` with no job queued still raises.

@@ -19,8 +19,6 @@ let
         macaroon: "{YML_ENV_2}"
         certificatePath: "{YML_ENV_3}"
   '';
-  rpcHost = nbLib.address (removePrefix "[" (removeSuffix "]" lnd.rpcAddress));
-  rpcAddress = if hasInfix ":" rpcHost then "[${rpcHost}]" else rpcHost;
 
   # RPCs used by ThunderHub's LND provider and subscriptions through the
   # bundled 'lightning' npm package. In particular, don't grant BakeMacaroon,
@@ -106,7 +104,7 @@ in {
       after = [ "lnd.service" "nix-bitcoin-secrets.target" ];
       environment = {
         ACCOUNT_CONFIG_PATH = "${cfg.dataDir}/accounts.yaml";
-        YML_ENV_1 = "${rpcAddress}:${toString lnd.rpcPort}";
+        YML_ENV_1 = lnd.rpcEndpoint;
         PORT = if useProxy then socketPath else toString cfg.port;
       } // optionalAttrs (!useProxy) { HOST = cfg.address; }
         // optionalAttrs cfg.tor.enforce {
@@ -155,7 +153,9 @@ in {
     ];
     systemd.services.thunderhub-proxy = mkIf useProxy {
       serviceConfig = {
-        InaccessiblePaths = [ "/run/lnd" ];
+        # LND removes its runtime directory when stopped. The socket can
+        # activate the proxy before LND creates it again.
+        InaccessiblePaths = [ "-/run/lnd" ];
         # A separate UID keeps the login credentials in the dashboard's
         # process environment private. The proxy only shares the socket group.
         DynamicUser = true;

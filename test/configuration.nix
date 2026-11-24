@@ -1728,6 +1728,24 @@ let
       };
       expected = { default = false; other = false; override = true; otherBackend = true; };
     };
+    testThunderHubLndRpcEndpoint = let
+      endpoint = rpcAddress: let
+        cfg = evaluate {
+          services.thunderhub.enable = true;
+          services.lnd = { inherit rpcAddress; rpcPort = 10010; };
+        };
+      in {
+        server = cfg.systemd.services.thunderhub.environment.YML_ENV_1;
+        certIPs = cfg.services.lnd.certificate.extraIPs;
+      };
+    in {
+      expr = map endpoint [ "::" "[::1]" "0.0.0.0" ];
+      expected = [
+        { server = "[::]:10010"; certIPs = [ "::" ]; }
+        { server = "[::1]:10010"; certIPs = [ "::1" ]; }
+        { server = "0.0.0.0:10010"; certIPs = [ "0.0.0.0" ]; }
+      ];
+    };
     # A socket unit holds RTL's address and port, except with netns-isolation
     testRtlProxySocket = let
       rtl = module: evaluate {
