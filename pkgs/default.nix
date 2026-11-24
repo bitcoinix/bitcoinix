@@ -44,10 +44,15 @@ let self = {
       lndconnect
       lndinit
       nbxplorer
-      rtl
-      thunderhub;
+      rtl;
 
     inherit pkgs;
+
+    thunderhub = pkgs.thunderhub.overrideAttrs (old: {
+      patches = (old.patches or []) ++ [
+        ./thunderhub/local-fonts.patch
+      ];
+    });
 
     trustedcoin = pkgs.trustedcoin.overrideAttrs (old: {
       patches = (old.patches or []) ++ [

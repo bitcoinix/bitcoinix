@@ -502,6 +502,24 @@ def test_thunderhub():
 
     assert_running("thunderhub")
     wait_for_ui()
+
+    page = succeed(f"curl -fsS {url}/")
+    assert "fonts.googleapis.com" not in page and "fonts.gstatic.com" not in page
+    stylesheet = re.search(r'href="(/assets/[\w.-]+\.css)"', page)
+    assert stylesheet, "Dashboard stylesheet missing"
+    css = succeed(f"curl -fsS {url}{stylesheet[1]}")
+    for family in ("noto-sans", "jetbrains-mono"):
+        font = re.search(rf"url\((/assets/{family}-latin-wght-normal-[\w-]+\.woff2)\)", css)
+        assert font, f"Local {family} font missing"
+        assert_full_match(f"curl -fsS --range 0-3 {url}{font[1]}", "wOF2")
+
+    headers = succeed(f"curl -fsSI {url}/")
+    policy = re.search(r"(?im)^content-security-policy: *([^\r\n]+)", headers)
+    assert policy, "Dashboard Content-Security-Policy missing"
+    directives = policy[1].split(";")
+    assert "font-src 'self' data:" in directives, directives
+    assert "style-src 'self' 'unsafe-inline'" in directives, directives
+
     account_id = lnd_account_id()
     login = ("mutation($id: String!, $password: String!, $token: String) { public { "
              "get_session_token(id: $id, password: $password, token: $token) } }")

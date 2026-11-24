@@ -1,0 +1,27 @@
+diff --git a/src/client/index.html b/src/client/index.html
+index 6b90f94..619fd4a 100644
+--- a/src/client/index.html
++++ b/src/client/index.html
+@@ -8,9 +8,6 @@
+       content="Manage and monitor your lightning network node right inside your browser"
+     />
+     <link rel="icon" href="/favicon.ico" />
+-    <link rel="preconnect" href="https://fonts.googleapis.com" />
+-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+-    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans:wght@100;200;300;400;500;600;700;800;900&display=swap" rel="stylesheet" />
+     <title>ThunderHub - Lightning Node Manager</title>
+   </head>
+   <body>
+diff --git a/src/server/main.ts b/src/server/main.ts
+index 1600857..c3fd4f2 100644
+--- a/src/server/main.ts
++++ b/src/server/main.ts
+@@ -13,6 +13,8 @@ async function bootstrap() {
+       contentSecurityPolicy: {
+         directives: {
+           ...helmet.contentSecurityPolicy.getDefaultDirectives(),
++          'font-src': ["'self'", 'data:'],
++          'style-src': ["'self'", "'unsafe-inline'"],
+           'connect-src': ["'self'", 'wss://api.boltz.exchange'],
+           ...(!useHttps && { 'upgrade-insecure-requests': null }),
+         },
