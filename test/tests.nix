@@ -50,6 +50,13 @@ let
       test.data.bitcoinNetwork = cfg.bitcoind.network;
       # lnd requires bitcoind and stops with it, also when test `lnd` is off
       test.data.restart-bitcoind.lnd = cfg.lnd.enable;
+      # These stop and start with the bridge, also when their tests are off
+      test.data.netns-bridge-restart = {
+        bitcoind = cfg.bitcoind.enable;
+        lnd = cfg.lnd.enable;
+        charge-lnd = cfg.charge-lnd.enable;
+        restrict-forwarding = config.nix-bitcoin.netns-isolation.restrictForwarding;
+      };
 
       tests.i2pd = cfg.bitcoind.enable && cfg.bitcoind.i2p != false;
       # Scenarios that set `tests = mkForce { ... }` have no `tests.i2pd`
@@ -555,6 +562,7 @@ let
       imports = with scenarios; [ netnsBase regtest ];
       services.clightning.extraConfig = "clnrest-certs=${clnrestCerts}";
       test.data.clnrest-certs = clnrestCerts;
+      tests.netns-bridge-restart = true;
     };
 
     # lnd without the `walletrpc` build tag lacks the RPCs of `walletrpc.WalletKit`.

@@ -116,12 +116,61 @@ let
     networking.nftables.enable = true;
     networking.firewall.backend = "iptables";
   };
-  netnsNftablesIptablesPackage = evaluate {
+  netnsNftablesIptables = {
     services.bitcoind.enable = true;
     nix-bitcoin.netns-isolation.enable = true;
     networking.nftables.enable = true;
     networking.firewall.backend = "iptables";
     networking.firewall.package = pkgs.iptables;
+  };
+  netnsNftablesIptablesPackage = evaluate netnsNftablesIptables;
+  netnsNftablesRuleset = evaluate {
+    imports = [ netnsNftablesIptables ];
+    networking.nftables.ruleset = "table inet extra { }";
+  };
+  netnsNftablesOldStateVersion = evaluate {
+    imports = [ netnsNftablesIptables ];
+    system.stateVersion = lib.mkForce "23.05";
+  };
+  netnsNftablesTables = evaluate {
+    imports = [ netnsNftablesIptables ];
+    networking.nftables.tables.extra = { family = "inet"; content = ""; };
+  };
+  netnsNftablesTable = { family, name, module ? {} }: evaluate {
+    imports = [ netnsNftablesIptables module ];
+    networking.nftables.tables.${name} = { inherit family; content = ""; };
+  };
+  noFirewall.networking.firewall.enable = false;
+  noIPv6.networking.enableIPv6 = false;
+  noForwardRules.nix-bitcoin.netns-isolation.restrictForwarding = false;
+  noReversePath.networking.firewall.checkReversePath = false;
+  strictReversePath.networking.firewall.checkReversePath = "strict";
+  # The bridge runs iptables-nft, the host firewall iptables-legacy
+  legacyFirewallPath.systemd.services.firewall.path = lib.mkBefore [ pkgs.iptables-legacy ];
+  netnsNftablesIptablesLegacy = {
+    imports = [ netnsNftablesIptables ];
+    networking.firewall.package = lib.mkForce pkgs.iptables-legacy;
+  };
+  netnsNftablesIptablesLegacyRuleset = evaluate {
+    imports = [ netnsNftablesIptablesLegacy ];
+    networking.nftables.ruleset = "table inet extra { }";
+  };
+  netnsNftablesIptablesLegacyTable = evaluate {
+    imports = [ netnsNftablesIptablesLegacy ];
+    networking.nftables.tables.nat = { family = "ip"; content = ""; };
+  };
+  # The bridge runs iptables-legacy, the host firewall iptables-nft
+  netnsNftablesIptablesOnFirewallPathRuleset = evaluate {
+    imports = [ netnsNftablesIptablesLegacy ];
+    systemd.services.firewall.path = lib.mkBefore [ pkgs.iptables ];
+    networking.nftables.ruleset = "table inet extra { }";
+  };
+  # A wrapper around iptables-nft
+  netnsNftablesWrappedIptablesRuleset = evaluate {
+    imports = [ netnsNftablesIptables ];
+    networking.firewall.package = lib.mkForce
+      (pkgs.symlinkJoin { name = "fw-tools"; paths = [ pkgs.iptables ]; });
+    networking.nftables.ruleset = "table inet extra { }";
   };
   netnsBitcoind = {
     services.bitcoind.enable = true;
@@ -1002,6 +1051,37 @@ let
       ];
       expected = [ true false false ];
     };
+    # Before 0.2.1, a config could flush the nftables ruleset or replace a table
+    # of iptables-nft. Its saved deletions still run once after the fix.
+    testVersioningNetnsNftablesFlush = let
+      hasFlushNotice = version: hasNoticeAt version "still runs the old deletions once";
+    in {
+      expr = {
+        nftables = hasFlushNotice "0.2.0" netnsNftablesIptables;
+        nftablesDisabled = hasFlushNotice "0.2.0" netnsBitcoind;
+        iptablesLegacy = hasFlushNotice "0.2.0" netnsNftablesIptablesLegacy;
+        iptablesOnFirewallPath = hasFlushNotice "0.2.0" {
+          imports = [ netnsNftablesIptablesLegacy ];
+          systemd.services.firewall.path = lib.mkBefore [ pkgs.iptables ];
+        };
+        noNetns = hasFlushNotice "0.2.0" {
+          services.bitcoind.enable = true;
+          networking.nftables.enable = true;
+        };
+        acknowledged = hasFlushNotice "0.2.1" {
+          imports = [ netnsNftablesIptables ];
+          nix-bitcoin.versioning.releasedVersion = "0.2.1";
+        };
+      };
+      expected = {
+        nftables = true;
+        nftablesDisabled = true;
+        iptablesLegacy = false;
+        iptablesOnFirewallPath = true;
+        noNetns = false;
+        acknowledged = false;
+      };
+    };
     testHistoricalNetworkMigrationPaths = {
       expr = map (case: let
         notices = (evaluate {
@@ -1186,6 +1266,140 @@ let
     testNetnsAllowsNftablesWithIptablesPackage = {
       expr = failedAssertions netnsNftablesIptablesPackage;
       expected = [];
+    };
+    testNetnsRejectsNftablesRuleset = {
+      expr = map (lib.hasInfix "`networking.nftables.flushRuleset` deletes them")
+        (failedAssertions netnsNftablesRuleset);
+      expected = [ true ];
+    };
+    testNetnsRejectsNftablesOldStateVersion = {
+      expr = map (lib.hasInfix "`networking.nftables.flushRuleset` deletes them")
+        (failedAssertions netnsNftablesOldStateVersion);
+      expected = [ true ];
+    };
+    testNetnsAllowsNftablesTables = {
+      expr = failedAssertions netnsNftablesTables;
+      expected = [];
+    };
+    # iptables-nft keeps the bridge's NAT rule in `ip nat`, the forwarding
+    # rules in `ip filter` and the host firewall in `ip filter` and `ip6 filter`
+    testNetnsRejectsNftablesIptablesTables = {
+      expr = map (table:
+        map (lib.hasInfix "`networking.nftables.tables` replaces ${table.family} ${table.name} whenever")
+          (failedAssertions (netnsNftablesTable table))
+      ) [
+        { family = "ip"; name = "nat"; }
+        { family = "ip"; name = "filter"; }
+        { family = "ip6"; name = "filter"; }
+        { family = "ip6"; name = "nat"; }
+        { family = "inet"; name = "filter"; }
+        { family = "ip"; name = "nat"; module = noFirewall; }
+        { family = "ip6"; name = "filter"; module = noFirewall; }
+        { family = "ip6"; name = "filter"; module = noIPv6; }
+        { family = "ip"; name = "nat"; module = legacyFirewallPath; }
+      ];
+      expected = [ [ true ] [ true ] [ true ] [] [] [ true ] [] [] [ true ] ];
+    };
+    # nb-netns-forward keeps its rules in `ip filter` with the iptables of the
+    # bridge, also when the host firewall is off or runs iptables-legacy
+    testNetnsRejectsNftablesFilterTableForForwardRules = {
+      expr = map (module:
+        map (lib.hasInfix "`networking.nftables.tables` replaces ip filter whenever")
+          (failedAssertions (netnsNftablesTable { family = "ip"; name = "filter"; inherit module; }))
+      ) [
+        noFirewall
+        legacyFirewallPath
+        noForwardRules
+        { imports = [ noFirewall noForwardRules ]; }
+        { imports = [ legacyFirewallPath noForwardRules ]; }
+        { networking.firewall.package = lib.mkForce pkgs.iptables-legacy; }
+        { imports = [ noFirewall ]; networking.firewall.package = lib.mkForce pkgs.iptables-legacy; }
+      ];
+      expected = [ [ true ] [ true ] [ true ] [] [] [] [] ];
+    };
+    # The host firewall keeps its reverse path check in `ip mangle` and
+    # `ip6 mangle`, unless `checkReversePath` is false
+    testNetnsRejectsNftablesMangleTables = {
+      expr = map (table:
+        map (lib.hasInfix "`networking.nftables.tables` replaces ${table.family} ${table.name} whenever")
+          (failedAssertions (netnsNftablesTable table))
+      ) [
+        { family = "ip"; name = "mangle"; }
+        { family = "ip6"; name = "mangle"; }
+        { family = "ip"; name = "mangle"; module = strictReversePath; }
+        { family = "ip"; name = "mangle"; module.networking.firewall.checkReversePath = true; }
+        { family = "ip"; name = "mangle"; module = noReversePath; }
+        { family = "ip6"; name = "mangle"; module = noReversePath; }
+        { family = "ip6"; name = "mangle"; module = noIPv6; }
+        { family = "ip"; name = "mangle"; module = noFirewall; }
+        { family = "ip"; name = "mangle"; module = legacyFirewallPath; }
+        { family = "ip"; name = "mangle"; module.networking.firewall.package = lib.mkForce pkgs.iptables-legacy; }
+      ];
+      expected = [ [ true ] [ true ] [ true ] [ true ] [] [] [] [] [] [] ];
+    };
+    # The message gives the commands that add the deleted rules again, in
+    # their boot order. A reload replaces the rules in place.
+    testNetnsNftablesRestoresRulesAfterFlush = {
+      expr = map (config:
+        map (message: lib.head (builtins.match ".* or run (.*), since the first reload .*" message))
+          (failedAssertions config)
+      ) [
+        netnsNftablesRuleset
+        (netnsNftablesTable { family = "ip"; name = "nat"; })
+        (netnsNftablesTable { family = "ip"; name = "nat"; module = noFirewall; })
+        (netnsNftablesTable { family = "ip"; name = "nat"; module = noForwardRules; })
+        (netnsNftablesTable { family = "ip"; name = "nat"; module = { imports = [ noFirewall noForwardRules ]; }; })
+      ];
+      expected = let
+        firewall = "`systemctl reload-or-restart firewall.service`";
+        forward = "`systemctl reload-or-restart nb-netns-forward.service`";
+        bridge = "`systemctl restart nb-netns-bridge.service`";
+      in [
+        [ "${firewall}, ${forward} and ${bridge} in this order" ]
+        [ "${firewall}, ${forward} and ${bridge} in this order" ]
+        [ "${forward} and ${bridge} in this order" ]
+        [ "${firewall} and ${bridge} in this order" ]
+        [ bridge ]
+      ];
+    };
+    testNetnsAllowsNftablesRulesetWithIptablesLegacy = {
+      expr = failedAssertions netnsNftablesIptablesLegacyRuleset;
+      expected = [];
+    };
+    testNetnsAllowsNftablesIptablesTableWithIptablesLegacy = {
+      expr = failedAssertions netnsNftablesIptablesLegacyTable;
+      expected = [];
+    };
+    testNetnsRejectsNftablesRulesetWithIptablesOnFirewallPath = {
+      expr = map (lib.hasInfix "`networking.nftables.flushRuleset` deletes them")
+        (failedAssertions netnsNftablesIptablesOnFirewallPathRuleset);
+      expected = [ true ];
+    };
+    testNetnsRejectsNftablesRulesetWithWrappedIptables = {
+      expr = map (lib.hasInfix "`networking.nftables.flushRuleset` deletes them")
+        (failedAssertions netnsNftablesWrappedIptablesRuleset);
+      expected = [ true ];
+    };
+    # The bridge keeps its NAT rule in the ruleset, also when the host firewall
+    # is off or runs iptables-legacy
+    testNetnsRejectsNftablesRulesetForBridge = {
+      expr = map (module:
+        map (lib.hasInfix "`networking.nftables.flushRuleset` deletes them")
+          (failedAssertions (evaluate {
+            imports = [ netnsNftablesIptables module ];
+            networking.nftables.ruleset = "table inet extra { }";
+          }))
+      ) [
+        noFirewall
+        legacyFirewallPath
+        # A wrapper around iptables-nft
+        {
+          imports = [ legacyFirewallPath ];
+          networking.firewall.package = lib.mkForce
+            (pkgs.symlinkJoin { name = "fw-tools"; paths = [ pkgs.iptables ]; });
+        }
+      ];
+      expected = [ [ true ] [ true ] [ true ] ];
     };
     testNetnsRejectsDeclaredForwarding = {
       expr = map netnsRejectsForwarding [

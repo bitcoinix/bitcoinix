@@ -82,6 +82,14 @@ let
       default = bridgeIp;
       description = "IP of the netns bridge interface.";
     };
+
+    usesNftables = mkOption {
+      type = types.bool;
+      internal = true;
+      readOnly = true;
+      default = bridgeUsesNftables || firewallUsesNftables;
+      description = "Whether netns-isolation or the host firewall keeps iptables rules in the nftables ruleset.";
+    };
   };
 
   cfg = config.nix-bitcoin.netns-isolation;
@@ -122,24 +130,67 @@ let
 
   ip = "${pkgs.iproute2}/bin/ip";
   iptables = "${config.networking.firewall.package}/bin/iptables";
+  # `pkgs.iptables-legacy` keeps its rules in the legacy xtables, outside the
+  # nftables ruleset. Any other build, such as a renamed or wrapped one, counts
+  # as iptables-nft. The bridge runs the iptables of `networking.firewall.package`.
+  bridgeUsesNftables = "${config.networking.firewall.package}" != "${pkgs.iptables-legacy}";
+  # The host firewall, which opens ports on `nb-br`, runs the first iptables
+  # on its PATH, after only nftables' bin, which has no iptables. This is the
+  # check of the WireGuard preset.
+  firewallUsesNftables = config.networking.firewall.enable
+    && findFirst (dir: dir != "${pkgs.nftables}/bin") null
+         (splitString ":" (toString (config.systemd.services.firewall.environment.PATH or null)))
+       != "${pkgs.iptables-legacy}/bin";
+  # nb-netns-forward runs the iptables of the bridge, also when the host
+  # firewall is off or runs iptables-legacy
+  forwardUsesNftables = cfg.restrictForwarding && bridgeUsesNftables;
+  # The firewall adds its reverse path check to the mangle tables. NixOS sets
+  # `checkReversePath` to false when the kernel can't do the check.
+  firewallChecksReversePath = firewallUsesNftables
+    && config.networking.firewall.checkReversePath != false;
+  # The tables where iptables-nft keeps these rules
+  iptablesTables = optional bridgeUsesNftables "ip nat"
+    ++ optional (forwardUsesNftables || firewallUsesNftables) "ip filter"
+    ++ optional (firewallUsesNftables && config.networking.enableIPv6) "ip6 filter"
+    ++ optional firewallChecksReversePath "ip mangle"
+    ++ optional (firewallChecksReversePath && config.networking.enableIPv6) "ip6 mangle";
+  iptablesTablesInNftables = filter (table: elem table iptablesTables)
+    (mapAttrsToList (_: t: "${t.family} ${t.name}")
+      (filterAttrs (_: t: t.enable) config.networking.nftables.tables));
+  # These restore the rules after the last flush, in their boot order. A
+  # reload replaces the rules in place. A restart of the firewall or of
+  # nb-netns-forward first removes the rules that are still there.
+  restoreRules = let
+    commands = optional config.networking.firewall.enable "`systemctl reload-or-restart firewall.service`"
+      ++ optional cfg.restrictForwarding "`systemctl reload-or-restart nb-netns-forward.service`"
+      ++ [ "`systemctl restart nb-netns-bridge.service`" ];
+  in if length commands == 1 then head commands
+     else "${concatStringsSep ", " (init commands)} and ${last commands} in this order";
 
   bridgeIp = "169.254.${toString cfg.addressblock}.10";
 
   forwardChain = "nb-netns-forward";
-  # iptables-restore replaces the rules of the chain in one step, so a reload
-  # never leaves forwarded traffic unfiltered. The jump is appended, so ACCEPT
-  # rules that other tools insert at the top of FORWARD still apply.
+  # iptables-restore replaces the rules of the chain and adds a missing FORWARD
+  # jump in one step, so a reload never leaves forwarded traffic unfiltered. The
+  # jump is appended, so ACCEPT rules that other tools insert at the top of
+  # FORWARD still apply.
   # IPv4 only, like `net.ipv4.ip_forward`. The namespaces have no IPv6 addresses.
   addForwardRules = ''
-    ${iptables}-restore -w --noflush <<'EOF'
+    jumpRule=""
+    if ! ${iptables} -w -C FORWARD -j ${forwardChain} 2>/dev/null; then
+      jumpRule="-A FORWARD -j ${forwardChain}"
+    fi
+    {
+      cat <<'EOF'
     *filter
     :${forwardChain} - [0:0]
     -A ${forwardChain} -i nb-br -j ACCEPT
     -A ${forwardChain} -o nb-br -m conntrack --ctstate ESTABLISHED,RELATED --ctdir REPLY -j ACCEPT
     -A ${forwardChain} -j DROP
-    COMMIT
     EOF
-    ${iptables} -w -C FORWARD -j ${forwardChain} 2>/dev/null || ${iptables} -w -A FORWARD -j ${forwardChain}
+      [[ ! $jumpRule ]] || echo "$jumpRule"
+      echo COMMIT
+    } | ${iptables}-restore -w --noflush
   '';
   # The kernel takes any value but 0 as on
   isOn = value: !(elem value [ null false 0 "0" ]);
@@ -163,6 +214,21 @@ in {
         assertion = config.networking.firewall.backend == "iptables"
           && lib.getName config.networking.firewall.package != "nftables";
         message = "`nix-bitcoin.netns-isolation` runs its iptables rules with `networking.firewall.package`, which is the nftables package without an iptables binary when `networking.nftables` is enabled, and firewalld is not supported. Disable `networking.nftables` and `services.firewalld`, or keep `networking.firewall.backend = \"iptables\"` and set `networking.firewall.package` to a package with `bin/iptables`, so that the firewall uses the iptables backend and package.";
+      }
+      {
+        # With `flushRuleset`, every start, reload or stop of `nftables.service`
+        # runs `flush ruleset`. NixOS turns it on by default when `ruleset` or
+        # `rulesetFile` is set or `system.stateVersion` is older than 23.11.
+        assertion = !(config.networking.nftables.enable && config.networking.nftables.flushRuleset)
+                    || !(bridgeUsesNftables || firewallUsesNftables);
+        message = "`nix-bitcoin.netns-isolation` needs the NAT rule of the namespace bridge, the forwarding rules of `nb-netns-forward` and the host firewall, which iptables-nft keeps in the nftables ruleset, but `networking.nftables.flushRuleset` deletes them whenever `nftables.service` starts, reloads or stops. Without the NAT rule, the namespaces can't reach anything beyond the host. Without the forwarding rules, the host forwards traffic between all its interfaces. The flush is on by default when `networking.nftables.ruleset` or `networking.nftables.rulesetFile` is set or `system.stateVersion` is older than 23.11. Move your nftables rules to `networking.nftables.tables` and set `networking.nftables.flushRuleset = false`. After deploying, reboot once or run ${restoreRules}, since the first reload or stop still runs the old flush.";
+      }
+      {
+        # `nftables.service` deletes and recreates every table in
+        # `networking.nftables.tables`. Raw `flush` or `delete` commands in
+        # `ruleset`, `rulesetFile` or `extraDeletions` aren't checked.
+        assertion = !config.networking.nftables.enable || iptablesTablesInNftables == [];
+        message = "`nix-bitcoin.netns-isolation` needs the NAT rule of the namespace bridge, the forwarding rules of `nb-netns-forward` and the host firewall, which iptables-nft keeps in the tables `ip nat`, `ip filter`, `ip6 filter`, `ip mangle` and `ip6 mangle`, but `networking.nftables.tables` replaces ${concatStringsSep " and " (unique iptablesTablesInNftables)} whenever `nftables.service` starts or reloads, and deletes each one when `nftables.service` stops. Rename the table or use the `inet` family. After deploying, reboot once or run ${restoreRules}, since the first reload or stop still deletes the old table.";
       }
       {
         # Services with `tor.enforce` may reach the whole namespace subnet
@@ -247,6 +313,18 @@ in {
           RemainAfterExit = true;
         };
         script = ''
+          # A stop or start that failed can leave the bridge behind with its
+          # address. Delete only such a bridge, not a LAN bridge or VLAN that
+          # has the same name.
+          if [[ -e /sys/class/net/nb-br ]]; then
+            addresses=$(${ip} -o -4 addr show dev nb-br | while read -r _ _ _ address _; do echo "$address"; done)
+            if [[ -d /sys/class/net/nb-br/bridge && $addresses == "${bridgeIp}/24" ]]; then
+              ${ip} link del nb-br
+            else
+              echo "Link nb-br exists, but it isn't a bridge with only the address ${bridgeIp}/24, like the bridge that a failed stop leaves behind. So netns-isolation doesn't delete it. Rename or delete this link, then run systemctl start nb-netns-bridge.service multi-user.target, which also starts the services in the namespaces." >&2
+              exit 1
+            fi
+          fi
           ${ip} link add name nb-br type bridge
           ${ip} link set nb-br up
           ${ip} addr add ${bridgeIp}/24 brd + dev nb-br
@@ -256,8 +334,10 @@ in {
           # every namespace accepts.
           ${iptables} -w -t nat -A POSTROUTING -s 169.254.${toString cfg.addressblock}.0/24 ! -o nb-br -j MASQUERADE
         '';
+        # The rule is gone after a flush of the nftables ruleset. Delete the
+        # bridge anyway, so that the next start works.
         preStop = ''
-          ${iptables} -w -t nat -D POSTROUTING -s 169.254.${toString cfg.addressblock}.0/24 ! -o nb-br -j MASQUERADE
+          ${iptables} -w -t nat -D POSTROUTING -s 169.254.${toString cfg.addressblock}.0/24 ! -o nb-br -j MASQUERADE 2> /dev/null || true
           ${ip} link del nb-br
         '';
       };
