@@ -306,7 +306,7 @@ ssh root@<node> 'systemctl stop bitcoind'
 rsync -a /path/to/existing/bitcoind-datadir/ root@<node>:/var/lib/bitcoind
 
 # 3. Fix data dir permissions on the bitcoinix node
-ssh root@<node> 'chown -R bitcoin: /var/lib/bitcoind'
+ssh root@<node> 'chown -R bitcoin: /var/lib/bitcoind && chmod 750 /var/lib/bitcoind'
 
 # 4. Start bitcoind
 ssh root@<node> 'systemctl start bitcoind'

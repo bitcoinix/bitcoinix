@@ -84,7 +84,7 @@ def test_restart_bitcoind():
 @test("config-replace")
 def test_config_replace():
     # Services write their config at start, and the config dirs are writable by
-    # the operator (bitcoind) or the service user.
+    # the service user.
     # Test that symlinks to files and directories are replaced by regular files
     # with the expected owner and mode, without changing the symlink targets.
     units = [data["unit"] for data in test_data["config-replace"]]

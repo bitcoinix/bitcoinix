@@ -977,6 +977,15 @@ let
       ];
       expected = [ false false true true ];
     };
+    # Before 0.2.1, group bitcoin could write the bitcoind data dir
+    testVersioningBitcoindDataDir = {
+      expr = map (hasNotice "bitcoind data dir (`services.bitcoind.dataDir`) is no longer") [
+        { services.bitcoind.enable = true; }
+        { services.clightning.enable = true; }
+        { services.bitcoind.enable = false; }
+      ];
+      expected = [ true true false ];
+    };
     testHistoricalNetworkMigrationPaths = {
       expr = map (case: let
         notices = (evaluate {

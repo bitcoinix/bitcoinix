@@ -21,7 +21,7 @@ def test_bitcoind():
     succeed(f"runuser -u operator -- cat {cookie} >/dev/null")
     # Group members cannot replace it
     machine.fail(f"runuser -u operator -- mv {cookie} {cookie}.moved")
-    # No cookie is left in the group-writable data directory
+    # No cookie is left in the data directory
     assert not succeed("find /var/lib/bitcoind -name .cookie").strip()
 
     # RPC access for user 'public' should be restricted
@@ -31,6 +31,11 @@ def test_bitcoind():
     machine.wait_until_succeeds(
         log_has_string("bitcoind", "RPC User public not allowed to call method stop")
     )
+
+    # Group members read bitcoin.conf, as bitcoin-cli above shows, but they don't
+    # write the data directory
+    assert_file_metadata("/var/lib/bitcoind", owner="bitcoin", group="bitcoin", mode="750")
+    machine.fail("runuser -u operator -- touch /var/lib/bitcoind/group-write-probe")
 
 
 @test("bitcoind-group-read")
@@ -83,8 +88,8 @@ def test_bitcoind_group_read():
         # and the setup creates the regtest dir first
         succeed(f"test -d {network_dir}/wallets")
 
-    # The data dir is group-writable, so a group member can replace an entry in
-    # it with a symlink: `blocks` on mainnet, `regtest` on regtest. The setup must
+    # Older versions let group members replace an entry in the data dir with a
+    # symlink: `blocks` on mainnet, `regtest` on regtest. The setup must
     # not follow it, and not a symlink at the blocks dir either. Each symlink here
     # points to the real dir, without group access.
     for planted in [blocks] if mainnet else [network_dir, blocks]:
