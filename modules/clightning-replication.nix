@@ -139,6 +139,15 @@ let
   localDirMounts = optionalAttrs (localDir != null) {
     RequiresMountsFor = [ (unitPath localDir) ];
   };
+  # At boot, tmpfiles can run before a `nofail` mount like the one in the docs.
+  # So the unit that writes the local dir first also takes away write access of
+  # the group and others, as the clightning user, once systemd has mounted it.
+  # That also works on a share where root can't chmod. It clears the setgid bit
+  # like tmpfiles does, because `RestrictSUIDSGID` refuses a chmod that keeps it.
+  # `:` keeps systemd from expanding `$` in the path, and `-` starts the unit as
+  # before when the dir belongs to another user.
+  setsLocalDirMode = localDir != null && cfg.local.setupDirectory;
+  localDirMode = mkBefore [ "-:${pkgs.coreutils}/bin/chmod ug-s,go-w ${unitPath localDir}" ];
 in {
   inherit options;
 
@@ -168,8 +177,12 @@ in {
     programs.fuse.enable = mkIf useMounts true;
     environment.systemPackages = optionals cfg.encrypt [ pkgs.gocryptfs ];
 
+    # Only clightning writes the replica and the mount points. Like the data dir,
+    # the group can read these dirs but not write them. The rule for `mountsDir`
+    # sets its mode on a switch even while clightning-replication-mounts is stopped.
     systemd.tmpfiles.rules = optional (localDir != null && cfg.local.setupDirectory)
-      "d '${localDir}' 0770 ${user} ${group} - -";
+      "d '${localDir}' 0750 ${user} ${group} - -"
+      ++ optional useMounts "d '${mountsDir}' 0750 ${user} ${group} - -";
 
     services.clightning.wallet = let
       mainDB = "${clightning.networkDir}/lightningd.sqlite3";
@@ -179,6 +192,9 @@ in {
     systemd.services.clightning = {
       bindsTo = mkIf useMounts [ "clightning-replication-mounts.service" ];
       unitConfig = localDirMounts;
+      # With `encrypt`, clightning writes to gocryptfs, and clightning-replication-mounts
+      # writes the local dir
+      serviceConfig.ExecStartPre = mkIf (setsLocalDirMode && !cfg.encrypt) localDirMode;
       serviceConfig.ReadWritePaths = [
         # We can't simply set `destDir` here because it might point to
         # a FUSE mount.
@@ -249,8 +265,9 @@ in {
         '';
 
       serviceConfig = {
+        ExecStartPre = mkIf setsLocalDirMode localDirMode;
         CacheDirectory = "clightning-replication";
-        CacheDirectoryMode = "770";
+        CacheDirectoryMode = "750";
         User = user;
         RemainAfterExit = "yes";
         Type = "oneshot";
