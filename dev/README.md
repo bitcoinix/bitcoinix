@@ -51,6 +51,13 @@ script. Keep label names aligned with the
 Use `directories` and `names` for recursive matching that includes hidden files;
 `patterns` uses Node's `path.matchesGlob`, whose wildcards skip hidden names.
 
+Open PRs receive a size label from `size: XS` through `size: XXL` based on added
+and deleted lines. The count ignores whitespace-only changes and includes tests
+and development scenarios only when they account for all changed lines. Sizes
+refresh when a PR changes, when its target branch receives a push, and hourly.
+If the matching repository label is missing, the workflow removes stale size
+labels. The thresholds are in the [size workflow](../.github/workflows/pr-size.yml).
+
 ## Run a dev shell
 
 Run these commands inside the Linux environment selected above when using a Mac.
