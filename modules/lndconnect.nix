@@ -132,6 +132,42 @@ let
   # https://github.com/LN-Zap/lndconnect/issues/25
   lib.hiPrio (pkgs.writeScriptBin name ''
     ${shebang}
+    ${optionalString enableOnion ''
+      # Never run lndconnect without a host. It then asks public services for
+      # the node's IP over clearnet and prints a URL with that IP.
+      # lndconnect uses the last `--host`, so a host in the args replaces the
+      # onion address.
+      host=
+      prevArg=
+      for arg; do
+        # Like lndconnect, take no args after `--` as options
+        if [[ $arg == -- ]]; then
+          break
+        fi
+        if [[ $prevArg == --host || $arg == --host=* ]]; then
+          host=''${arg#--host=}
+          # lndconnect removes the double quotes around a value, so `""` is empty too
+          if [[ ! $host || $host == '""' ]]; then
+            echo "Error: --host needs a value" >&2
+            exit 1
+          fi
+        fi
+        prevArg=$arg
+      done
+      if [[ ! $host ]]; then
+        onionFile=${onionFile}
+        if ! host=$(cat "$onionFile") || [[ ! $host =~ ^[a-z2-7]{56}\.onion$ ]]; then
+          {
+            echo "Error: Can't read an onion address from $onionFile"
+            echo "Tor or the onion-addresses service may not have started yet. Check them with"
+            echo "'systemctl status tor onion-addresses'."
+            echo "Or user $(id -un) has no access to this onion address. See option"
+            echo "'nix-bitcoin.onionAddresses.access'."
+          } >&2
+          exit 1
+        fi
+      fi
+    ''}
     ${optionalString checkOwner ''
       readOwned() {
         local content
@@ -165,7 +201,7 @@ let
     ''}
     url=$(
       ${getExe config.nix-bitcoin.pkgs.lndconnect} --url \
-        ${optionalString enableOnion "--host=\"$(cat ${onionFile})\""} \
+        ${optionalString enableOnion ''--host="$host"''} \
         --port=${toString port} \
         ${certArg} \
         --adminmacaroonpath=${if checkOwner then "/dev/fd/3" else "'${authSecretPath}'"} \
