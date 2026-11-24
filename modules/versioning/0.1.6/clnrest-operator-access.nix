@@ -27,8 +27,10 @@ with lib;
   in ''
     lnconnect-clnrest now gives the operator user access to the clnrest onion
     address only when `nix-bitcoin.operator.enable` is set. The operator role is
-    disabled, so the operator user `${name}` doesn't get this access.
-    To keep it, add "clnrest" to `nix-bitcoin.onionAddresses.access.${name}`,
+    disabled, so the operator user `${name}` doesn't get this access. Root
+    doesn't need it, because root runs `lnconnect-clnrest` as user
+    `${config.services.clightning.user}`, which has its own copy. To keep it for
+    `${name}`, add "clnrest" to `nix-bitcoin.onionAddresses.access.${name}`,
     which needs `${name}` to be an enabled account in `users.users`. Or set
     `nix-bitcoin.operator.enable = true`, but only if the account is declared as
     an enabled `users.users.${name}` or doesn't exist yet, since the role

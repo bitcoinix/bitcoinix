@@ -99,14 +99,27 @@ let
     authSecretPath,
     enableOnion,
     onionService ? null,
+    # Instead of `onionService`: the name of an onion address file in the dir of
+    # the user that runs the script, see ./onion-addresses.nix
+    userOnionService ? null,
     certPath ? null,
     # Instead of `certPath`: Bash code that prints the cert path.
     # It runs only when the URL includes the cert and the args don't set
     # `--tlscertpath`.
-    getCertPathCmd ? null
+    getCertPathCmd ? null,
+    # The user that owns `authSecretPath` and the cert of `getCertPathCmd`.
+    # It can replace them with links to files that the caller can read. So when
+    # this is set, the script reads only regular files of this user and passes
+    # their content to lndconnect through file descriptors.
+    secretsOwner ? null
   }:
   let
     useCertPathCmd = getCertPathCmd != null && !enableOnion;
+    checkOwner = secretsOwner != null;
+    onionDir = config.nix-bitcoin.onionAddresses.dataDir;
+    onionFile = if userOnionService != null
+      then ''"${onionDir}/$(id -un)/${userOnionService}"''
+      else "'${onionDir}/${onionService}'";
     certArg =
       if enableOnion then "--nocert"
       # Empty when the args include `--nocert` or `--tlscertpath`
@@ -119,6 +132,21 @@ let
   # https://github.com/LN-Zap/lndconnect/issues/25
   lib.hiPrio (pkgs.writeScriptBin name ''
     ${shebang}
+    ${optionalString checkOwner ''
+      readOwned() {
+        local content
+        if [[ -f $1 ]] && content=$(
+             { [[ -f /dev/stdin && $(stat -L -c %U /dev/stdin) == ${escapeShellArg secretsOwner} ]] &&
+               head -c 65536; } < "$1"
+           ); then
+          printf '%s\n' "$content"
+        else
+          echo "Error: '$1' isn't a regular file of user ${secretsOwner}" >&2
+          return 1
+        fi
+      }
+      auth=$(readOwned '${authSecretPath}')
+    ''}
     ${optionalString useCertPathCmd ''
       certPath=
       needsCertPath=1
@@ -129,21 +157,26 @@ let
       done
       if [[ $needsCertPath ]]; then
         certPath=$(${getCertPathCmd}) || exit
+        ${optionalString checkOwner ''
+          cert=$(readOwned "$certPath")
+          certPath=/dev/fd/4
+        ''}
       fi
     ''}
     url=$(
       ${getExe config.nix-bitcoin.pkgs.lndconnect} --url \
-        ${optionalString enableOnion "--host=\"$(cat '${config.nix-bitcoin.onionAddresses.dataDir}/${onionService}')\""} \
+        ${optionalString enableOnion "--host=\"$(cat ${onionFile})\""} \
         --port=${toString port} \
         ${certArg} \
-        --adminmacaroonpath='${authSecretPath}' \
-        --configfile=/dev/null "$@"
+        --adminmacaroonpath=${if checkOwner then "/dev/fd/3" else "'${authSecretPath}'"} \
+        --configfile=/dev/null "$@" \
+        ${optionalString checkOwner ''3<<< "$auth" 4<<< "''${cert-}"''}
     )
 
     ${optionalString isClnrest
       # Change URL protocol to clnrest and replace the macaroon with a rune.
       ''
-        rune=$(cat '${authSecretPath}')
+        rune=${if checkOwner then "$auth" else "$(cat '${authSecretPath}')"}
         # Bash substitution keeps the rune out of process arguments, which
         # every local user can read through /proc/<pid>/cmdline.
         url=''${url/#lndconnect/clnrest}
@@ -165,15 +198,6 @@ let
   # operator role is enabled, so that access stays an explicit choice
   operator = config.nix-bitcoin.operator;
   operatorName = operator.name;
-  # This is also true when a config grants the access explicitly
-  operatorHasClnrestAccess =
-    elem "clnrest" (config.nix-bitcoin.onionAddresses.access.${operatorName} or []);
-  # The `users.users` attribute that defines the operator's login, which can
-  # differ from the login name. null if no enabled account has that name.
-  operatorAccount = findFirst (key:
-    let u = config.users.users.${key}; in u.name == operatorName && (u.enable or true)
-  ) null (attrNames config.users.users);
-  operatorExists = operatorAccount != null;
 in {
   inherit options;
 
@@ -220,9 +244,13 @@ in {
           environment.systemPackages = [(
             mkLndconnect {
               name = "lnconnect-clnrest";
+              # Root runs it as the clightning user, which owns the admin rune and
+              # clnrest's cert, like lndconnect runs as the lnd user
+              shebang = "#!/usr/bin/env -S ${nbLib.runAsUserIfRoot clightning.user} ${pkgs.stdenv.shell} -e";
               isClnrest = true;
+              secretsOwner = clightning.user;
               enableOnion = clnrest.lnconnect.onion;
-              onionService = "${operatorName}/clnrest";
+              userOnionService = "clnrest";
               port = clnrest.port;
               # Ask clightning for clnrest's cert dir, which `clnrest-certs` can change.
               # The query fails when clightning is down, or when the caller can't read
@@ -249,24 +277,6 @@ in {
         }
 
         (mkIf clnrest.lnconnect.onion {
-          assertions = [
-            { assertion = operatorHasClnrestAccess;
-              message = ''
-                `services.clightning.plugins.clnrest.lnconnect.onion` requires that the
-                operator user `${operatorName}` can read the clnrest onion address, because
-                `lnconnect-clnrest` reads it from that user's directory.
-                Set `nix-bitcoin.operator.enable = true`.
-              '' + (if operatorExists then ''
-                Or add "clnrest" to `nix-bitcoin.onionAddresses.access.${operatorName}`.
-                To run `lnconnect-clnrest` as `${operatorName}` instead of root, also add
-                "${clightning.group}" to `users.users.${operatorAccount}.extraGroups`. That group
-                can read the admin rune and use the clightning RPC socket.
-              '' else ''
-                Or define the user `${operatorName}` and grant the access explicitly,
-                see docs/services.md.
-              '');
-            }
-          ];
           services.tor = {
             enable = true;
             relay.onionServices.clnrest = nbLib.mkOnionService {
@@ -275,8 +285,13 @@ in {
               port = clnrest.port;
             };
           };
-          # This also allows nodeinfo to show the clnrest onion address
-          nix-bitcoin.onionAddresses.access = mkIf operator.enable { ${operatorName} = [ "clnrest" ]; };
+          # The operator's copy also allows nodeinfo to show the clnrest onion address.
+          # Two definitions, so that `operatorName == clightning.user` is not a duplicate key
+          nix-bitcoin.onionAddresses.access = mkMerge [
+            # Without clightning, its user doesn't exist
+            (mkIf clightning.enable { ${clightning.user} = [ "clnrest" ]; })
+            (mkIf operator.enable { ${operatorName} = [ "clnrest" ]; })
+          ];
         })
       ])
     )

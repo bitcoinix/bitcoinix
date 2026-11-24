@@ -1,3 +1,45 @@
+def check_bitcoin_cli_files():
+    """bitcoin-cli reads the config in the Nix store, not the copy in the data dir.
+    Root runs it as the bitcoin user, which owns the dirs of both files."""
+    conf = "/var/lib/bitcoind/bitcoin.conf"
+    cookie = "/run/bitcoind/.cookie"
+    canary = "/run/bitcoin-cli-test-canary"
+    capture = "/tmp/bitcoin-cli-test-capture"
+    listener = "bitcoin-cli-test-listener"
+    port = 18999
+    chain = test_data["bitcoind-rest"]["chain"]
+    planted = "".join([
+        f"{chain}=1\n" if chain != "main" else "",
+        f"[{chain}]\nrpcconnect=127.0.0.1\nrpcport={port}\nrpccookiefile={canary}\n",
+    ])
+    # Nothing else may listen there, or the check below would pass without the listener
+    machine.fail(f"ss -Htln 'sport = :{port}' | grep -q .")
+    succeed(
+        f"install -m 600 <(echo bitcoin-cli-test:canary) {canary}",
+        f"install -d -o operator -m 700 {capture}",
+        f"runuser -u bitcoin -- mv -T {conf} {conf}.orig",
+        f"printf %s {shlex.quote(planted)} | runuser -u bitcoin -- tee {conf} >/dev/null",
+        # Record the start of each request to the address in the planted config
+        f"systemd-run --unit={listener} --uid=operator"
+        f" $(command -v systemd-socket-activate) --listen=127.0.0.1:{port} --accept --inetd"
+        f" $(command -v dd) of={capture}/request bs=4096 count=1 status=none",
+    )
+    # Don't connect to check the port, which would record a request
+    machine.wait_until_succeeds(f"ss -Htln 'sport = :{port}' | grep -q .")
+    statuses = [machine.execute(f"{user} bitcoin-cli getnetworkinfo")[0]
+                for user in ("", "runuser -u operator --")]
+    captured = succeed(f"ls -A {capture}; cat {capture}/* 2>/dev/null || true")
+    assert captured == "", f"bitcoin-cli used the config in the data dir:\n{captured}"
+    assert statuses == [0, 0], statuses
+    succeed(f"systemctl stop {listener}", f"runuser -u bitcoin -- mv -T {conf}.orig {conf}")
+
+    # A cookie that links to a file of root
+    succeed(f"runuser -u bitcoin -- sh -c 'mv -T {cookie} {cookie}.orig && ln -s {canary} {cookie}'")
+    status, output = machine.execute("bitcoin-cli getnetworkinfo 2>&1")
+    succeed(f"runuser -u bitcoin -- mv -T {cookie}.orig {cookie}", f"rm -r {canary} {capture}")
+    assert status != 0 and "Failed to read cookie file" in output, output
+
+
 @test("bitcoind")
 def test_bitcoind():
     assert_running("bitcoind")
@@ -21,6 +63,7 @@ def test_bitcoind():
     succeed(f"runuser -u operator -- cat {cookie} >/dev/null")
     # Group members cannot replace it
     machine.fail(f"runuser -u operator -- mv {cookie} {cookie}.moved")
+    check_bitcoin_cli_files()
     # No cookie is left in the data directory
     assert not succeed("find /var/lib/bitcoind -name .cookie").strip()
 
@@ -293,6 +336,7 @@ def test_clightning():
         as_member = f"runuser -u {shlex.quote(member)} --"
         succeed(f"{as_member} lightning-cli getinfo >/dev/null")
         machine.fail(f"{as_member} touch {probe}")
+    check_lightning_cli_config(data_dir, user)
 
     enabled_plugins = test_data["clightning-plugins"]
     if enabled_plugins:
@@ -326,6 +370,20 @@ def test_clightning():
         machine.fail(f"runuser -u bitcoin -- test -r {replica_db}")
         if directory := replication["encryptedLocalDir"]:
             succeed(f"test -f {shlex.quote(directory + '/lightningd-db/gocryptfs.conf')}")
+
+
+def check_lightning_cli_config(data_dir, user):
+    """Root runs lightning-cli as the clightning user, which owns the config that
+    lightning-cli reads. So an include in that config can't open a file of root."""
+    config = f"{data_dir}/config"
+    canary = "/run/lightning-cli-test-canary"
+    succeed(
+        f"install -m 600 <(echo '# lightning-cli-test-canary') {canary}",
+        f"runuser -u {user} -- sh -c 'cp -p {config} {config}.orig && echo include {canary} >> {config}'",
+    )
+    status, output = machine.execute("lightning-cli getinfo 2>&1")
+    succeed(f"runuser -u {user} -- mv -T {config}.orig {config}", f"rm {canary}")
+    assert status != 0 and f"Opening and reading {canary}: Permission denied" in output, output
 
 
 @test("lnd")
@@ -672,6 +730,40 @@ def test_nodeinfo():
     assert_full_match("runuser -u operator -- nodeinfo --version", f'"{revision}"\n')
     assert list(succeed_json("runuser -u operator -- nodeinfo bitcoind")) == ["bitcoind"]
     machine.fail("runuser -u operator -- nodeinfo no-such-service")
+    if status == 0:
+        check_nodeinfo_onion_files(info)
+
+
+def check_nodeinfo_onion_files(info):
+    """Root runs nodeinfo too. It reads the onion addresses in the operator's dir,
+    but only from regular files that the operator owns."""
+    # (service, output field, address file)
+    fixtures = [(name, "onion_address", name) for name in info]
+    fixtures.append(("lnd", "onion_rest_address", "lnd-rest"))
+    name, field, file_name = next(
+        (fixture for fixture in fixtures
+         if isinstance(info.get(fixture[0]), dict) and info[fixture[0]].get(fixture[1])),
+        (None, None, None))
+    assert name, f"nodeinfo shows no onion address: {info}"
+    file = f"/var/lib/onion-addresses/operator/{file_name}"
+    canary = "/run/nodeinfo-test-canary"
+    assert succeed_json(f"nodeinfo {name}")[name] == info[name]
+    succeed(f"install -m 600 <(echo {'c' * 56}.onion) {canary}",
+            f"runuser -u operator -- mv -T {file} {file}.orig")
+    replacements = {
+        "symlink": f"runuser -u operator -- ln -s {canary} {file}",
+        # Like a hard link to a file of root
+        "file of root": f"cp {canary} {file}",
+        "FIFO": f"runuser -u operator -- mkfifo {file}",
+    }
+    for kind, plant in replacements.items():
+        with machine.nested(f"onion address file is a {kind}"):
+            succeed(plant)
+            # The timeout stops a read that blocks on the FIFO
+            status, output = machine.execute(f"timeout 30 nodeinfo {name}")
+            succeed(f"rm {file}")
+            assert status == 0 and json.loads(output)[name][field] is None, output
+    succeed(f"runuser -u operator -- mv -T {file}.orig {file}", f"rm {canary}")
 
 
 @test("secure-node")

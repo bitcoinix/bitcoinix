@@ -331,8 +331,13 @@ let
       cli = mkOption {
         readOnly = true;
         type = types.package;
+        # Read the config from the Nix store, not the copy in the data dir. Users other
+        # than root can write the data dir, and the copy adds only settings that
+        # bitcoin-cli doesn't use.
+        # Root runs bitcoin-cli as the bitcoin user, which owns the dir of the cookie.
         default = pkgs.writers.writeBashBin "bitcoin-cli" ''
-          exec ${bitcoind}/bin/bitcoin-cli -datadir='${cfg.dataDir}' "$@"
+          exec ${nbLib.runAsUserIfRoot cfg.user} ${bitcoind}/bin/bitcoin-cli \
+            -datadir='${cfg.dataDir}' -conf='${configFile}' "$@"
         '';
         defaultText = "(See source)";
         description = "Binary to connect with the bitcoind instance.";

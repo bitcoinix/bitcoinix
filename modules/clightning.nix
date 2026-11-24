@@ -101,8 +101,11 @@ let
     };
     cli = mkOption {
       readOnly = true;
+      # lightning-cli reads the config files in the data dir, which the clightning
+      # user owns. So root runs it as that user.
       default = pkgs.writers.writeBashBin "lightning-cli" ''
-        ${cfg.package}/bin/lightning-cli --lightning-dir='${cfg.dataDir}' "$@"
+        exec ${nbLib.runAsUserIfRoot cfg.user} ${cfg.package}/bin/lightning-cli \
+          --lightning-dir='${cfg.dataDir}' "$@"
       '';
       defaultText = "(See source)";
       description = "Binary to connect with the Core Lightning instance.";

@@ -56,6 +56,9 @@ let
 
     import argparse
     import json
+    import os
+    import pwd
+    import stat
     import subprocess
     import sys
     from collections import OrderedDict
@@ -101,10 +104,20 @@ let
 
     def get_onion_address(name, port):
         path = f"/var/lib/onion-addresses/{operator}/{name}"
+        # The operator owns this dir, and root also runs nodeinfo. So only read
+        # a regular file that the operator owns, and don't follow a symlink.
+        # O_NONBLOCK keeps a FIFO from blocking the open. An onion address with
+        # its newline has 63 bytes.
         try:
-            with open(path, "r") as f:
-                onion_address = f.read().strip()
-        except OSError:
+            fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+            try:
+                st = os.fstat(fd)
+                if not stat.S_ISREG(st.st_mode) or st.st_uid != pwd.getpwnam(operator).pw_uid:
+                    raise OSError
+                onion_address = os.read(fd, 100).decode().strip()
+            finally:
+                os.close(fd)
+        except (OSError, KeyError, UnicodeDecodeError):
             print(f"error reading file {path}", file=sys.stderr)
             return
         return f"{onion_address}:{port}"

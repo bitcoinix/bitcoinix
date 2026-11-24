@@ -5,17 +5,24 @@ let
   secretsDir = config.nix-bitcoin.secretsDir;
 in {
   systemd.services.bitcoind = {
-    # Make the local bitcoin-cli work with the remote node.
-    # Without this, bitcoin-cli would try to use the local RPC cookie for
-    # authorization, which doesn't exist.
+    # Make the local bitcoin-cli work with the remote node. bitcoin-cli takes the
+    # credentials from the RPC cookie file, see ../bitcoind.nix. No local bitcoind
+    # writes that file, so write the remote node's credentials there.
+    # A cookie file holds `<user>:<password>`.
     preStart = lib.mkAfter ''
-      printf '%s\n' ${lib.escapeShellArg "rpcuser=${cfg.rpc.users.privileged.name}"} >> '${cfg.dataDir}/bitcoin.conf'
-      echo "rpcpassword=$(cat ${secretsDir}/bitcoin-rpcpassword-privileged)" >> '${cfg.dataDir}/bitcoin.conf'
+      # An assignment fails the script when the secret is missing
+      password=$(< '${secretsDir}/bitcoin-rpcpassword-privileged')
+      install -T -m 640 <(
+        printf '%s:%s\n' ${lib.escapeShellArg cfg.rpc.users.privileged.name} "$password"
+      ) /run/bitcoind/.cookie
     '';
     serviceConfig = {
       Type = lib.mkForce "oneshot";
       ExecStart = lib.mkForce "${pkgs.coreutils}/bin/true";
       RemainAfterExit = true;
+      # Keep the cookie file when the unit stops. bitcoin-cli still works then,
+      # because the remote node keeps running.
+      RuntimeDirectoryPreserve = true;
     };
   };
 }
