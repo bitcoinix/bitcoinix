@@ -576,7 +576,9 @@ let
     netnsBase = { config, pkgs, ... }: {
       nix-bitcoin.netns-isolation.enable = true;
       test.data.netns = config.nix-bitcoin.netns-isolation.netns;
+      test.data.netns-bridge-ip = config.nix-bitcoin.netns-isolation.bridgeIp;
       tests.netns-isolation = true;
+      tests.netns-forwarding = true;
       environment.systemPackages = [ pkgs.fping ];
       # The netns-isolation test checks that the service namespaces inherit this
       boot.kernel.sysctl."net.mptcp.enabled" = "0";

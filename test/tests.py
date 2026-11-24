@@ -36,6 +36,7 @@ TEST_PHASES = (
     )),
     ("network-and-hardening", (
         "netns-isolation",
+        "netns-forwarding",
         "tor-enforce",
         "hardening-ro-paths",
     )),

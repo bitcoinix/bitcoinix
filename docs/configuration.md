@@ -276,9 +276,17 @@ and services without `tor.enforce` can reach your LAN. With it enabled:
   still rely on their own authentication.
 - Connections from your LAN are dropped, and opening ports in `networking.firewall`
   doesn't change this. Use onion services for remote access.
-- Outgoing connections leave through the host with NAT, and the host doesn't filter
-  forwarded traffic. A service without `tor.enforce` can connect to other hosts in your
-  LAN, not only to the internet.
+- Outgoing connections leave through the host with NAT. A service without `tor.enforce`
+  can connect to other hosts in your LAN, not only to the internet.
+- The host forwards only the connections that the namespaces open and their replies. It
+  drops all other forwarded IPv4 traffic, so a host in one of your networks can't reach
+  another network through the node. If the node routes for other networks, for example
+  for VMs, containers or a VPN, set `nix-bitcoin.netns-isolation.restrictForwarding = false`.
+  `networking.nat`, Docker and Tailscale with routing features turn on
+  `net.ipv4.conf.all.forwarding`, and evaluation fails with it until you do. Tools that
+  route without this setting, like libvirt, Podman or Incus, aren't detected.
+- When you disable netns-isolation, the host forwards between all its interfaces until
+  you reboot, because NixOS doesn't turn IP forwarding off again.
 - With `tor.enforce`, a namespace drops outgoing connections except to the addresses it
   accepts connections from.
 - IPv6 is disabled on the namespace interfaces.
