@@ -81,9 +81,61 @@ The module manages backend connections and signing settings. Keep secrets out of
 Preserve the entire `dataDir` (default `/var/lib/cdk-mintd`) and both secrets.
 The mint database records spent proofs and outstanding obligations: a seed alone
 cannot recover it, and an outdated database can accept already-spent ecash.
-**The mint data directory is not included in `services.backups` automatically.**
-Stop the mint before taking a consistent copy of the complete directory and
-secrets, and keep the Lightning backend's recovery data separately.
+Keep the Lightning backend's recovery data separately; a mint snapshot does not
+replace Lightning channel recovery.
+
+### Automated backups
+
+Enable `services.backups.enable = true;` to include the mint. Before each duplicity
+backup, `cdk-mintd-backup` stops the mint, archives its complete data directory,
+and copies its signing seed and, when on-chain support is enabled, BDK mnemonic.
+This includes custom `seedFile` and `onchain.mnemonicFile` paths even when
+`nix-bitcoin.generateSecrets` is off. It then restarts a previously running mint;
+an intentionally stopped mint stays stopped. Payments are unavailable during
+staging, but the mint resumes before duplicity uploads the backup.
+
+The root-only staging directory `/var/lib/cdk-mintd-backup/current` contains:
+
+- `data.tar`: the complete mint data directory, including SQLite databases and WALs.
+- `seed` and optional `bdk-mnemonic`: exact copies of the configured secrets.
+- `manifest.json`: original data and secret paths; `created-at`: snapshot time.
+
+Duplicity archives this snapshot and excludes the live mint directory and partial
+staging, even if listed in `services.backups.extraFiles`. A failed copy removes the
+old snapshot so it cannot be mistaken for a current one, restarts a previously
+running mint, and makes duplicity fail **after** backing up the other services.
+Check `journalctl -u cdk-mintd-backup -u duplicity` on failure. Do not store your own
+files in `/var/lib/cdk-mintd-backup`.
+
+### Restore a snapshot
+
+Keep the mint inaccessible to wallets throughout recovery. A consistent snapshot
+can still be too old: payments and spent proofs recorded after `created-at` are
+missing. Do not reopen a mint from an outdated snapshot without reconciling that
+missing state and its liabilities.
+
+1. Restore `var/lib/cdk-mintd-backup/current` from duplicity to a temporary,
+   root-only directory. Retain the original mint data and secrets until recovery
+   has been verified.
+2. Stop `cdk-mintd` and pause scheduled backups. Check `manifest.json` against your
+   Nix configuration. Create an **empty** data directory owned by the configured
+   mint user and group, mode `0700`.
+3. Extract `data.tar` **as the mint user**, never as root, so archived symlinks
+   cannot redirect privileged writes. For the default user and directory, stream
+   the root-only archive to the unprivileged extractor:
+
+   ```bash
+   sudo cat /path/to/restored/current/data.tar | sudo runuser -u cdk-mintd -- \
+     tar --no-same-owner -xf - -C /var/lib/cdk-mintd
+   ```
+
+4. Restore `seed` to `seedFile` and, if present, `bdk-mnemonic` to
+   `onchain.mnemonicFile`, owned by the configured mint user/group with mode
+   `0440`. Preserve their bytes. Restore the entire data archive, including the
+   BDK wallet, from the **same snapshot**, rather than mixing database versions.
+5. Start the mint while external access remains blocked. Check its journal, mint
+   keys, quotes and wallet state. Resume scheduled backups and public access only
+   after resolving any state lost since the snapshot.
 
 Restore the BDK wallet database together with its mnemonic. For last-resort
 mnemonic-only recovery, follow CDK's

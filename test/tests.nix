@@ -232,7 +232,8 @@ let
       tests.cdk-mintd = cfg.cdk-mintd.enable;
       tests.cdk-mintd-onchain = cfg.cdk-mintd.enable && cfg.cdk-mintd.onchain.enable;
       test.data.cdk-mintd = optionalAttrs cfg.cdk-mintd.enable {
-        inherit (cfg.cdk-mintd) port backend dataDir user seedFile;
+        inherit (cfg.cdk-mintd) port backend dataDir user group seedFile;
+        mnemonicFile = cfg.cdk-mintd.onchain.mnemonicFile;
         onchain = cfg.cdk-mintd.onchain.enable;
         cli = "${cfg.cdk-mintd.package}/bin/cdk-mintd --work-dir ${cfg.cdk-mintd.dataDir}";
       };
@@ -390,6 +391,7 @@ let
         });
 
       tests.backups = cfg.backups.enable;
+      tests.cdk-mintd-backup = cfg.backups.enable && cfg.cdk-mintd.enable;
       test.data.backups = {
         inherit (cfg.backups) with-bulk-data;
         bitcoindDir = cfg.bitcoind.dataDir;
@@ -707,10 +709,23 @@ let
       imports = with scenarios; [ cdk-mintd-cln netnsBase ];
     };
 
-    cdk-mintd-onchain = {
+    cdk-mintd-onchain = { config, pkgs, ... }: {
       imports = with scenarios; [ cdk-mintd-cln netnsBase ];
       services.cdk-mintd.onchain.enable = true;
       services.cdk-mintd.settings.bdk.num_confs = 1;
+      services.backups.enable = true;
+      # The general backup fixture is mainnet-only and creates its own wallet.
+      tests.backups = mkForce false;
+      # Even an extraFiles entry must not include the live mint or partial copies.
+      services.backups.extraFiles = [ config.services.cdk-mintd.dataDir "/var/lib/cdk-mintd-backup" ];
+      environment.systemPackages = [ pkgs.sqlite ];
+      # Pause copying deterministically to test starts and cancellation mid-backup.
+      systemd.services.cdk-mintd-backup.path = mkBefore [
+        (pkgs.writeShellScriptBin "tar" ''
+          while [[ -e ${config.services.cdk-mintd.dataDir}/pause-backup ]]; do sleep 0.1; done
+          exec ${pkgs.gnutar}/bin/tar "$@"
+        '')
+      ];
     };
 
     unbeholden-lnurl-lnd = { config, ... }: {

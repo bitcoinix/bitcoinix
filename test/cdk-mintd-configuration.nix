@@ -96,4 +96,50 @@ in lib.nameValuePair "testCdkMintd-${backend}-${lib.boolToString onchain}" {
       "/routerrpc.Router/TrackPaymentV2"
     ];
   };
+  testCdkMintdBackupSelection = {
+    expr = let config = mint "clightning" true {
+      services.backups = { enable = true; extraFiles = [ "/var/lib" ]; };
+      services.cdk-mintd.dataDir = "/srv/mint[1]/./data";
+    }; in lib.filter (line: lib.hasInfix "mint" line || line == "/var/lib")
+      (map lib.strings.trim (lib.splitString "\n"
+        (builtins.readFile config.services.duplicity.includeFileList)));
+    expected = [
+      "- /srv/mint[[]1]/data"
+      "/var/lib/cdk-mintd-backup/current"
+      "- /var/lib/cdk-mintd-backup"
+      "/var/lib"
+    ];
+  };
+  testCdkMintdBackupConditions = {
+    expr = map (module: let config = evaluate module; in
+      config.systemd.services ? cdk-mintd-backup) [
+        {}
+        { services.backups.enable = true; }
+        { services.cdk-mintd = { enable = true; url = "https://mint.example.org"; }; }
+      ];
+    expected = [ false false false ];
+  };
+  testCdkMintdBackupCustomSecrets = {
+    expr = let config = mint "lnd" true {
+      services.backups.enable = true;
+      services.cdk-mintd = {
+        seedFile = "/custom/seed";
+        onchain.mnemonicFile = "/custom/mnemonic";
+      };
+    }; in {
+      generated = config.nix-bitcoin.generateSecrets;
+      seed = lib.hasInfix "/custom/seed" config.systemd.services.cdk-mintd-backup.script;
+      mnemonic = lib.hasInfix "/custom/mnemonic" config.systemd.services.cdk-mintd-backup.script;
+      scheduled = lib.hasInfix "cdk-mintd-backup.service" config.systemd.services.duplicity.preStart;
+    };
+    expected = { generated = false; seed = true; mnemonic = true; scheduled = true; };
+  };
+  testCdkMintdBackupStagingOverlap = {
+    expr = map (path: lib.any (lib.hasInfix "reserved for backup staging")
+      (failedAssertions (mint "lnd" false {
+        services.backups.enable = true;
+        services.cdk-mintd.dataDir = path;
+      }))) [ "/" "/var/lib" "/var/lib/cdk-mintd-backup" "/var/lib/cdk-mintd-backup/current/../data" ];
+    expected = [ true true true true ];
+  };
 }

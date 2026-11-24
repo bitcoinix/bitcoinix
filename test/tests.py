@@ -56,6 +56,7 @@ TEST_PHASES = (
         "lnd-macaroon-revocation",
         "trustedcoin",
         "cdk-mintd-onchain",
+        "cdk-mintd-backup",
     )),
     ("secrets", (
         "setup-secrets",
