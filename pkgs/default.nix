@@ -51,7 +51,16 @@ let self = {
     thunderhub = pkgs.thunderhub.overrideAttrs (old: {
       patches = (old.patches or []) ++ [
         ./thunderhub/local-fonts.patch
+        ./thunderhub/remove-boltz-exchange.patch
       ];
+      # Nest compiles even unregistered modules into the server distribution.
+      postPatch = (old.postPatch or "") + ''
+        rm -r src/server/modules/api/boltz \
+          src/client/src/views/swap \
+          src/client/src/pages/SwapPage.tsx \
+          src/client/src/context/BoltzSwapContext.tsx \
+          src/client/src/layouts/sidebar/SidebarSwap.tsx
+      '';
     });
 
     trustedcoin = pkgs.trustedcoin.overrideAttrs (old: {

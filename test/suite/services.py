@@ -519,6 +519,7 @@ def test_thunderhub():
     directives = policy[1].split(";")
     assert "font-src 'self' data:" in directives, directives
     assert "style-src 'self' 'unsafe-inline'" in directives, directives
+    assert "connect-src 'self'" in directives, directives
 
     account_id = lnd_account_id()
     login = ("mutation($id: String!, $password: String!, $token: String) { public { "
@@ -530,6 +531,13 @@ def test_thunderhub():
     info = graphql(dashboard)
     assert "errors" not in info, info
     assert info["data"]["getNodeInfo"]["public_key"] == succeed_json("lncli getinfo")["identity_pubkey"]
+
+    # GraphQL validates skipped fields without executing them.
+    probe = shlex.quote(json.dumps({"query": "mutation { claimBoltzTransaction @skip(if: true) }"}))
+    result = succeed_json(f"curl -sS -b {jar} --json {probe} {url}/graphql")
+    assert any('Cannot query field "claimBoltzTransaction"' in error["message"]
+               for error in result.get("errors", [])), result
+
     # Offline mainnet fixtures never finish chain sync. AddInvoice needs the server active.
     if test_data.get("num_blocks"):
         wait_for_lnd_server()

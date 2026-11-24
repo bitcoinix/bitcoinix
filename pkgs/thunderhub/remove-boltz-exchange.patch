@@ -1,0 +1,188 @@
+diff --git a/src/client/src/App.tsx b/src/client/src/App.tsx
+index 2560320..343f0ab 100644
+--- a/src/client/src/App.tsx
++++ b/src/client/src/App.tsx
+@@ -41,7 +41,6 @@ import TransactionsPage from './pages/TransactionsPage';
+ import ForwardsPage from './pages/ForwardsPage';
+ import ChainPage from './pages/ChainPage';
+ import ToolsPage from './pages/ToolsPage';
+-import SwapPage from './pages/SwapPage';
+ import SettingsPage from './pages/SettingsPage';
+ import AmbossPage from './pages/AmbossPage';
+ import AssetsPage from './pages/AssetsPage';
+@@ -228,7 +227,6 @@ const AUTHENTICATED_ROUTES = (
+     <Route path="forwards" element={<ForwardsPage />} />
+     <Route path="chain" element={<ChainPage />} />
+     <Route path="tools" element={<ToolsPage />} />
+-    <Route path="swap" element={<SwapPage />} />
+     <Route path="settings" element={<SettingsPage />} />
+     <Route
+       path="settings/dashboard"
+@@ -305,7 +303,6 @@ const LEGACY_PATHS = [
+   'forwards',
+   'chain',
+   'tools',
+-  'swap',
+   'settings',
+   'settings/dashboard',
+   'amboss',
+diff --git a/src/client/src/context/ConfigContext.tsx b/src/client/src/context/ConfigContext.tsx
+index 47222f0..581ac3a 100644
+--- a/src/client/src/context/ConfigContext.tsx
++++ b/src/client/src/context/ConfigContext.tsx
+@@ -41,7 +41,6 @@ type State = {
+   theme: string;
+   sidebar: boolean;
+   rightSidebar: boolean;
+-  sidebarSwapExpanded: boolean;
+   sidebarBalancesExpanded: boolean;
+   sidebarLiquidityExpanded: boolean;
+   sidebarEventsExpanded: boolean;
+@@ -68,7 +67,6 @@ type ActionType =
+       theme?: string;
+       sidebar?: boolean;
+       rightSidebar?: boolean;
+-      sidebarSwapExpanded?: boolean;
+       sidebarBalancesExpanded?: boolean;
+       sidebarLiquidityExpanded?: boolean;
+       sidebarEventsExpanded?: boolean;
+@@ -96,7 +94,6 @@ const getInitialState = (): State => {
+     theme: themeTypes.indexOf(defT) > -1 ? defT : 'dark',
+     sidebar: true,
+     rightSidebar: true,
+-    sidebarSwapExpanded: true,
+     sidebarBalancesExpanded: true,
+     sidebarLiquidityExpanded: true,
+     sidebarEventsExpanded: true,
+diff --git a/src/client/src/context/ContextProvider.tsx b/src/client/src/context/ContextProvider.tsx
+index 43948b1..df4f3c1 100644
+--- a/src/client/src/context/ContextProvider.tsx
++++ b/src/client/src/context/ContextProvider.tsx
+@@ -2,14 +2,11 @@ import { FC, ReactNode } from 'react';
+ import { PriceProvider } from './PriceContext';
+ import { DashProvider } from './DashContext';
+ import { NotificationProvider } from './NotificationContext';
+-import { BoltzSwapProvider } from './BoltzSwapContext';
+
+ export const ContextProvider: FC<{ children?: ReactNode }> = ({ children }) => (
+   <NotificationProvider>
+     <DashProvider>
+-      <PriceProvider>
+-        <BoltzSwapProvider>{children}</BoltzSwapProvider>
+-      </PriceProvider>
++      <PriceProvider>{children}</PriceProvider>
+     </DashProvider>
+   </NotificationProvider>
+ );
+diff --git a/src/client/src/layouts/navigation/Navigation.tsx b/src/client/src/layouts/navigation/Navigation.tsx
+index b78459f..0551d58 100644
+--- a/src/client/src/layouts/navigation/Navigation.tsx
++++ b/src/client/src/layouts/navigation/Navigation.tsx
+@@ -8,7 +8,6 @@ import {
+   GitPullRequest,
+   Link as LinkIcon,
+   Users,
+-  Shuffle,
+   Grid,
+   Globe,
+   Gem,
+@@ -70,7 +69,6 @@ const FORWARDS = '/forwards';
+ const CHAIN_TRANS = '/chain';
+ const TOOLS = '/tools';
+ const SETTINGS = '/settings';
+-const SWAP = '/swap';
+ const AMBOSS = '/amboss';
+ const ASSETS = '/assets';
+ const ASSET_CHANNELS = '/asset-channels';
+@@ -132,11 +130,6 @@ const ASSETS_SETUP_SECTION: NavSection = {
+   items: [{ title: 'Setup', href: LITD_SETUP_DOCS_URL, icon: Gem }],
+ };
+
+-const TOOLS_SECTION: NavSection = {
+-  title: 'Tools',
+-  items: [{ title: 'Swap', link: SWAP, icon: Shuffle }],
+-};
+-
+ export const Navigation = ({ isBurger, setOpen }: NavigationProps) => {
+   const nodePath = useNodePath();
+   const { sidebar } = useConfigState();
+@@ -146,7 +139,6 @@ export const Navigation = ({ isBurger, setOpen }: NavigationProps) => {
+   const sections: NavSection[] = [
+     AMBOSS_SECTION,
+     tapdAvailable ? ASSETS_SECTION : ASSETS_SETUP_SECTION,
+-    TOOLS_SECTION,
+   ];
+
+   const renderNavButton = (item: NavItem, open = true) => {
+diff --git a/src/client/src/layouts/sidebar/RightSidebar.tsx b/src/client/src/layouts/sidebar/RightSidebar.tsx
+index 51717f8..74508f9 100644
+--- a/src/client/src/layouts/sidebar/RightSidebar.tsx
++++ b/src/client/src/layouts/sidebar/RightSidebar.tsx
+@@ -1,6 +1,5 @@
+ import { useConfigState } from '../../context/ConfigContext';
+ import { BalancesContent } from './BalancesContent';
+-import { SidebarSwap } from './SidebarSwap';
+ import { EventLog } from './EventLog';
+
+ export const RightSidebar = () => {
+@@ -13,7 +12,6 @@ export const RightSidebar = () => {
+       <div className="sticky top-19.25 flex flex-col max-h-[calc(100vh-77px)]">
+         <div className="w-[320px] shrink-0">
+           <BalancesContent />
+-          <SidebarSwap />
+         </div>
+         <div className="flex-1 min-h-0 w-[320px] flex flex-col">
+           <EventLog />
+diff --git a/src/server/config/configuration.ts b/src/server/config/configuration.ts
+index 946a007..0ac2195 100644
+--- a/src/server/config/configuration.ts
++++ b/src/server/config/configuration.ts
+@@ -27,7 +27,6 @@ type Urls = {
+   ticker: string;
+   fees: string;
+   blockHeight: string;
+-  boltz: string;
+   github: string;
+ };
+
+@@ -163,7 +162,6 @@ export default (): ConfigType => {
+     blockHeight: `${mempool}/api/blocks/tip/height`,
+     ticker: 'https://blockchain.info/ticker',
+     github: 'https://api.github.com/repos/apotdevin/thunderhub/releases/latest',
+-    boltz: 'https://api.boltz.exchange',
+   };
+
+   const npmVersion = getPackageVersion();
+diff --git a/src/server/main.ts b/src/server/main.ts
+index c3fd4f2..ea28d85 100644
+--- a/src/server/main.ts
++++ b/src/server/main.ts
+@@ -15,7 +15,7 @@ async function bootstrap() {
+           ...helmet.contentSecurityPolicy.getDefaultDirectives(),
+           'font-src': ["'self'", 'data:'],
+           'style-src': ["'self'", "'unsafe-inline'"],
+-          'connect-src': ["'self'", 'wss://api.boltz.exchange'],
++          'connect-src': ["'self'"],
+           ...(!useHttps && { 'upgrade-insecure-requests': null }),
+         },
+       },
+diff --git a/src/server/modules/api/api.module.ts b/src/server/modules/api/api.module.ts
+index 24dcbee..9de11bf 100644
+--- a/src/server/modules/api/api.module.ts
++++ b/src/server/modules/api/api.module.ts
+@@ -19,7 +19,6 @@ import { ChannelsModule } from './channels/channels.module';
+ import { ForwardsModule } from './forwards/forwards.module';
+ import { TransactionsModule } from './transactions/transactions.module';
+ import { InvoicesModule } from './invoices/invoices.module';
+-import { BoltzModule } from './boltz/boltz.module';
+ import { UserConfigModule } from './userConfig/userConfig.module';
+ import { TapdApiModule } from './tapd/tapd.module';
+ import { MagmaModule } from './magma/magma.module';
+@@ -49,7 +48,6 @@ import { PublicModule } from './public/public.module';
+     ForwardsModule,
+     TransactionsModule,
+     InvoicesModule,
+-    BoltzModule,
+     TapdApiModule,
+     MagmaModule,
+     TradeModule,

@@ -380,7 +380,8 @@ the `DeriveSharedKey` RPC used for LNURL-auth. The configured backend is LND.
 ThunderHub's Taproot Assets features require Lightning Terminal (`litd`).
 [Custom macaroons](#custom-macaroons)
 
-ThunderHub serves its dashboard fonts from the node.
+ThunderHub serves its dashboard fonts from the node. The bitcoinix package
+omits Boltz swaps, including recovery of previously saved swaps.
 By default the service can only reach local addresses. Features requiring an
 external server, such as fiat price lookups, require network access.
 `services.thunderhub.tor.enforce = false;` lifts the service's local IP restriction.
