@@ -3,34 +3,69 @@ name: PR size
 on:
   pull_request_target:
     types: [opened, reopened, synchronize, edited, ready_for_review, converted_to_draft]
-
-permissions:
-  contents: read
-  pull-requests: write
-
-concurrency:
-  group: pr-size-${{ github.event.pull_request.number }}
-  cancel-in-progress: true
+  push:
+    branches: ['**']
+  schedule:
+    - cron: '43 * * * *'
 
 jobs:
-  label:
+  select:
+    if: >-
+      github.event.pull_request.state == 'open' || github.event_name == 'schedule' ||
+      (github.event_name == 'push' && !github.event.deleted)
     runs-on: ubuntu-latest
+    permissions:
+      pull-requests: read
+    outputs:
+      prs: ${{ steps.open.outputs.result }}
+    steps:
+      - name: Select open PRs
+        id: open
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            if (context.eventName === 'pull_request_target') return [context.payload.number];
+            const params = {...context.repo, state: 'open', per_page: 100};
+            if (context.eventName === 'push') params.base = process.env.GITHUB_REF_NAME;
+            const prs = await github.paginate(github.rest.pulls.list, params);
+            return prs.map(pr => pr.number);
+
+  label:
+    needs: select
+    if: needs.select.outputs.prs != '[]'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    strategy:
+      fail-fast: false
+      matrix:
+        pr: ${{ fromJSON(needs.select.outputs.prs) }}
+    concurrency:
+      group: pr-size-${{ matrix.pr }}
+      cancel-in-progress: false
+    env:
+      PR_NUMBER: ${{ matrix.pr }}
     steps:
       - name: Fetch PR history
+        id: fetch
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-          BASE_REF: ${{ github.event.pull_request.base.ref }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
+          # A queued PR may have been closed or retargeted since selection.
+          base_ref=$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER" --jq 'select(.state == "open") | .base.ref')
+          if [[ -z $base_ref ]]; then exit 0; fi
           # A bare repository keeps fork PR contents out of the runner's working tree.
           git init --bare --quiet .
           git -c credential.helper='!gh auth git-credential' fetch --quiet --no-tags \
             "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY.git" \
-            "refs/heads/$BASE_REF:refs/pr-size/base" "refs/pull/$PR_NUMBER/head:refs/pr-size/head"
+            "refs/heads/$base_ref:refs/pr-size/base" "refs/pull/$PR_NUMBER/head:refs/pr-size/head"
+          echo "base_ref=$base_ref" >> "$GITHUB_OUTPUT"
 
       - name: Count changed lines
         id: diff
+        if: steps.fetch.outputs.base_ref != ''
         shell: python
         run: |
           import os
@@ -62,9 +97,11 @@ jobs:
               print(f"head={head}", file=output)
 
       - name: Apply size label
+        if: steps.diff.outputs.head != ''
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
           CHANGED_LINES: ${{ steps.diff.outputs.lines }}
+          SIZED_BASE_REF: ${{ steps.fetch.outputs.base_ref }}
           SIZED_HEAD: ${{ steps.diff.outputs.head }}
         with:
           script: |
@@ -78,10 +115,10 @@ jobs:
             ]);
             const lines = Number(process.env.CHANGED_LINES);
             const [target] = [...sizes].find(([, minimum]) => lines >= minimum);
-            const number = context.issue.number;
+            const number = Number(process.env.PR_NUMBER);
             const {data: pr} = await github.rest.pulls.get({...context.repo, pull_number: number});
             if (pr.state !== 'open' || pr.head.sha !== process.env.SIZED_HEAD ||
-                pr.base.ref !== context.payload.pull_request.base.ref) {
+                pr.base.ref !== process.env.SIZED_BASE_REF) {
               core.info('The PR changed while its diff was being measured.');
               return;
             }
@@ -89,14 +126,15 @@ jobs:
             core.info(`PR #${number}: ${lines} effective changed lines, ${target}`);
             const issue = {...context.repo, issue_number: number};
             if (!pr.labels.some(label => label.name === target)) {
+              let targetExists = true;
               try {
                 await github.rest.issues.getLabel({...context.repo, name: target});
               } catch (error) {
                 if (error.status !== 404) throw error;
                 core.notice(`Create ${target} in the repository to enable it on pull requests.`);
-                return;
+                targetExists = false;
               }
-              await github.rest.issues.addLabels({...issue, labels: [target]});
+              if (targetExists) await github.rest.issues.addLabels({...issue, labels: [target]});
             }
             for (const {name} of pr.labels) {
               if (name === target || !sizes.has(name)) continue;
