@@ -95,6 +95,10 @@
     "channel": "unstable",
     "version": "0.15.17"
   },
+  "thunderhub": {
+    "channel": "unstable",
+    "version": "0.19.1"
+  },
   "trustedcoin": {
     "channel": "unstable",
     "version": "0.8.7"

@@ -125,6 +125,11 @@
   #
   # You can enable both nodes simultaneously.
 
+  ### THUNDERHUB
+  # Enable ThunderHub and its local LND backend.
+  # services.thunderhub.enable = true;
+  # For SSH and Tor access, see ../docs/services.md#connect-to-thunderhub.
+
   ### MEMPOOL
   # Set this to enable mempool, a fully featured Bitcoin visualizer, explorer,
   # and API service.

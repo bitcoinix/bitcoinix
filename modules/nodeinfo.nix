@@ -41,7 +41,7 @@ let
 
   # The packages whose version nodeinfo shows for each service
   servicePackages = {
-    inherit (nbPkgs) bitcoind electrs fulcrum rtl;
+    inherit (nbPkgs) bitcoind electrs fulcrum rtl thunderhub;
     clightning = config.services.clightning.package;
     lnd = config.services.lnd.package;
     btcpayserver = config.services.btcpayserver.package;
@@ -199,6 +199,7 @@ in {
       fulcrum = mkInfo "";
       btcpayserver = mkInfo "";
       rtl = mkInfo "";
+      thunderhub = mkInfo "";
       mempool = mkInfo "";
       mempool-frontend = name: cfg: mkInfoLong {
         inherit name cfg;

@@ -23,7 +23,7 @@ The revision is baked into the `nodeinfo` script, so every bitcoinix update prod
 new system generation and boot entry, even when no package changed; no service restarts.
 Set `nix-bitcoin.revision = null;` to opt out.
 
-The entries of bitcoind, clightning, lnd, electrs, fulcrum, btcpayserver, rtl and mempool
+The entries of bitcoind, clightning, lnd, electrs, fulcrum, btcpayserver, rtl, thunderhub and mempool
 include the `version` of the package the service runs.
 
 Without arguments `nodeinfo` prints all entries. Arguments change that:
@@ -139,6 +139,7 @@ for the options.
 The backup includes the data directories of bitcoind, lnd, Core Lightning, NBXplorer
 and BTCPay Server, dumps of the BTCPay Server databases, `/var/lib/tor`,
 `/var/lib/nixos` and, with `nix-bitcoin.generateSecrets`, the secrets directory.
+When ThunderHub is enabled, the backup also includes its account settings and two-factor enrollment.
 It leaves out the mainnet, signet and testnet4 blockchains and their indexes
 unless `with-bulk-data` is set. This also covers networks previously used on the node.
 
@@ -342,6 +343,45 @@ Two-factor authentication that you set up in RTL stays on across restarts. If yo
 lose the authenticator, delete `RTL-Config.json` in RTL's data dir
 (`/var/lib/rtl` by default) and restart RTL. bitcoinix then writes a new one
 without the 2FA secret.
+
+### Connect to ThunderHub
+
+Enable the dashboard and its local LND backend in your node configuration.
+
+```nix
+services.thunderhub.enable = true;
+```
+
+Forward the HTTP port over SSH and open `http://127.0.0.1:3001` in your browser.
+With network namespace isolation, replace the remote `127.0.0.1:3001` in the
+command with the address from `nodeinfo thunderhub | jq -r .thunderhub.local_address`
+(default `169.254.1.35:3001`).
+
+```shell
+ssh -N -L 127.0.0.1:3001:127.0.0.1:3001 operator@bitcoin-node
+```
+
+Without namespace isolation, systemd keeps the HTTP port reserved while ThunderHub is stopped.
+The `secure-node.nix` and `enable-tor.nix` presets publish an onion service.
+You can also enable it separately with `nix-bitcoin.onionServices.thunderhub.enable = true;`.
+Open the address from `nodeinfo thunderhub | jq -r .thunderhub.onion_address` in Tor Browser.
+
+Select **LND** and log in with the password in `$secretsDir/thunderhub-password`.
+When supplying secrets manually, create this file with owner `root:root` and mode
+`0400`. Restart `thunderhub.service` after changing the password. You can enroll
+a second factor in the dashboard. ThunderHub saves the enrollment in `accounts.yaml`
+under `services.thunderhub.dataDir`. [Secrets directory](./configuration.md#secrets-dir)
+
+ThunderHub verifies LND's TLS certificate and uses its own revocable macaroon.
+**A dashboard login can spend funds**, including sending on-chain payments and
+opening or closing channels. LND denies macaroon administration and signer RPCs,
+including the one used for LNURL-auth. The configured backend is LND. ThunderHub's
+Taproot Assets features require Lightning Terminal (`litd`).
+[Custom macaroons](#custom-macaroons)
+
+By default the service can only reach local addresses. Features requiring an
+external server, such as fiat price lookups, require network access.
+`services.thunderhub.tor.enforce = false;` lifts the service's local IP restriction.
 
 ### Connect to BTCPay Server
 
@@ -848,7 +888,7 @@ local user and service can then use the Trezor through it.
 
 `services.lnd.macaroons.<name>` gives a service its own macaroon with only the
 permissions it needs. Each time lnd starts, bitcoinix creates the macaroon at
-`/run/lnd/<name>.macaroon`, readable only by `user`. BTCPay Server, charge-lnd, RTL and
+`/run/lnd/<name>.macaroon`, readable only by `user`. BTCPay Server, charge-lnd, RTL, ThunderHub and
 Unbeholden LNURL on lnd get their macaroons this way.
 
 ```nix
@@ -902,7 +942,7 @@ if the macaroon has optional permissions, also add `config.services.lnd.package`
 the triggers.
 
 BTCPay Server reads its macaroon for each request to lnd, and charge-lnd for each
-run. RTL copies its macaroon when it starts, and it restarts with lnd.
+run. RTL and ThunderHub read their macaroons at startup and restart with lnd.
 
 #### Revoke a macaroon
 
@@ -938,9 +978,9 @@ the root keys are in that database instead. Run as root:
    Then stop lnd and the units that can start it, so that none starts lnd during the
    next step: `charge-lnd.timer` and the services that require or want lnd.
    `systemctl list-dependencies --reverse lnd.service` lists them. For example,
-   with charge-lnd, BTCPay Server and RTL (leave out the ones your node doesn't have):
+   with charge-lnd, BTCPay Server, RTL and ThunderHub (leave out the ones your node doesn't have):
    ```
-   systemctl stop charge-lnd.timer charge-lnd btcpayserver rtl lnd
+   systemctl stop charge-lnd.timer charge-lnd btcpayserver rtl thunderhub lnd
    ```
 2. Delete the files as the lnd user, here for the default mainnet dir:
    ```
@@ -959,8 +999,7 @@ the root keys are in that database instead. Run as root:
    again, then steps 2 and 3, and keep the old copy.
    Then delete the copy: `runuser -u lnd -- rm /var/lib/lnd/old-admin.macaroon`.
 4. Start the units that you stopped, for example
-   `systemctl start charge-lnd.timer btcpayserver rtl`. RTL copies its macaroon
-   when it starts.
+   `systemctl start charge-lnd.timer btcpayserver rtl thunderhub`.
 
 lnd creates new root keys and new default macaroons, and bitcoinix creates new
 custom macaroons. All earlier macaroons stop working. Then:

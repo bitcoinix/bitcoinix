@@ -49,6 +49,7 @@ jq -r '
     "mempool-rust-gbt": gh("mempool/mempool"; "v"),
     "nbxplorer": gh("btcpayserver/NBXplorer"; "v"),
     "rtl": gh("Ride-The-Lightning/RTL"; "v"),
+    "thunderhub": gh("apotdevin/thunderhub"; "v"),
     "trustedcoin": gh("nbd-wtf/trustedcoin"; "v"),
     "unbeholden-lnurl": gh("unbeholdendev/unbeholden-lnurl"; "v"),
     "unbeholden-wallet": gh("unbeholdendev/unbeholden-wallet"; "v")

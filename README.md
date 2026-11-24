@@ -129,6 +129,7 @@ NixOS modules ([src](modules/modules.nix))
     Core Lightning [via WireGuard](./docs/services.md#use-zeus-mobile-lightning-wallet-via-wireguard) or
     [Tor](./docs/services.md#use-zeus-mobile-lightning-wallet-via-tor)
   * [Ride The Lightning (RTL)](https://github.com/Ride-The-Lightning/RTL): web interface for LND and Core Lightning
+  * [ThunderHub](https://thunderhub.io): web interface for LND
   * [mempool](https://github.com/mempool/mempool): Bitcoin visualizer, explorer, and API service
   * [Unbeholden LNURL](https://github.com/unbeholdendev/unbeholden-lnurl): Lightning Addresses, vouchers, notifications and Nostr zaps for LND or Core Lightning
   * [Unbeholden Wallet](https://github.com/unbeholdendev/unbeholden-wallet): watch-only wallet in the browser that signs on an air-gapped device

@@ -321,6 +321,10 @@ in {
           optional nodes.lnd.enable "lnd" ++
           optional nodes.clightning.enable "clightning";
       };
+      thunderhub = {
+        id = 35;
+        connections = [ "lnd" ];
+      };
       fulcrum = {
         id = 31;
         connections = [ "bitcoind" ];
@@ -372,6 +376,7 @@ in {
     services.btcpayserver.address = netns.btcpayserver.address;
 
     services.rtl.address = netns.rtl.address;
+    services.thunderhub.address = netns.thunderhub.address;
 
     services.mempool.address = netns.mempool.address;
     services.mempool.frontend.address = netns.nginx.address;

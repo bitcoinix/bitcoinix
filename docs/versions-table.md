@@ -26,6 +26,7 @@
 | `mempool-rust-gbt` | [3.3.2](https://github.com/mempool/mempool/releases/tag/v3.3.2) | local |
 | `nbxplorer` | [2.6.17](https://github.com/btcpayserver/NBXplorer/releases/tag/v2.6.17) | unstable |
 | `rtl` | [0.15.17](https://github.com/Ride-The-Lightning/RTL/releases/tag/v0.15.17) | unstable |
+| `thunderhub` | [0.19.1](https://github.com/apotdevin/thunderhub/releases/tag/v0.19.1) | unstable |
 | `trustedcoin` | [0.8.7](https://github.com/nbd-wtf/trustedcoin/releases/tag/v0.8.7) | unstable |
 | `unbeholden-lnurl` | [0.4.0](https://github.com/unbeholdendev/unbeholden-lnurl/releases/tag/v0.4.0) | local |
 | `unbeholden-wallet` | [0.4.0](https://github.com/unbeholdendev/unbeholden-wallet/releases/tag/v0.4.0) | local |

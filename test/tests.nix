@@ -36,6 +36,7 @@ let
         (mkIfTest "charge-lnd" [ curl xxd ])
         # Compare the certificate in a connection URL with the live TLS certificate
         (mkIfTest "lnconnect-clnrest-cert" [ openssl ])
+        (mkIfTest "thunderhub" [ curl oath-toolkit ])
         # Creates the cert of a fake RTL backend
         (mkIfTest "rtl-backend-certs" [ openssl ])
         # Calls lnd, clnrest and RTL's API with RTL's credentials
@@ -157,7 +158,7 @@ let
           ++ optional cfg.unbeholden-wallet.enable "unbeholden-wallet"
           ++ optional (cfg.btcpayserver.enable && cfg.nbxplorer.tor.enforce) "nbxplorer"
           ++ filter (service: cfg.${service}.enable && cfg.${service}.tor.enforce) [
-            "bitcoind" "btcpayserver" "clightning" "electrs" "fulcrum" "lnd" "mempool" "rtl" "unbeholden-lnurl"
+            "bitcoind" "btcpayserver" "clightning" "electrs" "fulcrum" "lnd" "mempool" "rtl" "thunderhub" "unbeholden-lnurl"
           ];
         # The complete allow list of each restricted unit
         allow = [ "127.0.0.1/32" "::1/128" ]
@@ -172,6 +173,13 @@ let
           IPAddressDeny = "any";
           ExecStart = "${pkgs.coreutils}/bin/sleep infinity";
         };
+      };
+
+      tests.thunderhub = cfg.thunderhub.enable;
+      test.data.thunderhub = optionalAttrs (config.tests.thunderhub or false) {
+        inherit (cfg.thunderhub) address port user dataDir;
+        lncli = "${cfg.lnd.package}/bin/lncli";
+        inherit (cfg.lnd) networkDir;
       };
 
       tests.rtl = cfg.rtl.enable;
@@ -362,7 +370,7 @@ let
       # The version of the package each enabled service runs
       test.data.nodeinfo-versions = mapAttrs (_: pkg: pkg.version)
         (filterAttrs (name: _: cfg.${name}.enable) {
-          inherit (config.nix-bitcoin.pkgs) bitcoind electrs fulcrum rtl;
+          inherit (config.nix-bitcoin.pkgs) bitcoind electrs fulcrum rtl thunderhub;
           clightning = cfg.clightning.package;
           lnd = cfg.lnd.package;
           btcpayserver = cfg.btcpayserver.package;
@@ -480,6 +488,7 @@ let
       };
       test.features.clightningPlugins = true;
       services.rtl.enable = true;
+      services.thunderhub.enable = true;
       services.lnd.enable = true;
       services.lnd.lndconnect = { enable = true; onion = true; };
       services.charge-lnd.enable = true;
@@ -530,6 +539,7 @@ let
       };
       test.features.clightningPlugins = true;
       services.rtl.enable = true;
+      services.thunderhub.enable = true;
       services.mempool.enable = true;
       services.unbeholden-wallet.enable = true;
       services.unbeholden-wallet.electrumServer = "fulcrum";

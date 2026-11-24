@@ -22,6 +22,7 @@ TEST_PHASES = (
         "lndconnect-local-bind",
         "charge-lnd",
         "btcpayserver",
+        "thunderhub",
         "rtl",
         "rtl-credentials",
         "rtl-backend-certs",

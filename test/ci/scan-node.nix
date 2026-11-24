@@ -4,7 +4,7 @@
 #
 # CVE-scan target (test/ci/cve.py): vulnix scans this system's RUNTIME
 # closure, the software a user actually runs (bitcoind, clightning, lnd,
-# electrs, fulcrum, btcpayserver, nbxplorer, mempool, rtl, kernel, systemd,
+# electrs, fulcrum, btcpayserver, nbxplorer, mempool, rtl, thunderhub, kernel, systemd,
 # openssl, ...), NOT build-time dependencies like compilers, which are what a
 # test-derivation closure drags in and are irrelevant to a deployed node.
 #
@@ -56,6 +56,7 @@ in
       services.btcpayserver.lightningBackend = "lnd";
       services.mempool.enable = true;
       services.unbeholden-wallet.enable = true;
+      services.thunderhub.enable = true;
       services.rtl.enable = true;
       # RTL asserts that at least one node interface is enabled
       services.rtl.nodes.clightning.enable = true;

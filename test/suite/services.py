@@ -472,6 +472,94 @@ def test_btcpayserver():
     )
 
 
+@test("thunderhub")
+def test_thunderhub():
+    data = test_data["thunderhub"]
+    host = data["address"]
+    if ":" in host:
+        host = f"[{host}]"
+    url = f"http://{host}:{data['port']}"
+    jar = "/run/thunderhub-test.cookies"
+
+    def wait_for_ui():
+        machine.wait_until_succeeds(f"curl -fsS {url}/ | grep -F '<title>ThunderHub'")
+
+    def graphql(query, variables=None, use_password=False):
+        body = shlex.quote(json.dumps({"query": query, "variables": variables or {}}))
+        # Feed the generated password to curl on stdin, including on login failures.
+        request = f"printf %s {body}"
+        if use_password:
+            request += """ | jq --rawfile pw /secrets/thunderhub-password '.variables.password = ($pw | rtrimstr("\\n"))'"""
+        return succeed_json(
+            f"umask 077; {request} | curl -fsS --max-time 30 -b {jar} -c {jar} --json @- {url}/graphql"
+        )
+
+    def lnd_account_id():
+        public = graphql("{ public { get_server_accounts { id name } } }")["data"]["public"]
+        accounts = public["get_server_accounts"]
+        assert [a["name"] for a in accounts] == ["LND"], accounts
+        return accounts[0]["id"]
+
+    assert_running("thunderhub")
+    wait_for_ui()
+    account_id = lnd_account_id()
+    login = ("mutation($id: String!, $password: String!, $token: String) { public { "
+             "get_session_token(id: $id, password: $password, token: $token) } }")
+    dashboard = "{ getNodeInfo { public_key } getNodeBalances { onchain { confirmed } lightning { confirmed } } }"
+    assert "errors" in graphql(dashboard)
+    assert "errors" in graphql(login, {"id": account_id, "password": "incorrect"})
+    assert graphql(login, {"id": account_id}, use_password=True)["data"]["public"]["get_session_token"]
+    info = graphql(dashboard)
+    assert "errors" not in info, info
+    assert info["data"]["getNodeInfo"]["public_key"] == succeed_json("lncli getinfo")["identity_pubkey"]
+    # Offline mainnet fixtures never finish chain sync. AddInvoice needs the server active.
+    if test_data.get("num_blocks"):
+        wait_for_lnd_server()
+        assert graphql("mutation { createInvoice(amount: 10) { request } }")["data"]["createInvoice"]["request"]
+
+    # This authenticated call needs macaroon administration privileges.
+    denied = graphql("{ lightning { get_access_ids { ids } } }")
+    assert "permission" in denied["errors"][0]["message"].lower(), denied
+    macaroon = "/run/lnd/thunderhub.macaroon"
+    assert_file_metadata(macaroon, owner=data["user"], mode="400")
+    machine.fail(f"runuser -u {data['user']} -- test -r {data['networkDir']}/admin.macaroon")
+    permissions = succeed_json(
+        f"runuser -u {data['user']} -- {data['lncli']} printmacaroon --macaroon_file {macaroon}"
+    )["permissions"]
+    assert all(p.startswith("uri:") for p in permissions), permissions
+    assert not any(p.endswith(("/BakeMacaroon", "/DeletePayment", "/DeleteAllPayments"))
+                   or "/signrpc." in p for p in permissions), permissions
+
+    # Enroll through the UI's API. A restart must reload the same second factor.
+    secret = graphql("{ getTwofaSecret { secret } }")["data"]["getTwofaSecret"]["secret"]
+
+    def totp():
+        return succeed(f"oathtool --totp -b - <<< {shlex.quote(secret)}").strip()
+
+    enroll = "mutation($s: String!, $t: String!) { updateTwofaSecret(secret: $s, token: $t) }"
+    assert graphql(enroll, {"s": secret, "t": totp()})["data"]["updateTwofaSecret"]
+    assert_file_metadata(f"{data['dataDir']}/accounts.yaml", owner=data["user"], mode="600")
+    # Give only the dashboard the system CA bundle in place of LND's
+    # self-signed certificate. Valid login credentials must now fail at LND.
+    drop_in = "/run/systemd/system/thunderhub.service.d/test-cert.conf"
+    succeed("mkdir -p /run/systemd/system/thunderhub.service.d",
+            "printf '%s\\n' '[Service]' 'LoadCredential=' 'LoadCredential=password:/secrets/thunderhub-password' "
+            f"'LoadCredential=lnd-cert:/etc/ssl/certs/ca-certificates.crt' > {drop_in}",
+            "systemctl daemon-reload", "systemctl restart thunderhub")
+    wait_for_ui()
+    # ThunderHub includes the certificate in the account ID.
+    denied = graphql(login, {"id": lnd_account_id(), "token": totp()}, use_password=True)
+    assert denied["errors"][0]["message"] == "UnableToConnectToThisNode", denied
+    succeed(f"rm {drop_in}", "systemctl daemon-reload", "systemctl restart thunderhub")
+    wait_for_ui()
+    assert "errors" in graphql(login, {"id": account_id}, use_password=True)
+    result = graphql(login, {"id": account_id, "token": totp()}, use_password=True)
+    assert result["data"]["public"]["get_session_token"], result
+    remove = "mutation($t: String!) { removeTwofaSecret(token: $t) }"
+    assert graphql(remove, {"t": totp()})["data"]["removeTwofaSecret"]
+    succeed(f"rm {jar}")
+
+
 def rtl_url(address, port):
     host = f"[{address}]" if ":" in address else address
     return f"http://{host}:{port}/rtl"

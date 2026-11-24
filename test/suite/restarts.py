@@ -12,9 +12,9 @@ def test_restart_bitcoind():
     # A deploy that changes the bitcoind unit stops bitcoind and starts it
     # again. The stop propagates to the dependents. The start must bring them
     # back. An explicit stop must keep everything down.
-    # unbeholden-lnurl `requires` its backend, which starts it again.
+    # ThunderHub and Unbeholden LNURL also stop and start with their backends.
     dependents = [
-        unit for unit in ["lnd", "clightning", "electrs", "unbeholden-lnurl"] if unit in enabled_tests
+        unit for unit in ["lnd", "clightning", "electrs", "thunderhub", "unbeholden-lnurl"] if unit in enabled_tests
     ]
 
     def state(unit):

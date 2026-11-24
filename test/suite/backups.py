@@ -104,6 +104,9 @@ def test_backups():
         if file not in actual_files:
             raise Exception(f"Backup file '{file}' is missing.")
 
+    if "thunderhub" in enabled_tests:
+        assert_file_exists(f"{test_data['thunderhub']['dataDir'].lstrip('/')}/accounts.yaml")
+
     for test, file in files:
         if test in enabled_tests:
             assert_file_exists(file)

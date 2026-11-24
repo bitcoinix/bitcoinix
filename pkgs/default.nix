@@ -44,7 +44,8 @@ let self = {
       lndconnect
       lndinit
       nbxplorer
-      rtl;
+      rtl
+      thunderhub;
 
     inherit pkgs;
 

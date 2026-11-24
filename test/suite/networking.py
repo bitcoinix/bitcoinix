@@ -70,7 +70,9 @@ def test_netns_isolation():
 
     # These reachability tests are non-exhaustive
     assert_reachable("bitcoind", ["clightning", "lnd"])
-    assert_unreachable("bitcoind", ["btcpayserver", "rtl"])
+    assert_unreachable("bitcoind", ["btcpayserver", "rtl", "thunderhub"])
+    assert_reachable("thunderhub", ["lnd"])
+    assert_unreachable("thunderhub", ["bitcoind"])
     assert_unreachable("btcpayserver", ["bitcoind"])
 
     # With br_netfilter loaded (e.g. by Docker), traffic between namespaces

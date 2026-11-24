@@ -42,5 +42,6 @@ in {
     electrs.enable = defaultTrue;
     fulcrum.enable = defaultTrue;
     rtl.enable = defaultTrue;
+    thunderhub.enable = defaultTrue;
   };
 }
