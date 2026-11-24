@@ -673,8 +673,11 @@ let
       };
     };
 
-    unbeholden-lnurl-lnd = {
+    unbeholden-lnurl-lnd = { config, ... }: {
       imports = [ scenarios.regtestBase ];
+      # Exercise both gRPC clients with the IPv6 wildcard in LND's certificate.
+      services.lnd.rpcAddress = mkDefault "::";
+      services.charge-lnd.enable = config.services.unbeholden-lnurl.backend == "lnd";
       services.unbeholden-lnurl = {
         enable = true;
         backend = "lnd";

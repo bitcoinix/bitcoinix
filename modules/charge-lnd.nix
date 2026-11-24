@@ -108,7 +108,7 @@ in
           ${config.nix-bitcoin.pkgs.charge-lnd}/bin/charge-lnd \
             --tlscert ${escapeShellArg lnd.certPath} \
             --macaroon /run/lnd/charge-lnd.macaroon \
-            --grpc ${nbLib.addressWithPort lnd.rpcAddress lnd.rpcPort} \
+            --grpc ${escapeShellArg lnd.rpcEndpoint} \
             --config ${checkedConfig} \
             ${escapeShellArgs cfg.extraFlags}
         '';

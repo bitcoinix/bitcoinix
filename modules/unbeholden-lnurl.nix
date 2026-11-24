@@ -155,7 +155,7 @@ let
     state_dir = cfg.dataDir;
   } // (if isLnd then {
     lnd = {
-      host = nbLib.addressWithPort lnd.rpcAddress lnd.rpcPort;
+      host = lnd.rpcEndpoint;
       tls_cert = lnd.certPath;
       macaroon = "/run/lnd/unbeholden-lnurl.macaroon";
     };
