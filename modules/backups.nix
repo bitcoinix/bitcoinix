@@ -327,32 +327,26 @@ in {
           umask 077
           # A failed run must not leave yesterday's copy looking current.
           rm -rf -- "$STATE_DIRECTORY/current" "$STATE_DIRECTORY/.next"
-          state=$(systemctl is-active cdk-mintd.service) || true
-          case $state in
-            active|activating|reloading)
-              # Submit both halves together: cancellation while the mint shuts
-              # down must not lose its restart. Don't replace a pending stop
-              # of the mint or its dependencies; later stops can cancel this job.
-              # try-restart also leaves it down if a stop completed since the
-              # state check above, without pulling its dependencies back up.
-              if ! systemctl try-restart --no-block --job-mode=fail cdk-mintd.service; then
-                systemctl stop cdk-mintd.service
-              fi
-              ;;
-            # Don't cancel a start waiting for its backend or for this backup.
-            # No new start is needed for a stopped or failed mint.
-            inactive|failed) ;;
-            *) echo "Error: cdk-mintd is $state" >&2; exit 1 ;;
-          esac
-
-          # The restart's start half waits for this unit. Archive only after
-          # the stop half has completed, including ExecStopPost cleanup.
+          # Recheck until all mint processes, including ExecStopPost, are gone.
+          # A try-restart may become a no-op if the mint starts shutting down
+          # between the state check and the transaction. Retry after transitions
+          # instead of waiting forever for a newly active mint to stop itself.
           while true; do
             state=$(systemctl is-active cdk-mintd.service) || true
             case $state in
+              active|activating|reloading)
+                # Submit both halves together so cancellation cannot lose the
+                # restart. Never replace conflicting jobs with an unconditional
+                # stop: they may include a start or reload that must survive.
+                # A completed stop remains stopped; pending stops take priority.
+                systemctl try-restart --no-block --job-mode=fail cdk-mintd.service || true
+                ;;
+              deactivating) ;; # Wait for an existing stop, without restarting it.
+              # Starts queued behind this snapshot remain systemd jobs.
               inactive|failed) break ;;
-              *) sleep 0.1 ;;
+              *) echo "Error: cdk-mintd is $state" >&2; exit 1 ;;
             esac
+            sleep 0.1
           done
 
           mkdir "$STATE_DIRECTORY/.next"

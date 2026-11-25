@@ -44,6 +44,8 @@ let
         (mkIfTest "secrets-no-argv" [ strace ])
         # Talks to the Electrum relay
         (mkIfTest "unbeholden-wallet" [ websocat ])
+        # Check that initialization guards reject ACL write access.
+        (mkIfTest "cdk-mintd" [ acl ])
       ]);
 
       tests.bitcoind = cfg.bitcoind.enable;
@@ -230,11 +232,12 @@ let
       };
 
       tests.cdk-mintd = cfg.cdk-mintd.enable;
-      tests.cdk-mintd-onchain = cfg.cdk-mintd.enable && cfg.cdk-mintd.onchain.enable;
       test.data.cdk-mintd = optionalAttrs cfg.cdk-mintd.enable {
         inherit (cfg.cdk-mintd) port backend dataDir user group seedFile;
         mnemonicFile = cfg.cdk-mintd.onchain.mnemonicFile;
         onchain = cfg.cdk-mintd.onchain.enable;
+        generatedSeed = config.nix-bitcoin.generateSecrets && config.nix-bitcoin.setupSecrets
+          && (config.nix-bitcoin.secrets ? cdk-mintd-seed);
         cli = "${cfg.cdk-mintd.package}/bin/cdk-mintd --work-dir ${cfg.cdk-mintd.dataDir}";
         walletCli = "${cfg.cdk-mintd.package}/bin/cdk-cli";
         peerPort = cfg.clightning.port;
@@ -396,8 +399,6 @@ let
         });
 
       tests.backups = cfg.backups.enable;
-      tests.cdk-mintd-backup = cfg.backups.enable && cfg.cdk-mintd.enable;
-      tests.cdk-mintd-backup-shutdown = cfg.backups.enable && cfg.cdk-mintd.enable;
       test.data.backups = {
         inherit (cfg.backups) with-bulk-data;
         bitcoindDir = cfg.bitcoind.dataDir;
@@ -726,6 +727,11 @@ let
 
     cdk-mintd-onchain = { config, pkgs, extendModules, ... }: {
       imports = with scenarios; [ cdk-mintd-cln netnsBase ];
+      # These tests depend on the supplied secrets, recovery variants and
+      # pause wrappers below, rather than just an enabled mint or backup service.
+      tests.cdk-mintd-onchain = true;
+      tests.cdk-mintd-backup = true;
+      tests.cdk-mintd-backup-shutdown = true;
       # Boot without the legacy activation script that creates /var/lib/nixos.
       services.userborn.enable = true;
       # Supply secrets once; recovery must repair setup-secrets after restoring
@@ -770,6 +776,10 @@ let
       # Pause copying deterministically to test starts and cancellation mid-backup.
       systemd.services.cdk-mintd-backup.path = mkBefore [
         (pkgs.writeShellScriptBin "systemctl" ''
+          if [[ $1 == is-active && $2 == cdk-mintd.service && -e $STATE_DIRECTORY/pause-before-state-check ]]; then
+            touch "$STATE_DIRECTORY/before-state-checked"
+            while [[ -e $STATE_DIRECTORY/pause-before-state-check ]]; do sleep 0.1; done
+          fi
           # Inject a backend start after the snapshot of the mint's state.
           if [[ $1 == is-active && $2 == cdk-mintd.service && -e $STATE_DIRECTORY/pause-state-check ]]; then
             status=0
@@ -779,9 +789,16 @@ let
             exit "$status"
           fi
           if [[ $1 == try-restart ]]; then
+            # Hold a rejected transaction while the driver checks that existing
+            # start/reload jobs survive. The next attempt uses real systemd.
             status=0
-            ${config.systemd.package}/bin/systemctl "$@" || status=$?
-            echo "$status" > "$STATE_DIRECTORY/restart-status"
+            if [[ -e $STATE_DIRECTORY/reject-restart ]]; then
+              status=1
+            else
+              ${config.systemd.package}/bin/systemctl "$@" || status=$?
+            fi
+            echo "$status" > "$STATE_DIRECTORY/restart-status.next"
+            mv -T "$STATE_DIRECTORY/restart-status.next" "$STATE_DIRECTORY/restart-status"
             exit "$status"
           fi
           exec ${config.systemd.package}/bin/systemctl "$@"

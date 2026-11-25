@@ -225,10 +225,10 @@ in {
         # In particular, ENOTDIR or a user-replaceable directory must never be
         # interpreted as a missing marker. Tmpfiles creates these for new mints.
         for dir in /var/lib/nixos ${stateDir}; do
-          guardMode=$(stat -c %a "$dir")
-          if [[ ! -d $dir || -L $dir || ! -r $dir || ! -x $dir ]] ||
-             [[ $(stat -c %u "$dir") != 0 ]] ||
-             (( (8#$guardMode & 8#022) != 0 )); then
+          if [[ ! -d $dir || -L $dir || ! -r $dir || ! -x $dir || -w $dir ]] ||
+             ! guardMode=$(stat -c %a "$dir") ||
+             ! guardOwner=$(stat -c %u "$dir") ||
+             [[ $guardOwner != 0 ]] || (( (8#$guardMode & 8#022) != 0 )); then
             echo "Unsafe initialization guard directory $dir; refusing to start the mint. Restore a real, root-owned directory with mode 0755 and its original initialization marker." >&2
             exit 1
           fi
@@ -289,6 +289,10 @@ in {
     # BindsTo + After refuses the mint start if another dependency is inactive.
     # wantedBy on lnd would restart it on a clean STOPPING=1 exit.
     systemd.services.${cfg.backend}.serviceConfig.ExecStartPost = [
+      "-+${config.systemd.package}/bin/systemctl start --no-block --job-mode=ignore-requirements cdk-mintd.service"
+    ];
+
+    systemd.services.bitcoind.serviceConfig.ExecStartPost = mkIf cfg.onchain.enable [
       "-+${config.systemd.package}/bin/systemctl start --no-block --job-mode=ignore-requirements cdk-mintd.service"
     ];
 

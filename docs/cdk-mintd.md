@@ -111,6 +111,8 @@ queued before shutdown, so cancellation during shutdown cannot lose its start.
 Systemd keeps that start, and any other start requests, waiting
 until the backup finishes. A stop requested during copying cancels that pending
 start; stops of the mint or its backends during shutdown also take precedence.
+A backup waits for an in-progress stop and retries restart transactions after
+state changes or job conflicts, without cancelling queued starts or reloads.
 Cleanup does not restart the mint afterwards. An intentionally stopped
 mint stays stopped unless a new start is requested.
 Payments are unavailable during staging; uploading does not wait for mint startup.
@@ -191,10 +193,18 @@ missing state and its liabilities.
    `0440`. Preserve their bytes. Restore the entire data archive, including the
    BDK wallet, from the **same snapshot**, rather than mixing database versions.
    When `nix-bitcoin.setupSecrets` is enabled, restore all declared secrets and
-   run `systemctl start nix-bitcoin-secrets.target` successfully before starting
-   the mint. In particular, with `generateSecrets = false`, deployment can fail
-   on missing supplied secrets and leave `secretsDir` locked to mode `0700`;
-   restarting the target after restoration reapplies the required access.
+   run the following successfully before starting the mint:
+
+   ```bash
+   systemctl reset-failed setup-secrets.service
+   systemctl restart setup-secrets.service
+   systemctl start nix-bitcoin-secrets.target
+   ```
+
+   Restarting `setup-secrets` reapplies owners and modes even if it and the target
+   are already active after a deployment with generated secrets. With
+   `generateSecrets = false`, it also repairs a failed deployment that left
+   `secretsDir` locked to mode `0700` because supplied secrets were missing.
 5. Remove `/run/systemd/system.control/cdk-mintd.service`, run
    `systemctl daemon-reload`, and start the mint while external access remains
    blocked. Check its journal, mint keys, quotes and wallet state. Only after

@@ -22,6 +22,8 @@ in lib.nameValuePair "testCdkMintd-${backend}-${lib.boolToString onchain}" {
     seed = config.nix-bitcoin.secrets.cdk-mintd-seed.user;
     mnemonic = config.nix-bitcoin.secrets ? cdk-mintd-bdk-mnemonic;
     bindsTo = service.bindsTo;
+    bitcoinRestartHook = lib.any (lib.hasInfix "--job-mode=ignore-requirements cdk-mintd.service")
+      (config.systemd.services.bitcoind.serviceConfig.ExecStartPost or []);
     user = service.serviceConfig.User;
     hardened = service.serviceConfig.ProtectSystem;
     address = isolated.services.cdk-mintd.address;
@@ -36,6 +38,7 @@ in lib.nameValuePair "testCdkMintd-${backend}-${lib.boolToString onchain}" {
     seed = "cdk-mintd";
     mnemonic = onchain;
     bindsTo = [ "${backend}.service" ] ++ lib.optional onchain "bitcoind.service";
+    bitcoinRestartHook = onchain;
     user = "cdk-mintd";
     hardened = "strict";
     address = "169.254.1.36";

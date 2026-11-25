@@ -42,6 +42,22 @@ def test_cdk_mintd():
     assert succeed_json(f"curl -fsS {url}/mint/quote/bolt11/{quote['quote']}")["state"] == "UNPAID"
     assert succeed(f"sha256sum {data['seedFile']}") == seed_hash
 
+    if data["generatedSeed"]:
+        # After a fresh deployment with generated secrets, both units are
+        # already active. Starting the target cannot repair restored file modes.
+        succeed("systemctl stop cdk-mintd",
+                f"chown root:root {data['seedFile']}", f"chmod 600 {data['seedFile']}",
+                "systemctl start nix-bitcoin-secrets.target")
+        machine.fail(f"runuser -u {data['user']} -- test -r {data['seedFile']}")
+        succeed("systemctl reset-failed setup-secrets.service",
+                "systemctl restart setup-secrets.service",
+                "systemctl start nix-bitcoin-secrets.target",
+                "systemctl start cdk-mintd")
+        assert_full_match(f"stat -c '%U %G %a' {data['seedFile']}",
+                          f"{data['user']} {data['group']} 440\n")
+        assert succeed(f"sha256sum {data['seedFile']}") == seed_hash
+        machine.wait_until_succeeds(f"curl -fsS {url}/info")
+
     # Losing the database must fail closed even if nix-config survives. Keep the
     # original state and restore it afterwards, as a real recovery would do.
     directory = data["dataDir"]
@@ -56,6 +72,11 @@ def test_cdk_mintd():
         succeed("systemctl reset-failed cdk-mintd")
         machine.fail("systemctl start cdk-mintd")
         machine.fail(f"test -e {directory}/cdk-mintd.sqlite")
+        invocation = succeed("systemctl show -P InvocationID cdk-mintd").strip()
+        assert invocation
+        log = succeed(f"journalctl _SYSTEMD_INVOCATION_ID={invocation} --no-pager")
+        assert "Unsafe initialization guard directory" in log, log
+        assert "original initialization marker" in log, log
         succeed("systemctl stop cdk-mintd")
 
     for mode in ["700", "744"]:
@@ -74,6 +95,12 @@ def test_cdk_mintd():
     refuse_initialization()
     succeed(f"chown root:root {guard_dir}", f"chmod 777 {guard_dir}")
     refuse_initialization()
+    succeed(f"chmod 755 {guard_dir}")
+    for path in [guard_dir, "/var/lib/nixos"]:
+        succeed(f"setfacl -m u:{data['user']}:rwx {path}",
+                f"runuser -u {data['user']} -- test -w {path}")
+        refuse_initialization()
+        succeed(f"setfacl -b {path}", f"chmod 755 {path}")
     succeed(f"rmdir {guard_dir}", f"mv {guard_dir}.saved {guard_dir}", "systemctl reset-failed cdk-mintd")
     machine.fail("systemctl start cdk-mintd")
     succeed("journalctl -u cdk-mintd | grep -F 'Refusing to recreate an initialized mint'",
@@ -82,6 +109,33 @@ def test_cdk_mintd():
             "systemctl start cdk-mintd")
     machine.wait_until_succeeds(f"curl -fsS {url}/info")
     assert succeed_json(f"curl -fsS {url}/keys") == keys
+
+    if data["onchain"]:
+        # Keep the backend running to isolate the mint's direct Bitcoin Core
+        # dependency from the backend's own restart hook.
+        backend_invocation = succeed(f"systemctl show -P InvocationID {data['backend']}")
+        bitcoin_pid = succeed("systemctl show -P MainPID bitcoind").strip()
+        # Flush regtest's freshly mined chain on exit; SIGKILL can lose those
+        # blocks and make Lightning abort independently of systemd dependencies.
+        succeed("mkdir -p /run/systemd/system/bitcoind.service.d",
+                "printf '[Service]\\nRestart=always\\nRestartSec=3s\\n' > /run/systemd/system/bitcoind.service.d/cdk-restart.conf",
+                # Dependency lists cannot be cleared with a drop-in. Override
+                # the unit in the higher-priority runtime directory instead.
+                "mkdir -p /run/systemd/system.control",
+                f"sed '/^Requires=/d' /etc/systemd/system/{data['backend']}.service"
+                f" > /run/systemd/system.control/{data['backend']}.service",
+                "systemctl daemon-reload",
+                f"! systemctl show -P Requires {data['backend']} | grep -w bitcoind.service",
+                "bitcoin-cli stop")
+        machine.wait_until_succeeds("test $(systemctl is-active cdk-mintd) = inactive")
+        machine.wait_until_succeeds(
+            f"test $(systemctl show -P MainPID bitcoind) != {bitcoin_pid} && bitcoin-cli getnetworkinfo")
+        machine.wait_until_succeeds(f"curl -fsS {url}/info")
+        assert succeed(f"systemctl show -P InvocationID {data['backend']}") == backend_invocation
+        assert succeed_json(f"curl -fsS {url}/keys") == keys
+        succeed("rm /run/systemd/system/bitcoind.service.d/cdk-restart.conf",
+                f"rm /run/systemd/system.control/{data['backend']}.service",
+                "systemctl daemon-reload")
     assert succeed_json(f"curl -fsS {url}/mint/quote/bolt11/{quote['quote']}")["state"] == "UNPAID"
 
     if data["backend"] == "lnd":
@@ -362,8 +416,8 @@ def test_cdk_mintd_backup():
     assert_full_match("stat -c %a /secrets", "700\n")
     succeed(f"(umask 077; setpriv --reuid={user} --regid={group} --init-groups -- "
             f"tar --no-same-owner --no-same-permissions -xf - -C {directory} < {restored}/data.tar)",
-            f"install -o {user} -g {group} -m 440 {restored}/seed {data['seedFile']}",
-            f"install -o {user} -g {group} -m 440 {restored}/bdk-mnemonic {data['mnemonicFile']}")
+            f"install -o root -g root -m 600 {restored}/seed {data['seedFile']}",
+            f"install -o root -g root -m 600 {restored}/bdk-mnemonic {data['mnemonicFile']}")
     assert_full_match(f"stat -c '%a' {directory}/wide-mode", "700\n")
     assert_full_match(f"runuser -u {user} -- sqlite3 {directory}/cdk-mintd.sqlite 'PRAGMA integrity_check'", "ok\n")
     assert_full_match(f"runuser -u {user} -- sqlite3 {directory}/bdk_wallet/bdk_wallet.sqlite 'PRAGMA integrity_check'", "ok\n")
@@ -372,6 +426,8 @@ def test_cdk_mintd_backup():
     assert succeed(f"sha256sum {data['seedFile']}").split()[0] == seed_hash
     succeed(f"{duplicity} restore --path-to-restore {guard.lstrip('/')} {destination} /tmp/cdk-initialized.restored",
             f"install -o root -g root -m 600 /tmp/cdk-initialized.restored {guard}",
+            "systemctl reset-failed setup-secrets.service",
+            "systemctl restart setup-secrets.service",
             "systemctl start nix-bitcoin-secrets.target",
             "rm /tmp/cdk-initialized.saved /tmp/cdk-initialized.restored /tmp/cdk-seed.saved")
     succeed(f"runuser -u {user} -- test -r {data['seedFile']}")
@@ -495,6 +551,8 @@ def test_cdk_mintd_backup_shutdown():
     backend = data["backend"]
     stage = "/var/lib/cdk-mintd-backup"
     barrier = "/run/cdk-shutdown-barrier"
+    post_stop_barrier = "/run/cdk-post-stop-barrier"
+    start_barrier = "/run/cdk-pre-start-barrier"
     pause_copy = f"{data['dataDir']}/pause-backup"
     url = f"http://{ip('cdk-mintd')}:{data['port']}/v1/info"
 
@@ -511,7 +569,10 @@ def test_cdk_mintd_backup_shutdown():
         "mkdir -p /run/systemd/system/cdk-mintd.service.d\n"
         "cat > /run/systemd/system/cdk-mintd.service.d/slow-stop.conf <<'EOF'\n"
         "[Service]\nTimeoutStopSec=60s\n"
+        "RestartSec=30s\nExecReload=/run/current-system/sw/bin/true\n"
+        f"ExecStartPre=/bin/sh -c 'while test -e {start_barrier}; do /run/current-system/sw/bin/sleep 0.1; done'\n"
         f"ExecStop=/bin/sh -c 'while test -e {barrier}; do /run/current-system/sw/bin/sleep 0.1; done'\n"
+        f"ExecStopPost=/bin/sh -c 'while test -e {post_stop_barrier}; do /run/current-system/sw/bin/sleep 0.1; done'\n"
         "EOF\n"
         # This dependent lets a stop be queued while the mint is still active,
         # so --job-mode=fail must reject the conflicting restart transaction.
@@ -521,6 +582,74 @@ def test_cdk_mintd_backup_shutdown():
         f"ExecStop=/bin/sh -c 'while test -e {barrier}; do /run/current-system/sw/bin/sleep 0.1; done'\n"
         "EOF\nsystemctl daemon-reload"
     )
+
+    # The pinned systemd keeps try-restart jobs for activating units. Exercise
+    # both a running preStart and RestartSec, rather than assuming active only.
+    for starting in ["pre-start", "auto-restart"]:
+        succeed(f"touch {pause_copy}")
+        if starting == "pre-start":
+            succeed("systemctl stop cdk-mintd", f"touch {start_barrier}",
+                    "systemctl start --no-block cdk-mintd")
+            machine.wait_until_succeeds("test $(systemctl show -P SubState cdk-mintd) = start-pre")
+        else:
+            succeed("systemctl kill --kill-whom=main --signal=KILL cdk-mintd")
+            machine.wait_until_succeeds("test $(systemctl show -P SubState cdk-mintd) = auto-restart")
+        succeed("systemctl start --no-block cdk-mintd-backup")
+        machine.wait_until_succeeds(f"test -d {stage}/.next")
+        assert_full_match("systemctl show -P MainPID cdk-mintd", "0\n")
+        succeed(f"rm -f {start_barrier} {pause_copy}", "systemctl start cdk-mintd-backup")
+        ready()
+
+    # A stop already underway must finish before copying, and remain stopped.
+    # Start the backup first so systemd's stop-before-start ordering doesn't
+    # hold its entire start job behind the stop we're trying to observe.
+    succeed(f"touch {barrier} {pause_copy} {stage}/pause-before-state-check",
+            "systemctl start --no-block cdk-mintd-backup")
+    machine.wait_until_succeeds(f"test -e {stage}/before-state-checked")
+    succeed("systemctl stop --no-block cdk-mintd")
+    machine.wait_until_succeeds("test $(systemctl show -P SubState cdk-mintd) = stop")
+    succeed(f"rm {stage}/pause-before-state-check")
+    machine.fail(f"test -d {stage}/.next")
+    succeed(f"rm {barrier}")
+    machine.wait_until_succeeds(f"test -d {stage}/.next")
+    succeed(f"rm {pause_copy} {stage}/before-state-checked", "systemctl start cdk-mintd-backup")
+    assert_full_match("systemctl show -P ActiveState cdk-mintd", "inactive\n")
+    succeed("systemctl start cdk-mintd")
+    ready()
+
+    # A crash after is-active but before try-restart makes the latter a no-op
+    # during deactivation. It must be retried once the automatic restart begins.
+    succeed(f"touch {post_stop_barrier} {pause_copy} {stage}/pause-state-check",
+            "systemctl start --no-block cdk-mintd-backup")
+    machine.wait_until_succeeds(f"test -e {stage}/state-checked")
+    succeed("systemctl kill --kill-whom=main --signal=KILL cdk-mintd")
+    machine.wait_until_succeeds("test $(systemctl show -P SubState cdk-mintd) = stop-post")
+    succeed(f"rm -f {stage}/restart-status", f"rm {stage}/pause-state-check")
+    machine.wait_until_succeeds(f"test -s {stage}/restart-status")
+    assert_full_match(f"cat {stage}/restart-status", "0\n")
+    machine.fail(f"test -d {stage}/.next")
+    succeed(f"rm {post_stop_barrier}")
+    machine.wait_until_succeeds(f"test -d {stage}/.next")
+    succeed(f"rm {pause_copy} {stage}/state-checked", "systemctl start cdk-mintd-backup")
+    ready()
+
+    for action in ["start", "reload"]:
+        # Inject a rejected restart while a real start/reload is queued. The
+        # snapshot must not replace it with a stop before retrying.
+        succeed(f"touch {pause_copy} {stage}/pause-state-check {stage}/reject-restart",
+                "systemctl start --no-block cdk-mintd-backup")
+        machine.wait_until_succeeds(f"test -e {stage}/state-checked")
+        succeed(f"systemctl {action} --no-block cdk-mintd")
+        job = succeed(f"systemctl list-jobs --no-legend cdk-mintd.service | grep -w {action}").split()[0]
+        succeed(f"rm -f {stage}/restart-status", f"rm {stage}/pause-state-check")
+        machine.wait_until_succeeds(f"test -s {stage}/restart-status")
+        assert_full_match(f"cat {stage}/restart-status", "1\n")
+        assert succeed(f"systemctl list-jobs --no-legend cdk-mintd.service | grep -w {action}").split()[0] == job
+        succeed(f"rm {stage}/reject-restart {stage}/state-checked")
+        machine.wait_until_succeeds(f"test -d {stage}/.next")
+        succeed(f"rm {pause_copy}", "systemctl start cdk-mintd-backup")
+        ready()
+
     for action in ["cancel", "timeout"]:
         if action == "timeout":
             machine.succeed(
