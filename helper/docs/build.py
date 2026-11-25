@@ -210,6 +210,10 @@ def extract_commit(repo, commit, dest):
         try:
             with tarfile.open(fileobj=process.stdout, mode="r|") as archive:
                 archive.extractall(dest, filter="data")
+            # tarfile stops at the end marker, before git's trailing padding.
+            # Drain the pipe before Popen closes it, otherwise git can get SIGPIPE.
+            while process.stdout.read(64 * 1024):
+                pass
         except BaseException:
             process.kill()
             raise
