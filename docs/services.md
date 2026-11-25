@@ -597,6 +597,10 @@ To print the connection URL as text instead of a QR code, run `lndconnect --url`
 `lnconnect-clnrest --url`. The URL contains the credentials for your node, so keep it
 secret.
 
+With `onion`, the commands fail when they can't read the onion address, for example
+while Tor still starts. They never look up your public IP then. `--host` replaces the
+onion address.
+
 #### Connecting without Tor or WireGuard
 Enabling `lndconnect` or `lnconnect` does not change the address that the REST server
 listens on. By default, the LND and clnrest REST servers only listen

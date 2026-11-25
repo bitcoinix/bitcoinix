@@ -1,7 +1,39 @@
+def assert_needs_onion_address(command, onion_file):
+    """`command` prints no URL without a host while `onion_file` is missing"""
+    def run(args, stderr="2>&1"):
+        return machine.execute(f"timeout 120 {command} --url {args} {stderr}")
+
+    owner = succeed(f"stat -c %U {onion_file}").strip()
+    as_owner = f"runuser -u {owner} --"
+    succeed(f"{as_owner} mv -T {onion_file} {onion_file}.orig")
+    try:
+        # lndconnect takes a `--host` after `--` as no option
+        without_host = [run(args) for args in ("", "-- --host 10.0.0.1")]
+        # A host in the args needs no onion address. lndconnect removes the quotes of `"10.0.0.1"`.
+        with_host = [run(args, "2>/dev/null") for args in ("--host 10.0.0.1", "--host '\"10.0.0.1\"'")]
+    finally:
+        succeed(f"{as_owner} mv -T {onion_file}.orig {onion_file}")
+    for status, output in without_host:
+        assert status == 1 and "://" not in output, output
+        assert f"Error: Can't read an onion address from {onion_file}" in output, output
+    for status, output in with_host:
+        assert status == 0 and urlparse(output.strip()).hostname == "10.0.0.1", output
+    # An empty host. lndconnect removes the quotes of `""`.
+    for args in ("--host=", "--host '\"\"'"):
+        status, output = run(args)
+        assert status == 1 and "://" not in output and "--host needs a value" in output, output
+    assert_matches(f"{command} --url -- --host=", r"[a-z2-7]{56}\.onion")
+
+
 @test("lndconnect-onion-lnd")
 def test_lndconnect_onion_lnd():
     assert_running("lnd")
+    # lndconnect reads the address that onion-addresses publishes
+    machine.wait_for_unit("onion-addresses")
     assert_matches("runuser -u operator -- lndconnect --url", ".onion")
+    onion_file = "/var/lib/onion-addresses/lnd/lnd-rest"
+    for command in ("runuser -u operator -- lndconnect", "lndconnect"):
+        assert_needs_onion_address(command, onion_file)
 
 
 @test("lnconnect-onion-clnrest")
@@ -11,6 +43,13 @@ def test_lnconnect_onion_clnrest():
     # nothing orders clightning after that service
     machine.wait_for_unit("onion-addresses")
     assert_matches("runuser -u operator -- lnconnect-clnrest --url", ".onion")
+    assert_needs_onion_address(
+        "runuser -u operator -- lnconnect-clnrest", "/var/lib/onion-addresses/operator/clnrest"
+    )
+    # A user without access to the onion address
+    status, output = machine.execute("runuser -u nobody -- timeout 120 lnconnect-clnrest --url 2>&1")
+    assert status == 1 and "://" not in output, output
+    assert "Can't read an onion address from /var/lib/onion-addresses/nobody/clnrest" in output, output
 
 
 @test("lnconnect-clnrest-cert")
@@ -75,13 +114,15 @@ def test_lnconnect_clnrest_files():
         succeed(f"install -m 600 <(echo {fake}) {canary}")
         for owner in owners:
             succeed(f"runuser -u {owner} -- sh -c 'mv -T {onion_file(owner)} {onion_file(owner)}.orig && ln -s {canary} {onion_file(owner)}'")
-        # Without an address, lndconnect looks up the public IP, which fails in the VM
-        output = machine.execute("timeout 120 lnconnect-clnrest --url 2>&1")[1]
+        # Without an address, lnconnect-clnrest fails and prints no URL
+        status, output = machine.execute("timeout 120 lnconnect-clnrest --url 2>&1")
         for owner in owners:
             succeed(f"runuser -u {owner} -- mv -T {onion_file(owner)}.orig {onion_file(owner)}")
         succeed(f"rm {canary}")
+        assert status == 1 and "://" not in output, output
         assert fake not in output, output
         assert f"{onion_file(user)}: Permission denied" in output, output
+        assert f"Can't read an onion address from {onion_file(user)}" in output, output
 
 
 @test("lndconnect-local-bind")

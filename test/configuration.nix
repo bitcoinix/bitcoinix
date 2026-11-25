@@ -1969,6 +1969,41 @@ let
         acknowledged = false;
       };
     };
+    # Before 0.2.1, an empty `--host` with `--localhost` or `--localip` gave a local URL in onion mode
+    testVersioningLndconnectNeedsOnionAddress = let
+      phrase = subject: "With `onion`, ${subject} when the onion address file is missing";
+      clnrestOnion = {
+        services.clightning = {
+          enable = true;
+          plugins.clnrest = { enable = true; lnconnect = { enable = true; onion = true; }; };
+        };
+      };
+    in {
+      expr = {
+        lnd = hasNoticeAt "0.2.0" (phrase "`lndconnect` now fails") lndconnectOnion;
+        clnrest = hasNoticeAt "0.2.0" (phrase "`lnconnect-clnrest` now fails") clnrestOnion;
+        both = hasNoticeAt "0.2.0" (phrase "`lndconnect` and `lnconnect-clnrest` now fail") {
+          imports = [ lndconnectOnion clnrestOnion ];
+          services.clightning.port = 9736;
+        };
+        noOnion = hasNoticeAt "0.2.0" "when the onion address file is missing" {
+          services.lnd = { enable = true; lndconnect.enable = true; };
+        };
+        acknowledged = hasNoticeAt "0.2.1" (phrase "`lndconnect` now fails") {
+          imports = [ lndconnectOnion ];
+          nix-bitcoin.versioning.releasedVersion = "0.2.1";
+        };
+        # Without the module that defines the wrapper options
+        disabledModule = hasNoticeAt "0.2.0" "when the onion address file is missing" {
+          disabledModules = [ ../modules/lndconnect.nix ];
+          services.lnd.enable = true;
+          services.clightning = { enable = true; plugins.clnrest.enable = true; port = 9736; };
+        };
+      };
+      expected = {
+        lnd = true; clnrest = true; both = true; noOnion = false; acknowledged = false; disabledModule = false;
+      };
+    };
     testOnionAccessRejectsUnknownUser = {
       expr = map (lib.hasInfix "no-such-user") (failedAssertions onionAccessUnknownUser);
       expected = [ true ];
