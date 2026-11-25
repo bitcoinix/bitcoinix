@@ -9,3 +9,8 @@ API.
   you, with its RPC, Electrum and Esplora servers. It doesn't run on bitcoind or electrs.
 - It is separate from mempool and works with any `services.mempool.electrumServer`.
 - `services.rbitcoin.esplora` is new and serves rbitcoin's Esplora REST API on port 3002.
+- It starts once rbitcoin has caught up and opened its RPC port, and serves pages once
+  rbitcoin's address index has also reached the tip.
+- Its store in `services.rbitcoin-space.dataDir` keeps block audits, mempool history and
+  replacements that no backfill rebuilds, and the backups leave it out. See the
+  [service notes](../../services.md#rbitcoinspace) to back it up.

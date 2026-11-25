@@ -22,9 +22,10 @@ let
       type = types.path;
       default = "/var/lib/rbitcoin-space";
       description = ''
-        The explorer's SQLite store: block table, mempool history, replacements.
-        It holds only data derived from the node and is rebuilt by the backfill
-        when lost.
+        The explorer's SQLite store, one `<network>.sqlite` file per network.
+        The backfill rebuilds only its block rows. The block audits, the
+        mempool history and the replacement record are recorded as they
+        happen and are lost for good with the file.
       '';
     };
     mempool = mkOption {
@@ -131,8 +132,15 @@ let
   # replaces on every start. They are read here, at every start of this
   # service, and passed in the environment (readable only by this user),
   # never on the command line or in the Nix store.
+  # The cookie is published only once rbitcoin holds its RPC port, after
+  # catch-up (see `services.rbitcoin.rpc.cookieFile`). Wait for it here, not
+  # in a start job, which would block for hours or days during the sync.
   start = pkgs.writers.writeBash "rbitcoin-space-start" ''
     set -euo pipefail
+    if [[ ! -e '${rbitcoin.rpc.cookieFile}' ]]; then
+      echo "Waiting for rbitcoin's RPC cookie at ${rbitcoin.rpc.cookieFile}"
+      until [[ -e '${rbitcoin.rpc.cookieFile}' ]]; do sleep 5; done
+    fi
     # The cookie is `user:password` with no trailing newline, so `read`
     # returns 1 at the end of the file even though it read the line.
     IFS=: read -r user password < '${rbitcoin.rpc.cookieFile}' || [[ $password ]]

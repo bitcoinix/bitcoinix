@@ -1277,16 +1277,20 @@ set `nix-bitcoin.onionServices.rbitcoin-space.enable = true;` and find the addre
 
 Things to know:
 
-- **First sync.** The explorer serves what the node has while it syncs. Address pages work
-  once rbitcoin's address index has caught up, and the explorer reports ready
-  (`curl http://localhost:60847/readyz`) only once rbitcoin's Electrum server is up, which
-  waits for that index (with `netns-isolation`, use the `local_address` from `nodeinfo`).
-  On mainnet both take as long as rbitcoin's sync.
+- **First sync.** The explorer serves nothing while rbitcoin syncs. rbitcoin opens its RPC
+  port only once it has caught up with the chain, and `rbitcoin-space` waits for that
+  before it starts (`systemctl status rbitcoin-space` shows it waiting). The explorer
+  then reads blocks through rbitcoin's Esplora server, which opens only once the address
+  index has reached the tip, several hours after the sync on mainnet. So on a fresh
+  mainnet node, the site is down for rbitcoin's whole sync plus the index build. The
+  explorer reports ready (`curl http://localhost:60847/readyz`) once rbitcoin's RPC
+  answers and its Electrum server is up (with `netns-isolation`, use the
+  `local_address` from `nodeinfo`).
 - **The RPC cookie.** The explorer reads rbitcoin's RPC cookie at every start, so it joins
   group `rbitcoinrpc`, and the cookie is an admin credential (see [rbitcoin](#rbitcoin)).
   rbitcoin writes a new cookie on every start, so the explorer stops and starts with it:
   `systemctl restart rbitcoin` also restarts `rbitcoin-space`, stopping rbitcoin stops it,
-  and after a crash it comes back once rbitcoin does.
+  and after a crash it comes back once rbitcoin's RPC port is open again.
 - **No authentication.** The explorer is a public website. It rate-limits each client, and
   `POST /api/tx` relays transactions to the node (turn it off with
   `services.rbitcoin-space.broadcast = false`). Behind a reverse proxy, set
@@ -1294,11 +1298,28 @@ Things to know:
   every visitor shares the proxy's limit. Through the onion service, all visitors arrive
   from Tor's address and Tor sends no such header, so they share one limit.
 - **Data.** `services.rbitcoin-space.dataDir` (default `/var/lib/rbitcoin-space`) holds a
-  SQLite store of data derived from the node. A backfill fills its block table and keeps
-  the node about half busy while it runs (`BACKFILL_BUSY_PERCENT`, default 50). The store
-  is rebuilt if lost, so it needs no backup. Its migrations are one-way: an older
-  rbitcoin.space refuses a store that a newer one migrated (`store_open_failed`), so to
-  downgrade, stop `rbitcoin-space`, empty `dataDir` and let it rebuild.
+  SQLite store, `<network>.sqlite` (e.g. `mainnet.sqlite`). A backfill fills its block
+  rows and keeps the node about half busy while it runs (`BACKFILL_BUSY_PERCENT`,
+  default 50). Only those block rows come back if the file is lost. The block audits,
+  the mempool history and the replacement record are recorded as blocks and
+  transactions arrive, and are lost for good with the file. The
+  [backups](#backups) do not include `dataDir`. To keep that history, back the store
+  up with `sqlite3` (package `sqlite`). Its own backup command gives a consistent copy
+  while the explorer runs, unlike copying the file, whose recent writes are still in
+  `mainnet.sqlite-wal`:
+
+  ```
+  sqlite3 -readonly /var/lib/rbitcoin-space/mainnet.sqlite '.backup /root/rbitcoin-space-mainnet.sqlite'
+  ```
+
+  To restore, stop `rbitcoin-space`, delete `mainnet.sqlite-wal` and `mainnet.sqlite-shm`
+  in `dataDir`, copy the backup to `mainnet.sqlite`, `chown rbitcoin-space:rbitcoin-space`
+  it and start the service. See upstream's
+  [DEPLOY.md](https://github.com/smolcars/rbitcoin-space/blob/v0.4.0/docs/DEPLOY.md#the-data-directory).
+  The store's migrations are one-way: an older rbitcoin.space refuses a store that a
+  newer one migrated (`store_open_failed`). So back the store up before an upgrade, and
+  to downgrade, restore the backup made before the upgrade. Emptying `dataDir` also
+  works, but loses the history above.
 - **Load on the node.** The live mempool polls the node about once a second, about 150 MB
   a minute of RPC traffic on mainnet. `services.rbitcoin-space.mempool = false` turns it
   off, along with the projected blocks and fee recommendations.
