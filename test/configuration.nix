@@ -2127,6 +2127,31 @@ let
         noEnforce = { socket = open; rtl = open; };
       };
     };
+    # A dashboard can use the proxy without a data directory or either IP filter.
+    testWebProxyOptionalSettings = let
+      inspect = dashboard: filters: let
+        config = evaluate {
+          imports = [ (import ../modules/web-interface-proxy.nix {
+            name = "dashboard"; socketPath = "/run/dashboard/ui.sock"; user = "dashboard";
+          }) ];
+          options.services.dashboard = lib.mkOption {
+            default = { enable = true; address = "127.0.0.1"; port = 8088; } // dashboard;
+          };
+          config.systemd.services.dashboard.serviceConfig = filters;
+        };
+        sockets = lib.filterAttrs (name: _: lib.hasPrefix "dashboard-proxy-" name) config.systemd.sockets;
+        socket = (lib.head (lib.attrValues sockets)).socketConfig;
+        masks = config.systemd.services.dashboard-proxy.serviceConfig.InaccessiblePaths;
+      in [ (socket.IPAddressAllow or null) (socket.IPAddressDeny or null)
+           (masks == config.nix-bitcoin.lib.localResolverPaths ++ [ config.nix-bitcoin.secretsDir ]) ];
+    in {
+      expr = [
+        (inspect {} {})
+        (inspect { dataDir = null; } { IPAddressAllow = "localhost"; })
+        (inspect { dataDir = ""; } { IPAddressDeny = "any"; })
+      ];
+      expected = [ [ null null true ] [ "localhost" null true ] [ null "any" true ] ];
+    };
     # The proxy runs as RTL's user, which alone can reach RTL's socket. It has no
     # network of its own and can't see RTL's files, the secrets or the local resolvers.
     testRtlProxySandbox = let

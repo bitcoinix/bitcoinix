@@ -788,7 +788,7 @@ def test_rtl_permissions():
     }
     # Node indices from `modules/rtl.nix`
     nodes = {"cln": (1, data["clightning"]), "lnd": (2, data["lnd"])}
-    rtl = f"http://{ip('rtl')}:{data['port']}/rtl"
+    rtl = rtl_url(data["address"], data["port"])
     jar = "/run/rtl-permissions-test-cookies"
     # The first page sets the session and CSRF cookies
     succeed(f"curl -fsS -o /dev/null -c {jar} {rtl}/")
