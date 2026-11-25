@@ -140,12 +140,6 @@ let
   # Where lncli looks for profiles: the lnd user's home from the passwd entry
   lncliDir = "${config.users.users.${cfg.user}.home}/.lncli";
   systemctl = "${config.systemd.package}/bin/systemctl";
-  # lnd.nix adds rpcAddress to the certificate, also when it's 0.0.0.0 or ::
-  # An IPv6 rpcAddress may be given with or without brackets.
-  rpcServer = let
-    bare = removePrefix "[" (removeSuffix "]" cfg.rpcAddress);
-    address = if hasInfix ":" bare then "[${bare}]" else bare;
-  in "${address}:${toString cfg.rpcPort}";
 
   # Restarts lnd after deleting stale root keys, unless lnd was stopped meanwhile.
   # `--job-mode=fail` keeps a queued stop from being replaced by the restart.
@@ -203,7 +197,7 @@ let
     ${runuser} -u ${cfg.user} -- ${createProfileFile}
     lncli() {
       ${runuser} -u ${cfg.user} -- ${cfg.package}/bin/lncli --profile= \
-        --rpcserver ${escapeShellArg rpcServer} --tlscertpath '${cfg.certPath}' \
+        --rpcserver ${escapeShellArg cfg.rpcEndpoint} --tlscertpath '${cfg.certPath}' \
         --macaroonpath '${cfg.networkDir}/admin.macaroon' "$@"
     }
     # A larger size limit, so that many root keys don't block the start

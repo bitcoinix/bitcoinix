@@ -186,8 +186,8 @@ let
       tests.rtl-backend-certs = cfg.rtl.enable;
       tests.rtl-permissions = cfg.rtl.enable;
       tests.rtl-stops-with-backend = cfg.rtl.enable;
-      test.data.rtl-credentials = {
-        inherit (cfg.rtl) dataDir user group port;
+      test.data.rtl-credentials = optionalAttrs cfg.rtl.enable {
+        inherit (cfg.rtl) dataDir user group address port;
         lnd = if cfg.rtl.nodes.lnd.enable then { inherit (cfg.lnd) networkDir user restPort; } else null;
         clightning = if cfg.rtl.nodes.clightning.enable then {
           inherit (cfg.clightning) networkDir user;
@@ -677,8 +677,11 @@ let
       };
     };
 
-    unbeholden-lnurl-lnd = {
+    unbeholden-lnurl-lnd = { config, ... }: {
       imports = [ scenarios.regtestBase ];
+      # Exercise both gRPC clients with the IPv6 wildcard in LND's certificate.
+      services.lnd.rpcAddress = mkDefault "::";
+      services.charge-lnd.enable = config.services.unbeholden-lnurl.backend == "lnd";
       services.unbeholden-lnurl = {
         enable = true;
         backend = "lnd";

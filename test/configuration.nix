@@ -1158,6 +1158,42 @@ let
       expected = [ true ];
     };
     testLightningSeparatePorts = { expr = failedAssertions localLightning; expected = []; };
+    testLndRpcEndpoint = let
+      endpoint = rpcAddress: let
+        lnd = (evaluate {
+          services.lnd = { enable = true; inherit rpcAddress; rpcPort = 10010; };
+        }).services.lnd;
+      in {
+        inherit (lnd) rpcEndpoint;
+        inherit (lnd.certificate) extraIPs;
+      };
+    in {
+      expr = map endpoint [ "127.0.0.1" "::" "[::1]" "0.0.0.0" ];
+      expected = [
+        { rpcEndpoint = "127.0.0.1:10010"; extraIPs = []; }
+        { rpcEndpoint = "[::]:10010"; extraIPs = [ "::" ]; }
+        { rpcEndpoint = "[::1]:10010"; extraIPs = [ "::1" ]; }
+        { rpcEndpoint = "0.0.0.0:10010"; extraIPs = [ "0.0.0.0" ]; }
+      ];
+    };
+    testLndRejectsMalformedRpcAddress = {
+      expr = lib.all (rpcAddress: !(builtins.tryEval (evaluate {
+        services.lnd = { enable = true; inherit rpcAddress; };
+      }).services.lnd.rpcEndpoint).success) [
+        "" "[" "]" "[]" "[::1" "::1]" "[[::1]]" "a[b]c"
+        " " "[ ]" "127.0.0.1 " "\t::1" "a\nb" "a\rb"
+        (builtins.fromJSON ''"\u00a0"'') (builtins.fromJSON ''"[\u2003]"'')
+      ];
+      expected = true;
+    };
+    testLndEmptyRpcHostNotice = let
+      notice = enable: rpcAddress: hasNotice "An empty LND RPC host" {
+        services.lnd = { inherit enable rpcAddress; };
+      };
+    in {
+      expr = [ (notice true "") (notice true "[]") (notice true "::") (notice false "") ];
+      expected = [ true true false false ];
+    };
     testLndconnectKeepsLocalAddresses = {
       expr = getRestAddresses localLightning;
       expected = [ "127.0.0.1" "127.0.0.1" ];
@@ -2126,6 +2162,31 @@ let
         enforce = { socket = local; rtl = local; };
         noEnforce = { socket = open; rtl = open; };
       };
+    };
+    # A dashboard can use the proxy without a data directory or either IP filter.
+    testWebProxyOptionalSettings = let
+      inspect = dashboard: filters: let
+        config = evaluate {
+          imports = [ (import ../modules/web-interface-proxy.nix {
+            name = "dashboard"; socketPath = "/run/dashboard/ui.sock"; user = "dashboard";
+          }) ];
+          options.services.dashboard = lib.mkOption {
+            default = { enable = true; address = "127.0.0.1"; port = 8088; } // dashboard;
+          };
+          config.systemd.services.dashboard.serviceConfig = filters;
+        };
+        sockets = lib.filterAttrs (name: _: lib.hasPrefix "dashboard-proxy-" name) config.systemd.sockets;
+        socket = (lib.head (lib.attrValues sockets)).socketConfig;
+        masks = config.systemd.services.dashboard-proxy.serviceConfig.InaccessiblePaths;
+      in [ (socket.IPAddressAllow or null) (socket.IPAddressDeny or null)
+           (masks == config.nix-bitcoin.lib.localResolverPaths ++ [ config.nix-bitcoin.secretsDir ]) ];
+    in {
+      expr = [
+        (inspect {} {})
+        (inspect { dataDir = null; } { IPAddressAllow = "localhost"; })
+        (inspect { dataDir = ""; } { IPAddressDeny = "any"; })
+      ];
+      expected = [ [ null null true ] [ "localhost" null true ] [ null "any" true ] ];
     };
     # The proxy runs as RTL's user, which alone can reach RTL's socket. It has no
     # network of its own and can't see RTL's files, the secrets or the local resolvers.
