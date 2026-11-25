@@ -236,6 +236,10 @@ let
         mnemonicFile = cfg.cdk-mintd.onchain.mnemonicFile;
         onchain = cfg.cdk-mintd.onchain.enable;
         cli = "${cfg.cdk-mintd.package}/bin/cdk-mintd --work-dir ${cfg.cdk-mintd.dataDir}";
+        walletCli = "${cfg.cdk-mintd.package}/bin/cdk-cli";
+        peerPort = cfg.clightning.port;
+        lndCli = lib.optionalString (cfg.cdk-mintd.backend == "lnd")
+          "${cfg.lnd.package}/bin/lncli --rpcserver ${lib.escapeShellArg cfg.lnd.rpcEndpoint} --tlscertpath ${lib.escapeShellArg cfg.lnd.certPath} --macaroonpath /run/cdk-mintd/lnd.macaroon";
       };
 
       tests.unbeholden-lnurl = cfg.unbeholden-lnurl.enable;
@@ -689,9 +693,18 @@ let
       };
     };
 
-    cdk-mintd-lnd = {
+    cdk-mintd-lnd = { config, ... }: {
       imports = [ scenarios.regtestBase ];
       nix-bitcoin.nodeinfo.enable = true;
+      # Exercise the shared gRPC endpoint against the actual TLS certificate.
+      # Netns isolation overrides this with LND's namespace address.
+      services.lnd.rpcAddress = mkDefault "::";
+      # A second Lightning node provides real channel liquidity and receives
+      # melts. The CLN-backed scenarios use this node as their mint backend.
+      services.clightning.enable = true;
+      tests.cdk-mintd-lightning = config.services.cdk-mintd.backend == "lnd";
+      nix-bitcoin.netns-isolation.services.clightning.connections =
+        lib.optional (config.services.cdk-mintd.backend == "lnd") "lnd";
       services.cdk-mintd = {
         enable = true;
         settings.mint_info.name = "Bitcoinix test mint";

@@ -110,20 +110,93 @@ def test_cdk_mintd():
     assert succeed_json(f"curl -fsS {url}/keys") == keys
 
 
+def start_cdk_wallet_command(unit, command):
+    # Run the wallet while the driver funds its quote or confirms its payout.
+    # Retain the exit status and output so a failed CLI cannot pass the test.
+    log = f"/tmp/{unit}.log"
+    succeed(f"systemd-run --unit={unit} --property=Type=exec --property=RemainAfterExit=yes "
+            f"--property=RuntimeMaxSec=180s --property=StandardOutput=file:{log} "
+            f"--property=StandardError=inherit {command}")
+    return log
+
+
+def finish_cdk_wallet_command(unit):
+    machine.wait_until_succeeds(
+        f"[[ $(systemctl show -P SubState {unit}) =~ ^(exited|failed)$ ]]", timeout=180)
+    output = succeed(f"cat /tmp/{unit}.log")
+    assert succeed(f"systemctl show -P Result {unit}").strip() == "success", output
+    assert succeed(f"systemctl show -P ExecMainStatus {unit}").strip() == "0", output
+    succeed(f"systemctl stop {unit}")
+    return output
+
+
+# Mine only after regtest has checked the common fixture's height.
+@test("cdk-mintd-lightning")
+def test_cdk_mintd_lightning():
+    data = test_data["cdk-mintd"]
+    mint_url = f"http://{ip('cdk-mintd')}:{data['port']}"
+    cli = f"{data['walletCli']} --work-dir /tmp/cdk-wallet-lightning --unit sat --non-interactive"
+    wait_for_lnd_server()
+    peer = succeed_json("lightning-cli -J getinfo")["id"]
+    succeed("bitcoin-cli -rpcwallet=test -generate 1")
+    address = succeed_json("lncli newaddress p2wkh")["address"]
+    succeed(f"bitcoin-cli -rpcwallet=test -named sendtoaddress address={address} amount=0.02 fee_rate=1",
+            "bitcoin-cli -rpcwallet=test -generate 6")
+    machine.wait_until_succeeds("lncli walletbalance | jq -e '.confirmed_balance | tonumber >= 2000000'")
+    succeed(f"lncli connect {peer}@{ip('clightning')}:{data['peerPort']}",
+            f"lncli openchannel --node_key={peer} --local_amt=1000000 --push_amt=200000 --sat_per_vbyte=1",
+            "bitcoin-cli -rpcwallet=test -generate 6")
+    machine.wait_until_succeeds("lncli listchannels | jq -e '.channels | any(.active)'", timeout=120)
+    machine.wait_until_succeeds(
+        "lightning-cli -J listpeerchannels | jq -e '.channels | any(.state == \"CHANNELD_NORMAL\")'", timeout=120)
+
+    # Fund ecash through a real channel payment from the independent peer.
+    log = start_cdk_wallet_command("cdk-lightning-mint", f"{cli} mint --wait-duration 60 {mint_url} 100000")
+    machine.wait_until_succeeds(f"grep -q '^Please pay: lnbcrt' {log}")
+    request = re.search(r"^Please pay: (\S+)", succeed(f"cat {log}"), re.MULTILINE)
+    assert request is not None
+    paid = succeed_json(f"lightning-cli -J -N none pay {request.group(1)}")
+    assert paid["status"] == "complete", paid
+    assert "Minted 100000 sat" in finish_cdk_wallet_command("cdk-lightning-mint")
+    assert "Total balance across all wallets: 100000 sat" in succeed(f"{cli} balance")
+
+    # The normal path uses SendPaymentV2; a full-amount MPP part exercises
+    # QueryRoutes and SendToRouteV2 without needing another mint.
+    for mpp, amount in [(False, 5000), (True, 10000)]:
+        label = f"cdk-melt-{mpp}"
+        invoice = succeed_json(f"lightning-cli -J invoice {amount * 1000} {label} cdk-melt")
+        machine.wait_until_succeeds(f"lncli queryroutes {peer} {amount} | jq -e '.routes | length > 0'")
+        options = f"--mpp --mpp-split={mint_url}={amount}" if mpp else f"--mint-url {mint_url}"
+        output = succeed(f"timeout 120 {cli} melt --method bolt11 --invoice {invoice['bolt11']} {options}")
+        preimage = re.search(r"[Pp]reimage: ([0-9a-f]{64})", output)
+        assert preimage is not None, output
+        assert hashlib.sha256(bytes.fromhex(preimage.group(1))).hexdigest() == invoice["payment_hash"]
+        received = succeed_json(f"lightning-cli -J listinvoices {label}")["invoices"][0]
+        assert received["status"] == "paid", received
+        assert received["amount_received_msat"] == amount * 1000, received
+        # Use exactly the mint's restricted macaroon, not the admin wrapper,
+        # to check TrackPaymentV2 on the completed outgoing payment.
+        tracked = succeed_json(f"{data['lndCli']} trackpayment --json {invoice['payment_hash']}")
+        assert tracked["status"] == "SUCCEEDED", tracked
+        assert tracked["payment_preimage"] == preimage.group(1), tracked
+
+
 # Mines blocks after the common regtest checks have checked the fixture height.
 @test("cdk-mintd-onchain")
 def test_cdk_mintd_onchain():
     data = test_data["cdk-mintd"]
     url = f"http://{ip('cdk-mintd')}:{data['port']}/v1"
-    # Inspect the actual generated TOML for IPv6 endpoints. The LND module's own
-    # IPv6 listener support is covered separately by its endpoint changes.
+    # LND preserves the host in its TLS certificate; Bitcoin RPC maps a
+    # wildcard listener to loopback. Both accept already-bracketed IPv6.
     import tomllib
-    for pre_start in test_data["cdk-mintd-ipv6-pre-starts"]:
+    for pre_start, lnd_host in zip(
+        test_data["cdk-mintd-ipv6-pre-starts"], ["[::]", "[::]", "[::1]", "[::1]"], strict=True
+    ):
         config_file = re.search(r"config init --new-mint --file (\S+)", pre_start)
         assert config_file is not None
         ipv6 = tomllib.loads(succeed(f"cat {config_file.group(1)}"))
         assert ipv6["info"]["listen_host"] == "[::]", ipv6
-        assert ipv6["lnd"]["address"] == "https://[::1]:10009", ipv6
+        assert ipv6["lnd"]["address"] == f"https://{lnd_host}:10009", ipv6
         assert ipv6["bdk"]["bitcoind_rpc_host"] == "[::1]", ipv6
         assert ipv6["info"]["logging"]["output"] == "stderr", ipv6
     # On-chain quotes require a public key for mint authorization.
@@ -165,6 +238,44 @@ def test_cdk_mintd_onchain():
     machine.wait_until_succeeds(check + " | jq -e '.amount_paid == 10000'")
     assert succeed(f"readlink {directory}/nix-config") == marker
     succeed(f"rm -rf {directory}/bdk_wallet.saved")
+
+    # Mint spendable ecash, then redeem it through BDK's sendrawtransaction
+    # path. A paid deposit quote alone never exercises signing or sending.
+    mint_url = url.removesuffix("/v1")
+    cli = f"{data['walletCli']} --work-dir /tmp/cdk-wallet-onchain --unit sat --non-interactive"
+    log = start_cdk_wallet_command(
+        "cdk-onchain-mint", f"{cli} mint --method onchain --wait-duration 60 {mint_url} 100000")
+    machine.wait_until_succeeds(f"grep -q '^Send sats to: bcrt1' {log}")
+    request = re.search(r"^Send sats to: (\S+)", succeed(f"cat {log}"), re.MULTILINE)
+    assert request is not None
+    address = request.group(1)
+    succeed(f"bitcoin-cli -rpcwallet=test -named sendtoaddress address={address} amount=0.001 fee_rate=1",
+            "bitcoin-cli -rpcwallet=test -generate 1")
+    assert "Minted 100000 sat" in finish_cdk_wallet_command("cdk-onchain-mint")
+    assert "Total balance across all wallets: 100000 sat" in succeed(f"{cli} balance")
+
+    payout_address = succeed("bitcoin-cli -rpcwallet=test getnewaddress").strip()
+    log = start_cdk_wallet_command(
+        "cdk-onchain-melt", f"{cli} melt --method onchain --mint-url {mint_url} "
+        f"--address {payout_address} --amount 50000")
+    machine.wait_until_succeeds(
+        f"bitcoin-cli -rpcwallet=test getreceivedbyaddress {payout_address} 0 | grep -Fx 0.00050000", timeout=180)
+    outputs = succeed_json(
+        f"bitcoin-cli -rpcwallet=test listunspent 0 9999999 '{json.dumps([payout_address])}'")
+    assert len(outputs) == 1, outputs
+    payout = outputs[0]
+    assert payout["confirmations"] == 0, payout
+    succeed("bitcoin-cli -rpcwallet=test -generate 1")
+    output = finish_cdk_wallet_command("cdk-onchain-melt")
+    assert "Payment successful: state=PAID, amount=50000" in output, output
+    quote_id = re.search(r"Quote ID: (\S+)", output)
+    assert quote_id is not None, output
+    quote = succeed_json(f"curl -fsS {url}/melt/quote/onchain/{quote_id.group(1)}")
+    assert quote["state"] == "PAID", quote
+    assert quote["outpoint"] == f"{payout['txid']}:{payout['vout']}", quote
+    transaction = succeed_json(f"bitcoin-cli -rpcwallet=test gettransaction {payout['txid']}")
+    assert transaction["confirmations"] >= 1, transaction
+    assert_full_match(f"bitcoin-cli -rpcwallet=test getreceivedbyaddress {payout_address} 1", "0.00050000\n")
 
 
 @test("cdk-mintd-backup")

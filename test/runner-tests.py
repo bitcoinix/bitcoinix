@@ -42,8 +42,9 @@ class RunnerTests(unittest.TestCase):
             "electrs", "stop-electrs", "netns-isolation", "tor-enforce", "hardening-ro-paths",
             "backups", "restart-bitcoind", "config-replace", "clnrest-admin-rune",
             "regtest", "lnd-restart-on-clean-exit", "lnd-macaroon-revocation",
-            "trustedcoin", "cdk-mintd-onchain", "setup-secrets",
+            "trustedcoin", "cdk-mintd-lightning", "cdk-mintd-onchain", "setup-secrets",
             "setup-secrets-supplied", "cdk-mintd-backup", "cdk-mintd-backup-shutdown",
+            "netns-bridge-restart",
         ]
         self.context["enabled_tests"] = set(expected)
         self.context["nb_run_tests"]()

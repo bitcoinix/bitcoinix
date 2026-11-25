@@ -149,7 +149,7 @@ let
       onchain.onchain_backend = if cfg.onchain.enable then "bdk" else "none";
     } // (if isLnd then {
       lnd = (cfg.settings.lnd or {}) // {
-        address = "https://${connectAddress lnd.rpcAddress}:${toString lnd.rpcPort}";
+        address = "https://${lnd.rpcEndpoint}";
         cert_file = lnd.certPath;
         macaroon_file = "/run/cdk-mintd/lnd.macaroon";
       };

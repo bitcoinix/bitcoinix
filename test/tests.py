@@ -55,6 +55,7 @@ TEST_PHASES = (
         "lnd-restart-on-clean-exit",
         "lnd-macaroon-revocation",
         "trustedcoin",
+        "cdk-mintd-lightning",
         "cdk-mintd-onchain",
     )),
     ("secrets", (
