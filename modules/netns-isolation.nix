@@ -33,7 +33,6 @@ let
       type = types.attrsOf (types.submodule {
         options = {
           id = mkOption {
-            # TODO: Assert uniqueness
             type = types.ints.between 11 255;
             description = ''
               id for the netns, used for the IP address host part and
@@ -126,6 +125,11 @@ let
     ) base (builtins.attrNames base);
 
   enabledServices = filterAttrs (n: v: isEnabled n) cfg.services;
+  # Ids that more than one entry uses, mapped to the names of those entries.
+  # All entries count, enabled or not, so a clash shows up before both
+  # services are enabled together.
+  duplicateIds = filterAttrs (id: names: length names > 1)
+    (groupBy (n: toString cfg.services.${n}.id) (attrNames cfg.services));
   isEnabled = x: config.services.${x}.enable;
 
   ip = "${pkgs.iproute2}/bin/ip";
@@ -237,6 +241,13 @@ in {
         # subnet clear of them.
         assertion = !(builtins.elem cfg.addressblock [ 169 170 ]);
         message = "`nix-bitcoin.netns-isolation.addressblock` must not be 169 or 170: the subnet 169.254.${toString cfg.addressblock}.0/24 would include a cloud metadata address, which services with `tor.enforce` are then allowed to reach. Choose a different address block.";
+      }
+      {
+        # Namespaces with the same id get the same address and interface names
+        assertion = duplicateIds == {};
+        message = "`nix-bitcoin.netns-isolation.services` entries must have unique ids. Shared ids: "
+          + concatStringsSep "; " (mapAttrsToList (id: names: "${id} (${concatStringsSep ", " names})") duplicateIds)
+          + ". Give each entry its own `id`.";
       }
       {
         # A module that sets this forwards for other networks, and nb-netns-forward
