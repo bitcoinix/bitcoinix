@@ -1222,14 +1222,17 @@ Things to know before enabling it:
   scripthash index. It is built after the node reaches the tip, which takes
   several hours on mainnet, and the Electrum port only opens once it is ready.
 - **RPC.** With `services.rbitcoin.rpc.enable`, rbitcoin serves a Bitcoin Core
-  compatible JSON-RPC subset over TCP. Clients authenticate with the cookie at
-  `/run/rbitcoin/rpc.cookie`, readable by group `rbitcoinrpc`. The cookie
-  changes on every start, so clients should read it from that path (mempool
-  does). The operator's `rbitcoin-cli` uses the unix socket in `dataDir`.
-  The cookie is mode 0640 so that group `rbitcoinrpc` can read it. rbitcoin
-  refuses a cookie with group bits unless started with
-  `--rpc-cookie-perms group`, which the module passes. (Earlier rbitcoin
-  versions only logged a warning.)
+  compatible JSON-RPC subset over TCP. rbitcoin opens the RPC port only once
+  it has caught up with the chain, which takes hours or days on a fresh
+  mainnet node. Clients authenticate with the cookie at
+  `/run/rbitcoin-rpc/rpc.cookie`, readable by group `rbitcoinrpc`. The
+  `rbitcoin-rpc-cookie` service publishes it there only after rbitcoin's own
+  process holds the RPC port, and removes it when rbitcoin stops. Without
+  netns isolation, any local user could listen on the port before rbitcoin
+  does, and a client would send that listener the cookie. So clients wait for
+  the file (mempool does), and the cookie changes on every start, so they
+  should read it from that path. The operator's `rbitcoin-cli` uses the unix
+  socket in `dataDir` and works while rbitcoin syncs.
 - **Tor.** With `services.rbitcoin.tor.proxy` (enabled by `secure-node.nix`),
   all P2P connections, including DNS seed lookups, go through Tor.
 - **Large addresses.** `services.rbitcoin.maxShCreates` (default 10000)

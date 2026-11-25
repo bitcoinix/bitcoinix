@@ -44,6 +44,8 @@ let
         (mkIfTest "secrets-no-argv" [ strace ])
         # Talks to the Electrum relay
         (mkIfTest "unbeholden-wallet" [ websocat ])
+        # Takes rbitcoin's RPC port before rbitcoin does
+        (mkIfTest "rbitcoin" [ socat ])
       ]);
 
       tests.bitcoind = cfg.bitcoind.enable;
@@ -380,6 +382,7 @@ let
       services.bitcoind.listen = mkIf cfg.rbitcoin.enable true;
       test.data.rbitcoin = {
         rpc = cfg.rbitcoin.rpc.enable;
+        rpcPortOwnedBy = "${cfg.rbitcoin.rpc.portOwnedBy}";
         electrum = cfg.rbitcoin.electrum.enable;
       };
       tests.rbitcoin-mempool = cfg.mempool.enable && cfg.mempool.electrumServer == "rbitcoin";

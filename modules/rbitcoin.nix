@@ -95,8 +95,10 @@ let
         description = ''
           Whether to serve the Bitcoin Core compatible JSON-RPC subset over TCP.
           Clients authenticate with an RPC cookie at `cookieFile`, readable by
-          group `rbitcoinrpc`. The unix socket in `dataDir` is always enabled
-          for the `rbitcoin-cli` wrapper.
+          group `rbitcoinrpc`. The cookie appears there only once rbitcoin
+          listens on the RPC port, which is after it has caught up with the
+          chain. The unix socket in `dataDir` is always enabled for the
+          `rbitcoin-cli` wrapper.
 
           WARNING: The cookie is an administrative credential. rbitcoin has
           no restricted or read-only credential, so every method (including
@@ -115,14 +117,26 @@ let
         defaultText = "8332 for mainnet, the network's default port otherwise";
         description = "Port to listen for JSON-RPC connections.";
       };
+      portOwnedBy = mkOption {
+        internal = true;
+        readOnly = true;
+        default = rpcPortOwnedBy;
+        description = ''
+          Script that exits 0 if the process with the given pid owns the RPC
+          port. Used by `rbitcoin-rpc-cookie` and the tests.
+        '';
+      };
       cookieFile = mkOption {
         readOnly = true;
         type = types.path;
-        default = "/run/rbitcoin/rpc.cookie";
+        default = "/run/rbitcoin-rpc/rpc.cookie";
         description = ''
-          Bitcoin Core format RPC cookie, regenerated on every start. Clients
-          should read it from this path (and re-read it after an HTTP 401)
-          rather than copy it.
+          Bitcoin Core format RPC cookie, regenerated on every start. It exists
+          only while rbitcoin holds its RPC port, so a client that finds it
+          talks to rbitcoin and not to another local process that took the
+          port while rbitcoin was still syncing. Clients should wait for it,
+          read it from this path (and re-read it after an HTTP 401) rather
+          than copy it.
         '';
       };
     };
@@ -210,6 +224,75 @@ let
     '';
   };
   inherit (config.services) bitcoind electrs fulcrum;
+
+  # rbitcoin reads its RPC cookie when it opens the RPC port, after catch-up,
+  # which can be days after the start. Until then any local user can listen
+  # on that port, so a client must not send the cookie before rbitcoin holds
+  # it. rbitcoin's copy is in its 0700 runtime directory. root keeps a second
+  # copy (`pendingCookie`), and `rbitcoin-rpc-cookie` publishes it at
+  # `cfg.rpc.cookieFile` while rbitcoin's main process owns the RPC port.
+  nodeCookie = "/run/rbitcoin/rpc.cookie";
+  pendingCookie = "/run/rbitcoin-rpc.pending";
+
+  # The listeners that take a client's connection to the RPC address: that
+  # address and the wildcards. `ss` prints IPv6 addresses in brackets and a
+  # dual-stack wildcard as `*`.
+  rpcClientAddress = nbLib.address cfg.rpc.address;
+  rpcPort = toString cfg.rpc.port;
+  rpcListeners = [ "${listenAddress rpcClientAddress cfg.rpc.port}" "[::]:${rpcPort}" "*:${rpcPort}" ]
+    ++ optionals (!hasInfix ":" rpcClientAddress) [
+      "0.0.0.0:${rpcPort}"
+      "[::ffff:${rpcClientAddress}]:${rpcPort}"
+    ];
+
+  # Exits 0 if the process with pid $1 owns all listeners in `rpcListeners`,
+  # and there is at least one. Sockets are matched by inode against the
+  # process's open files. Process names are not used: `ss -p` prints them
+  # unescaped, and any user can name a process `pid=<pid>,`.
+  rpcPortOwnedBy = pkgs.writers.writeBash "rbitcoin-rpc-port-owned-by" ''
+    set -euo pipefail
+    pid=$1
+    [[ $pid =~ ^[1-9][0-9]*$ ]] || exit 1
+    # The inodes of the process's open sockets, in one pass: rbitcoin keeps
+    # thousands of files open
+    inodes=" $(${pkgs.findutils}/bin/find /proc/"$pid"/fd -mindepth 1 -printf '%l\n' 2>/dev/null \
+      | ${pkgs.gnused}/bin/sed -n 's/^socket:\[\([0-9]*\)\]$/\1/p' | ${pkgs.coreutils}/bin/tr '\n' ' ') "
+    # Only the first `ino:` field: later fields like `cgroup:` hold names
+    # that users choose
+    ${pkgs.iproute2}/bin/ss -Hltne 'sport = :${rpcPort}' \
+      | ${pkgs.gawk}/bin/awk -v mine="$inodes" -v listeners='${concatStringsSep " " rpcListeners}' '
+          BEGIN { n = split(listeners, l, " "); for (i = 1; i <= n; i++) relevant[l[i]] = 1 }
+          !($4 in relevant) { next }
+          {
+            found = 1; ino = ""
+            for (i = 5; i <= NF; i++) if ($i ~ /^ino:/) { ino = substr($i, 5); break }
+            if (ino == "" || index(mine, " " ino " ") == 0) other = 1
+          }
+          END { exit !(found && !other) }'
+  '';
+
+  publishCookie = nbLib.script "rbitcoin-rpc-cookie-publish" ''
+    pid=$(${config.systemd.package}/bin/systemctl show -P MainPID rbitcoin.service)
+    if [[ ! $pid =~ ^[1-9][0-9]*$ ]]; then
+      echo "rbitcoin has no main process"
+      exit 1
+    fi
+    owned() { ${rpcPortOwnedBy} "$pid"; }
+    if ! owned; then
+      echo "Waiting for rbitcoin to listen on ${concatStringsSep ", " rpcListeners}"
+      until owned; do sleep 2; done
+    fi
+    install -m 0640 -g rbitcoinrpc '${pendingCookie}' '${cfg.rpc.cookieFile}.tmp'
+    mv -fT '${cfg.rpc.cookieFile}.tmp' '${cfg.rpc.cookieFile}'
+    echo "Published the RPC cookie at ${cfg.rpc.cookieFile}"
+    # Keep watching: rbitcoin may restart between the check and the move, or
+    # lose its listener while it keeps running. Exiting removes the runtime
+    # directory and the cookie with it, and the unit restarts and waits again.
+    while owned; do sleep 5; done
+    echo "rbitcoin no longer holds its RPC port, removing the cookie"
+    rm -f '${cfg.rpc.cookieFile}'
+    exit 1
+  '';
   isUnder = dir: path: path == dir || hasPrefix "${dir}/" path;
 
   args = [
@@ -230,10 +313,10 @@ let
   ++ [ "--rpc" "--rpc-socket=${cfg.dataDir}/rpc.sock" ]
   ++ optionals cfg.rpc.enable [
     "--rpc-listen=${listenAddress cfg.rpc.address cfg.rpc.port}"
-    "--rpc-cookie-file=${cfg.rpc.cookieFile}"
-    # The cookie is 0640 (see ExecStartPre). rbitcoin refuses group bits at
-    # startup unless told to allow them.
-    "--rpc-cookie-perms" "group"
+    "--rpc-cookie-file=${nodeCookie}"
+    # rbitcoin's own copy is 0600 (see ExecStartPre). Clients read the
+    # published copy, see `nodeCookie`.
+    "--rpc-cookie-perms" "owner"
   ]
   ++ optional cfg.electrum.enable "--electrum-listen=${listenAddress cfg.electrum.address cfg.electrum.port}"
   # Seed hostnames go to the proxy too; rbitcoin never resolves them locally
@@ -284,29 +367,30 @@ in {
       unitConfig.RequiresMountsFor = [ cfg.dataDir ] ++ optional (cfg.coldDataDir != null) cfg.coldDataDir;
       serviceConfig = nbLib.defaultHardening // {
         # The cookie is written here instead of being a nix-bitcoin secret so
-        # that it exists only at runtime and changes on every start. Mode 0640
-        # and no trailing newline, as Bitcoin Core writes it (clients send the
-        # contents verbatim as HTTP Basic credentials). Runs as root (`+`):
-        # `PrivateUsers` would hide group `rbitcoinrpc` from the service.
+        # that it exists only at runtime and changes on every start. No
+        # trailing newline, as Bitcoin Core writes it (clients send the
+        # contents verbatim as HTTP Basic credentials). Runs as root (`+`) to
+        # keep the copy that `rbitcoin-rpc-cookie` publishes, see `nodeCookie`.
         ExecStartPre = mkIf cfg.rpc.enable (nbLib.rootScript "rbitcoin-rpc-cookie" ''
-          cookie='${cfg.rpc.cookieFile}'
+          cookie='${nodeCookie}'
           # /run/rbitcoin belongs to the service user, who could swap a file
           # there for a symlink between root's write and its chown/chmod. Build
           # the cookie in a root-only directory and only rename it into place.
           dir=$(mktemp -d /run/rbitcoin-cookie.XXXXXX)
           trap 'rm -rf "$dir"' EXIT
-          printf '__cookie__:%s' "$(head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n')" > "$dir/cookie"
-          chown ${cfg.user}:rbitcoinrpc "$dir/cookie"
-          chmod 0640 "$dir/cookie"
+          secret=$(head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n')
+          [[ ''${#secret} == 64 ]]
+          printf '__cookie__:%s' "$secret" > "$dir/cookie"
+          install -m 0600 "$dir/cookie" '${pendingCookie}'
+          chown ${cfg.user}:${cfg.group} "$dir/cookie"
+          chmod 0600 "$dir/cookie"
           mv -fT "$dir/cookie" "$cookie"
         '');
         ExecStart = "${cfg.package}/bin/rbitcoin-node ${utils.escapeSystemdExecArgs args}";
         User = cfg.user;
         Group = cfg.group;
         RuntimeDirectory = "rbitcoin";
-        # Group `rbitcoinrpc` reaches the cookie through this directory,
-        # without being able to list it.
-        RuntimeDirectoryMode = "0711";
+        RuntimeDirectoryMode = "0700";
         Restart = "on-failure";
         RestartSec = "10s";
         # On shutdown the node flushes its tip tables and mempool.
@@ -317,6 +401,38 @@ in {
         # hides.
         ProcSubset = "all";
       } // nbLib.allowedIPAddresses cfg.tor.enforce;
+    };
+
+    systemd.services.rbitcoin-rpc-cookie = mkIf cfg.rpc.enable {
+      description = "Publish rbitcoin's RPC cookie once rbitcoin holds its RPC port";
+      # Starts with every start of rbitcoin and stops with it, like
+      # `rbitcoin-space`. Stopping removes the runtime directory and with it
+      # the published cookie.
+      wantedBy = [ "rbitcoin.service" ];
+      bindsTo = [ "rbitcoin.service" ];
+      partOf = [ "rbitcoin.service" ];
+      after = [ "rbitcoin.service" ];
+      serviceConfig = {
+        # Waits without blocking a start job (for hours during IBD), and runs
+        # for as long as the cookie is published
+        Type = "exec";
+        ExecStart = publishCookie;
+        # root, to see which process holds the port. The group owns the
+        # runtime directory.
+        User = "root";
+        Group = "rbitcoinrpc";
+        RuntimeDirectory = "rbitcoin-rpc";
+        RuntimeDirectoryMode = "0750";
+        UMask = "0027";
+        Restart = "on-failure";
+        RestartSec = "5s";
+        ProtectSystem = "strict";
+        ProtectHome = true;
+        PrivateTmp = true;
+        NoNewPrivileges = true;
+        # rbitcoin's network namespace, with netns-isolation
+        NetworkNamespacePath = config.systemd.services.rbitcoin.serviceConfig.NetworkNamespacePath or null;
+      };
     };
 
     users.users.${cfg.user} = {

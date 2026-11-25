@@ -394,7 +394,15 @@ in {
       # Outside production mode, Express error pages show stack traces with /nix/store paths
       environment.NODE_ENV = "production";
       serviceConfig = nbLib.defaultHardening // {
-        ExecStart = "${cfg.package}/bin/mempool-backend";
+        ExecStart = if useRbitcoin then nbLib.script "mempool-start" ''
+          # rbitcoin publishes its cookie only once it holds its RPC port, after
+          # catch-up. Wait here, not in a start job, which would block for hours.
+          if [[ ! -e '${rbitcoin.rpc.cookieFile}' ]]; then
+            echo "Waiting for rbitcoin's RPC cookie at ${rbitcoin.rpc.cookieFile}"
+            until [[ -e '${rbitcoin.rpc.cookieFile}' ]]; do sleep 5; done
+          fi
+          exec ${cfg.package}/bin/mempool-backend
+        '' else "${cfg.package}/bin/mempool-backend";
         CacheDirectory = "mempool";
         CacheDirectoryMode = "770";
         # Show "mempool" instead of "node" in the journal
