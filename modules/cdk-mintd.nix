@@ -208,7 +208,10 @@ in {
     services.clightning.enable = mkIf (!isLnd) true;
     services.bitcoind.enable = mkIf cfg.onchain.enable true;
 
-    systemd.tmpfiles.rules = [ "d '${cfg.dataDir}' 0700 ${cfg.user} ${cfg.group} - -" ];
+    systemd.tmpfiles.rules = [
+      "d '${cfg.dataDir}' 0700 ${cfg.user} ${cfg.group} - -"
+      "d ${stateDir} 0755 root root - -"
+    ];
     systemd.services.cdk-mintd = {
       wantedBy = [ "multi-user.target" ];
       requires = [ "${cfg.backend}.service" ] ++ optional cfg.onchain.enable "bitcoind.service";
@@ -216,6 +219,12 @@ in {
         ++ optional cfg.onchain.enable "bitcoind.service";
       preStart = ''
         umask 077
+        # A failed stat must not be interpreted as a missing initialization
+        # marker. This directory is created by tmpfiles even for a new mint.
+        if [[ ! -r ${stateDir} || ! -x ${stateDir} ]]; then
+          echo "Cannot inspect ${stateDir}; refusing to start the mint. Restore this root-owned directory's access permissions (0755) and check its parent directories." >&2
+          exit 1
+        fi
         ${optionalString isLnd ''
           # lnd owns /run/lnd. Do not let a substituted symlink make CDK send
           # a mint secret to lnd as the macaroon header.
@@ -240,7 +249,7 @@ in {
           fi
         else
           ${optionalString (!cfg.allowNewMint) ''
-            if [[ -e ${stateDir}/initialized ]]; then
+            if [[ -e ${stateDir}/initialized || -L ${stateDir}/initialized ]]; then
               echo "Refusing to recreate an initialized mint. Restore its database and signing secrets; a seed alone cannot recover spent-proof state." >&2
               exit 1
             fi

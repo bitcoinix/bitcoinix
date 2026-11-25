@@ -78,8 +78,13 @@ module runs `config init --new-mint`; when the generated Nix configuration or
 `/var/lib/nixos/cdk-mintd/initialized` prevents a missing database or changed
 `dataDir` from silently creating a replacement mint with the old signing seed.
 Keep this marker with the node's state when migrating hosts; automated backups
-include it under `var/lib/nixos`. If the entire node state is lost, restore the
-mint before enabling the service. Only when deliberately replacing a mint, use a
+include it under `var/lib/nixos`. Its directory must be root-owned and readable
+and searchable by the mint user (mode `0755`). Startup refuses an absent or
+inaccessible marker directory rather than treating its marker as missing.
+On a replacement host, install the recovery masks below **before the first
+deployment that enables the service**, even if `/secrets` is already restored.
+This needs no mint account; the protected deployment creates the user and group
+needed to restore the data. Only when deliberately replacing a mint, use a
 **new signing seed**, an empty data directory and temporary `allowNewMint = true`.
 Never use this option to recover a mint with outstanding ecash.
 
@@ -100,9 +105,11 @@ Enable `services.backups.enable = true;` to include the mint. Before each duplic
 backup, `cdk-mintd-backup` stops the mint, archives its complete data directory,
 and copies its signing seed and, when on-chain support is enabled, BDK mnemonic.
 This includes custom `seedFile` and `onchain.mnemonicFile` paths even when
-`nix-bitcoin.generateSecrets` is off. It then queues a restart for a previously
-running or starting mint, including start requests made during the copy. An
-intentionally stopped mint stays stopped unless a new start is requested.
+`nix-bitcoin.generateSecrets` is off. A previously running mint gets a start job
+queued before copying. Systemd keeps it, and any other start requests, waiting
+until the backup finishes. A stop requested during copying cancels that pending
+start; cleanup does not restart the mint afterwards. An intentionally stopped
+mint stays stopped unless a new start is requested.
 Payments are unavailable during staging; uploading does not wait for mint startup.
 
 The root-only staging directory `/var/lib/cdk-mintd-backup/current` contains:
@@ -114,7 +121,7 @@ The root-only staging directory `/var/lib/cdk-mintd-backup/current` contains:
 Duplicity archives this snapshot and excludes the live mint directory and partial
 staging, even if listed in `services.backups.extraFiles`. The old snapshot is
 removed before starting the backup hook, so even a hook that cannot start leaves
-no stale snapshot. A failed copy queues the mint's restart and makes duplicity
+no stale snapshot. A failed copy releases any pending mint start and makes duplicity
 fail **after** backing up the other services.
 Check `journalctl -u cdk-mintd-backup -u duplicity` on failure. Do not store your own
 files in `/var/lib/cdk-mintd-backup`.
@@ -126,7 +133,9 @@ can still be too old: payments and spent proofs recorded after `created-at` are
 missing. Do not reopen a mint from an outdated snapshot without reconciling that
 missing state and its liabilities.
 
-1. Open a root shell (`sudo -s`). Pause scheduled backups with
+1. Open a root shell (`sudo -s`). **On a new host, perform this step before the
+   first deployment that enables `services.cdk-mintd`.** On an existing host,
+   pause scheduled backups with
    `systemctl stop duplicity.timer` if the timer is enabled. Wait for any running
    `duplicity` and `cdk-mintd-backup` jobs to finish, then prevent new backup jobs
    and mint starts throughout recovery. NixOS installs units in `/etc`, which
@@ -143,8 +152,16 @@ missing state and its liabilities.
    systemctl stop cdk-mintd.service
    ```
 
-   Confirm all three show `LoadState=masked` before continuing. These masks last
-   until reboot; keep the node running until recovery finishes.
+   Confirm all three show `LoadState=masked` before continuing. On a new host,
+   now deploy the configuration enabling the mint to create its user, group and
+   data directory. Keep the masks in place, and check `LoadState=masked` again
+   after deployment. These masks last until reboot; keep the node running until
+   recovery finishes.
+
+   Also restore `var/lib/nixos/cdk-mintd/initialized` from the backup when
+   available. It is outside the `current` snapshot. Keep its parent directory
+   owned by `root:root` with mode `0755`, and the marker owned by `root:root`
+   with mode `0600`. Preserve an existing marker.
 2. Restore `var/lib/cdk-mintd-backup/current` from duplicity to a temporary,
    root-only directory. With `--path-to-restore var/lib/cdk-mintd-backup/current`,
    files such as `data.tar` are directly inside the target directory, without a

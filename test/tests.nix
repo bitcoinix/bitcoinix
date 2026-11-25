@@ -725,6 +725,7 @@ let
       environment.systemPackages = [ pkgs.sqlite ];
       security.pam.loginLimits = [{ domain = "*"; type = "-"; item = "nofile"; value = "4096"; }];
       systemd.services.cdk-mintd-backup.serviceConfig.LimitNOFILE = 1024;
+      systemd.services.cdk-mintd-backup.serviceConfig.TimeoutStartSec = mkForce "45s";
       test.data.cdk-mintd-recovery-pre-start = config.nix-bitcoin.lib.script "cdk-wallet-recovery" (
         (extendModules { modules = [{ services.cdk-mintd.onchain.allowNewWallet = mkForce true; }]; })
           .config.systemd.services.cdk-mintd.preStart
@@ -736,6 +737,17 @@ let
       }]; }).config.systemd.services.cdk-mintd.preStart;
       # Pause copying deterministically to test starts and cancellation mid-backup.
       systemd.services.cdk-mintd-backup.path = mkBefore [
+        (pkgs.writeShellScriptBin "systemctl" ''
+          # Inject a backend start after the snapshot of the mint's state.
+          if [[ $1 == is-active && $2 == cdk-mintd.service && -e $STATE_DIRECTORY/pause-state-check ]]; then
+            status=0
+            ${config.systemd.package}/bin/systemctl "$@" || status=$?
+            touch "$STATE_DIRECTORY/state-checked"
+            while [[ -e $STATE_DIRECTORY/pause-state-check ]]; do sleep 0.1; done
+            exit "$status"
+          fi
+          exec ${config.systemd.package}/bin/systemctl "$@"
+        '')
         (pkgs.writeShellScriptBin "tar" ''
           while [[ -e ${config.services.cdk-mintd.dataDir}/pause-backup ]]; do sleep 0.1; done
           exec ${pkgs.gnutar}/bin/tar "$@"

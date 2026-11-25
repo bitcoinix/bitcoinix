@@ -48,6 +48,19 @@ def test_cdk_mintd():
     succeed("systemctl stop cdk-mintd", f"mv {directory} {directory}.saved",
             f"install -d -o {data['user']} -g {data['group']} -m 700 {directory}",
             f"cp -a {directory}.saved/nix-config {directory}/")
+    # A private directory (e.g. restored under umask 077) must not hide the
+    # marker and authorize a new mint. Check read and search permission failures.
+    guard_dir = os.path.dirname(guard)
+    for mode in ["700", "744"]:
+        succeed(f"chmod {mode} {guard_dir}", "systemctl reset-failed cdk-mintd")
+        machine.fail("systemctl start cdk-mintd")
+        machine.fail(f"test -e {directory}/cdk-mintd.sqlite")
+        succeed("systemctl stop cdk-mintd")
+    succeed(f"chmod 755 {guard_dir}", f"mv {guard_dir} {guard_dir}.saved")
+    machine.fail("systemctl start cdk-mintd")
+    machine.fail(f"test -e {directory}/cdk-mintd.sqlite")
+    succeed("systemctl stop cdk-mintd", f"mv {guard_dir}.saved {guard_dir}",
+            "systemctl reset-failed cdk-mintd")
     machine.fail("systemctl start cdk-mintd")
     succeed("journalctl -u cdk-mintd | grep -F 'Refusing to recreate an initialized mint'",
             "systemctl stop cdk-mintd", f"rm -rf {directory}",
@@ -146,7 +159,6 @@ def test_cdk_mintd_backup():
     url = f"http://{ip('cdk-mintd')}:{data['port']}/v1"
     stage = "/var/lib/cdk-mintd-backup"
     current = f"{stage}/current"
-    runtime = "/run/cdk-mintd-backup"
     duplicity = "export $(cat /secrets/backup-encryption-env); duplicity"
     destination = "file:///var/lib/localBackups"
 
@@ -207,6 +219,8 @@ def test_cdk_mintd_backup():
     succeed(f"{duplicity} restore --path-to-restore {current.lstrip('/')} {destination} {restored}")
     mask("duplicity", "cdk-mintd-backup", "cdk-mintd")
     succeed("systemctl stop cdk-mintd",
+            # Emulate a new host with the old seed but no database or marker.
+            "mv /var/lib/nixos/cdk-mintd/initialized /tmp/cdk-initialized.saved",
             f"mv {directory} {directory}.before-restore",
             f"install -d -o {user} -g {group} -m 700 {directory}")
     succeed(f"systemctl restart {data['backend']}")
@@ -222,6 +236,7 @@ def test_cdk_mintd_backup():
     assert_full_match(f"readlink {directory}/root-link", "/root/cdk-backup-canary\n")
     assert_full_match("cat /root/cdk-backup-canary", "root-secret\n")
     assert succeed(f"sha256sum {data['seedFile']}").split()[0] == seed_hash
+    succeed("mv /tmp/cdk-initialized.saved /var/lib/nixos/cdk-mintd/initialized")
     unmask("duplicity", "cdk-mintd-backup", "cdk-mintd")
     succeed("systemctl start cdk-mintd")
     ready()
@@ -261,13 +276,49 @@ def test_cdk_mintd_backup():
     machine.wait_until_succeeds("test $(systemctl show -P Job cdk-mintd) != 0")
     assert_full_match("systemctl show -P ActiveState cdk-mintd", "inactive\n")
     succeed("systemctl start --no-block cdk-mintd-backup")
-    machine.wait_until_succeeds(f"test -e {runtime}/restart && test -d {stage}/.next")
+    machine.wait_until_succeeds(f"test -d {stage}/.next")
+    machine.wait_until_succeeds("systemctl list-jobs --no-legend cdk-mintd.service | grep -w start")
     succeed(f"rm {directory}/pause-backup", "timeout 30 systemctl start cdk-mintd-backup")
     assert_full_match("systemctl show -P ActiveState cdk-mintd", "inactive\n")
     succeed("rm /run/cdk-start-barrier")
     ready()
     succeed("rm /run/systemd/system/cdk-mintd.service.d/barrier.conf",
             "systemctl daemon-reload")
+
+    # A start arriving after the backup observes an inactive mint must remain
+    # queued throughout the copy, not get cancelled by a redundant stop command.
+    succeed("systemctl stop cdk-mintd", f"touch {stage}/pause-state-check",
+            f"touch {directory}/pause-backup", "systemctl start --no-block cdk-mintd-backup")
+    machine.wait_until_succeeds(f"test -e {stage}/state-checked")
+    succeed(f"systemctl restart {data['backend']}")
+    machine.wait_until_succeeds("systemctl list-jobs --no-legend cdk-mintd.service | grep -w start")
+    job = succeed("systemctl show -P Job cdk-mintd")
+    succeed(f"rm {stage}/pause-state-check")
+    machine.wait_until_succeeds(f"test -d {stage}/.next")
+    assert succeed("systemctl show -P Job cdk-mintd") == job
+    assert_full_match("systemctl show -P ActiveState cdk-mintd", "inactive\n")
+    succeed(f"rm {directory}/pause-backup", "systemctl start cdk-mintd-backup",
+            f"rm {stage}/state-checked")
+    ready()
+
+    # An explicit stop during copying cancels the queued restart. Neither normal
+    # completion nor cancellation of the backup may resurrect that request.
+    for cancel in [False, True]:
+        succeed(f"touch {directory}/pause-backup", "systemctl start --no-block cdk-mintd-backup")
+        machine.wait_until_succeeds(f"test -d {stage}/.next")
+        machine.wait_until_succeeds("systemctl list-jobs --no-legend cdk-mintd.service | grep -w start")
+        succeed("systemctl stop cdk-mintd")
+        assert succeed("systemctl show -P Job cdk-mintd").strip() in ("", "0")
+        if cancel:
+            succeed("systemctl stop cdk-mintd-backup", f"rm {directory}/pause-backup")
+            machine.fail(f"test -e {current}")
+        else:
+            succeed(f"rm {directory}/pause-backup", "systemctl start cdk-mintd-backup")
+        assert_full_match("systemctl show -P ActiveState cdk-mintd", "inactive\n")
+        assert succeed("systemctl show -P Job cdk-mintd").strip() in ("", "0")
+        machine.fail(f"test -e {stage}/.next")
+        succeed("systemctl reset-failed cdk-mintd cdk-mintd-backup", "systemctl start cdk-mintd")
+        ready()
 
     # A copy error restarts the mint, removes stale/partial staging, backs up
     # unrelated files, and fails duplicity after it has archived those files.
@@ -286,12 +337,12 @@ def test_cdk_mintd_backup():
     # and fulfills a new start request made while a stopped mint is being copied.
     succeed("systemctl stop cdk-mintd", f"touch {directory}/pause-backup",
             "systemctl start --no-block cdk-mintd-backup")
-    machine.wait_until_succeeds(f"test -e {runtime}/in-progress && test -d {stage}/.next")
-    succeed(f"systemctl restart {data['backend']}", "systemctl start cdk-mintd")
+    machine.wait_until_succeeds(f"test -d {stage}/.next")
+    succeed(f"systemctl restart {data['backend']}", "systemctl start --no-block cdk-mintd")
+    machine.wait_until_succeeds("systemctl list-jobs --no-legend cdk-mintd.service | grep -w start")
     assert_full_match("systemctl show -P ActiveState cdk-mintd", "inactive\n")
     succeed("systemctl stop cdk-mintd-backup")
     ready()
-    machine.fail(f"test -e {runtime}/in-progress")
     machine.fail(f"test -e {stage}/.next")
     machine.fail(f"test -e {current}")
     succeed(f"rm {directory}/pause-backup", "systemctl reset-failed cdk-mintd-backup",

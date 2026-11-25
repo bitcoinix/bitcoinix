@@ -69,6 +69,7 @@ When `cdk-mintd` is enabled, the backup briefly stops it to stage its complete d
 and signing secrets in `/var/lib/cdk-mintd-backup/current`. A previously running
 or starting mint is queued to restart before uploading; a stopped mint stays
 stopped unless a new start is requested during staging. Duplicity includes
-the snapshot and excludes live mint databases. Copy failures still back up the
-other services, then fail the backup. See [mint backup and recovery](../cdk-mintd.md#automated-backups)
+the snapshot and excludes live mint databases. A stop during staging cancels a
+pending mint restart. Copy failures still back up the other services, then fail
+the backup. See [mint backup and recovery](../cdk-mintd.md#automated-backups)
 for the snapshot layout, custom secrets and the risks of restoring outdated spent-proof state.
