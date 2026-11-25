@@ -116,6 +116,7 @@ let
       description = ''
         Bash expression which outputs the public service address to announce to peers.
         If left empty, no address is announced.
+        The service fails to start when the command fails or prints nothing.
       '';
     };
     tor = nbLib.tor;
@@ -206,11 +207,13 @@ in {
         # Older versions let group members write the data dir, so `config` can
         # be a symlink or a file that one of them owns. A redirect into it would
         # follow the symlink or reuse the file.
+        ${optionalString (cfg.getPublicAddressCmd != "")
+          (nbLib.readPublicAddress "clightning" cfg.getPublicAddressCmd)}
         conf=$(
           cat '${configFile}'
           echo "bitcoin-rpcpassword=$(cat '${config.nix-bitcoin.secretsDir}/bitcoin-rpcpassword-clightning')"
           ${optionalString (cfg.getPublicAddressCmd != "") ''
-            echo "announce-addr=$(${cfg.getPublicAddressCmd}):${toString publicPort}"
+            echo "announce-addr=$publicAddress:${toString publicPort}"
           ''}
         )
         install -T -m 640 <(echo "$conf") '${cfg.dataDir}/config'

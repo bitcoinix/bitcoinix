@@ -150,6 +150,21 @@ let self = {
     ${src}
   ''}";
 
+  # Bash code for preStart that sets `publicAddress` to the output of the
+  # `getPublicAddressCmd` of `service`. `set -e` doesn't catch a failing `$(...)`
+  # inside an `echo`, so this runs the command on its own. It also fails when the
+  # command prints nothing. `)` is on a line of its own, so that a comment at the
+  # end of `cmd` doesn't hide it.
+  readPublicAddress = service: cmd: ''
+    publicAddress=$(
+      ${cmd}
+    )
+    if [[ ! $publicAddress ]]; then
+      echo "Error: services.${service}.getPublicAddressCmd printed no address" >&2
+      exit 1
+    fi
+  '';
+
   mkOnionService = map: {
     map = [ map ];
     version = 3;

@@ -407,6 +407,24 @@ def test_lnd():
         uri = f"{info['identity_pubkey']}@{address}:{onion['port']}"
         assert uri in info["uris"], info["uris"]
 
+        # Without the address, or with an empty one, preStart fails before it
+        # writes lnd.conf. Run it directly: a failed lnd unit would fail later
+        # checks that lnd never failed.
+        address_file, conf = onion["addressFile"], onion["conf"]
+        pre_start = f"runuser -u {onion['user']} -- {onion['preStart']} 2>&1"
+        conf_state = f"stat -c '%i %Y' {conf} && sha256sum {conf}"
+        before = succeed(conf_state)
+        succeed(f"mv -T {address_file} {address_file}.orig")
+        try:
+            missing = machine.execute(pre_start)
+            succeed(f"install -m 400 -o {onion['user']} /dev/null {address_file}")
+            empty = machine.execute(pre_start)
+        finally:
+            succeed(f"mv -T {address_file}.orig {address_file}")
+        assert missing[0] != 0 and f"{address_file}: No such file or directory" in missing[1], missing
+        assert empty[0] != 0 and "getPublicAddressCmd printed no address" in empty[1], empty
+        assert succeed(conf_state) == before, "preStart replaced lnd.conf"
+
     # Go 1.24 listens with Multipath TCP by default. The lnd unit turns that
     # off, so no lnd socket may show up as an MPTCP listener. Look in lnd's
     # namespace, and check that ss sees lnd there at all, so the test can't
