@@ -161,6 +161,116 @@ def test_netns_isolation():
     )
 
 
+# The host forwards only the traffic of the service namespaces. Network namespaces
+# on veth pairs stand in for a host on each of two networks of the node (a, b) and
+# for a service namespace without `tor.enforce` on the bridge (inner).
+@test("netns-forwarding")
+def test_netns_forwarding():
+    chain = "nb-netns-forward"
+    bridge_ip = test_data["netns-bridge-ip"]
+    block = bridge_ip.rsplit(".", 1)[0]
+    inner_ip = f"{block}.250"
+    a, b, inner = "nbt-a", "nbt-b", "nbt-inner"
+    a_ip, b_ip = "10.201.1.2", "10.201.2.2"
+
+    def ping(ns, dest):
+        return f"ip netns exec {ns} fping -c1 -t500 {dest}"
+
+    def add_host(ns, veth, net, route):
+        succeed(
+            f"ip netns add {ns}",
+            f"ip link add {veth} type veth peer name eth0 netns {ns}",
+            f"ip addr add {net}.1/24 dev {veth}",
+            f"ip link set {veth} up",
+            f"ip -n {ns} addr add {net}.2/24 dev eth0",
+            f"ip -n {ns} link set eth0 up",
+            f"ip -n {ns} route add {route} via {net}.1",
+        )
+
+    def assert_dropped(src, dest, in_if, out_if):
+        # ACCEPT rules ahead of the jump show that only the chain blocks this path
+        accept = [f"-i {in_if} -o {out_if} -j ACCEPT", f"-i {out_if} -o {in_if} -j ACCEPT"]
+        succeed(*(f"iptables -w -I FORWARD 1 {rule}" for rule in accept))
+        machine.wait_until_succeeds(ping(src, dest), timeout=30)
+        succeed(*(f"iptables -w -D FORWARD {rule}" for rule in accept))
+        machine.fail(ping(src, dest))
+
+    def assert_rules():
+        assert_full_match(f"iptables -w -S {chain}", re.escape(
+            f"-N {chain}\n"
+            f"-A {chain} -i nb-br -j ACCEPT\n"
+            f"-A {chain} -o nb-br -m conntrack --ctstate RELATED,ESTABLISHED --ctdir REPLY -j ACCEPT\n"
+            f"-A {chain} -j DROP\n"
+        ))
+        assert_full_match(f"iptables -w -S FORWARD | grep -c -- '-j {chain}$'", "1\n")
+
+    def active_since(unit):
+        return int(succeed(f"systemctl show -P ActiveEnterTimestampMonotonic {unit}"))
+
+    try:
+        add_host(a, "nb-veth-ta", "10.201.1", "10.201.2.0/24")
+        add_host(b, "nb-veth-tb", "10.201.2", "10.201.1.0/24")
+        succeed(
+            f"ip netns add {inner}",
+            f"ip link add nb-veth-ti type veth peer name eth0 netns {inner}",
+            "ip link set nb-veth-ti master nb-br",
+            "ip link set nb-veth-ti up",
+            f"ip -n {inner} addr add {inner_ip}/24 dev eth0",
+            f"ip -n {inner} link set eth0 up",
+            f"ip -n {inner} route add default via {bridge_ip}",
+        )
+
+        # Between two networks of the node
+        assert_dropped(a, b_ip, "nb-veth-ta", "nb-veth-tb")
+        # A namespace connects out with NAT. a has no route to the bridge subnet,
+        # so the reply passes only with NAT and the rule for replies.
+        machine.wait_until_succeeds(ping(inner, a_ip), timeout=30)
+        # From a network of the node into the bridge subnet
+        succeed(f"ip -n {a} route add {block}.0/24 via 10.201.1.1")
+        assert_dropped(a, inner_ip, "nb-veth-ta", "nb-br")
+
+        # With br_netfilter (e.g. loaded by Docker), bridged traffic also passes
+        # FORWARD. The netns-isolation test checks the traffic between namespaces.
+        succeed("modprobe br_netfilter")
+        succeed(ping(inner, a_ip))
+        machine.fail(ping(a, inner_ip))
+        machine.fail(ping(a, b_ip))
+        succeed("rmmod br_netfilter")
+    finally:
+        machine.execute(f"ip netns delete {a}; ip netns delete {b}; ip netns delete {inner}")
+
+    assert_running(chain)
+    assert_rules()
+    # At boot, the rules exist before forwarding is on and before the bridge starts.
+    # The firewall runs first, so the two never run iptables at the same time.
+    def started(unit):
+        return int(succeed(f"systemctl show -P InactiveExitTimestampMonotonic {unit}"))
+
+    for unit in ["systemd-sysctl", "nb-netns-bridge"]:
+        assert 0 < active_since(chain) <= started(unit), (unit, active_since(chain), started(unit))
+    assert 0 < active_since("firewall") <= started(chain), (active_since("firewall"), started(chain))
+
+    units = ["nb-netns-bridge", "netns-bitcoind", "bitcoind"]
+    before = {unit: active_since(unit) for unit in units}
+    # A reload, like a switch that changes the unit, replaces the rules in place
+    # and adds the jump if it's missing
+    succeed(f"iptables -w -A {chain} -j ACCEPT", f"systemctl reload {chain}")
+    assert_rules()
+    succeed(f"iptables -w -D FORWARD -j {chain}", f"systemctl reload {chain}")
+    assert_rules()
+    # A restart of the rules doesn't restart the bridge or the namespaced services
+    succeed(f"systemctl restart {chain}")
+    assert {unit: active_since(unit) for unit in units} == before
+    assert_rules()
+
+    # A stop, like a switch that turns `restrictForwarding` off, removes the rules
+    succeed(f"systemctl stop {chain}")
+    machine.fail(f"iptables -w -S {chain}")
+    machine.fail(f"iptables -w -S FORWARD | grep -- '-j {chain}$'")
+    succeed(f"systemctl start {chain}")
+    assert_rules()
+
+
 # Services with `tor.enforce`, and charge-lnd, reach only localhost and, with
 # netns-isolation, their namespace subnet, and can't use the local resolver
 # sockets (nscd, systemd-resolved, D-Bus). `test_data["tor-enforce"]` selects the

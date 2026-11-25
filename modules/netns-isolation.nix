@@ -55,6 +55,22 @@ let
       });
     };
 
+    restrictForwarding = mkOption {
+      type = types.bool;
+      default = true;
+      description = ''
+        Whether the host forwards only the traffic of the namespaces, that is
+        the connections that a namespace opens and their replies. The host
+        then drops all other forwarded IPv4 traffic, so a host on one of the
+        node's networks can't reach another network through the node.
+
+        Set this to `false` when the node routes for other networks on
+        purpose, e.g. with `networking.nat`, Docker or a Tailscale subnet
+        router. netns-isolation then adds no forwarding rules, and the host
+        forwards between all its interfaces unless you filter this yourself.
+      '';
+    };
+
     netns = mkOption {
       readOnly = true;
       default = netns;
@@ -108,6 +124,27 @@ let
   iptables = "${config.networking.firewall.package}/bin/iptables";
 
   bridgeIp = "169.254.${toString cfg.addressblock}.10";
+
+  forwardChain = "nb-netns-forward";
+  # iptables-restore replaces the rules of the chain in one step, so a reload
+  # never leaves forwarded traffic unfiltered. The jump is appended, so ACCEPT
+  # rules that other tools insert at the top of FORWARD still apply.
+  # IPv4 only, like `net.ipv4.ip_forward`. The namespaces have no IPv6 addresses.
+  addForwardRules = ''
+    ${iptables}-restore -w --noflush <<'EOF'
+    *filter
+    :${forwardChain} - [0:0]
+    -A ${forwardChain} -i nb-br -j ACCEPT
+    -A ${forwardChain} -o nb-br -m conntrack --ctstate ESTABLISHED,RELATED --ctdir REPLY -j ACCEPT
+    -A ${forwardChain} -j DROP
+    COMMIT
+    EOF
+    ${iptables} -w -C FORWARD -j ${forwardChain} 2>/dev/null || ${iptables} -w -A FORWARD -j ${forwardChain}
+  '';
+  # The kernel takes any value but 0 as on
+  isOn = value: !(elem value [ null false 0 "0" ]);
+  forwardingSetElsewhere =
+    isOn (config.boot.kernel.sysctl."net.ipv4.conf.all.forwarding" or null);
 in {
   inherit options;
 
@@ -135,6 +172,12 @@ in {
         assertion = !(builtins.elem cfg.addressblock [ 169 170 ]);
         message = "`nix-bitcoin.netns-isolation.addressblock` must not be 169 or 170: the subnet 169.254.${toString cfg.addressblock}.0/24 would include a cloud metadata address, which services with `tor.enforce` are then allowed to reach. Choose a different address block.";
       }
+      {
+        # A module that sets this forwards for other networks, and nb-netns-forward
+        # would drop that traffic
+        assertion = !cfg.restrictForwarding || !forwardingSetElsewhere;
+        message = "`boot.kernel.sysctl.\"net.ipv4.conf.all.forwarding\"` is on, so this node forwards traffic for other networks. Modules like `networking.nat`, Docker (`virtualisation.docker`) and Tailscale with `useRoutingFeatures` set to `server` or `both` set it. With `nix-bitcoin.netns-isolation.restrictForwarding`, the host drops all forwarded traffic except that of the service namespaces. Set `nix-bitcoin.netns-isolation.restrictForwarding = false` to keep the forwarding. The host then forwards between all its interfaces, unless you filter forwarded traffic yourself.";
+      }
     ];
     networking.dhcpcd.denyInterfaces = [ "nb-br" "nb-veth*" ];
     services.tor.client.socksListenAddress = {
@@ -153,9 +196,44 @@ in {
       config.services.tor.client.socksListenAddress.port
       (config.services.i2pd.settings.sam.port or 7656)
     ];
+    # For the NAT of the namespaces. nb-netns-forward limits what the host forwards.
     boot.kernel.sysctl."net.ipv4.ip_forward" = true;
 
     systemd.services = {
+      # Like the NixOS firewall, this starts before network-pre.target, so the
+      # rules exist before any interface is set up and before nb-netns-bridge
+      # starts. It also starts before systemd-sysctl turns on forwarding,
+      # because interfaces that the initrd set up keep their addresses by
+      # default. It runs after the firewall, also on a reload, because the
+      # firewall script doesn't wait for the lock of iptables-legacy. Unlike
+      # the firewall, it doesn't stop at shutdown, so the rules stay while the
+      # services stop.
+      # It's a unit of its own, because a change to nb-netns-bridge restarts
+      # every namespaced service.
+      nb-netns-forward = mkIf cfg.restrictForwarding {
+        description = "nix-bitcoin netns forwarding rules";
+        wantedBy = [ "sysinit.target" ];
+        wants = [ "network-pre.target" ];
+        after = [ "systemd-modules-load.service" "firewall.service" ];
+        before = [ "network-pre.target" "systemd-sysctl.service" ];
+        unitConfig.DefaultDependencies = false;
+        serviceConfig = {
+          Type = "oneshot";
+          RemainAfterExit = true;
+        };
+        script = addForwardRules;
+        # A switch replaces the rules without removing them first
+        reloadIfChanged = true;
+        reload = addForwardRules;
+        # Delete every jump first, because a chain that's still referenced
+        # can't be deleted
+        preStop = ''
+          while ${iptables} -w -D FORWARD -j ${forwardChain} 2>/dev/null; do :; done
+          ${iptables} -w -F ${forwardChain} 2>/dev/null || true
+          ${iptables} -w -X ${forwardChain} 2>/dev/null || true
+        '';
+      };
+
       # Due to a NixOS bug we can't currently use option `networking.bridges` to
       # setup the bridge while `networking.useDHCP` is enabled.
       nb-netns-bridge = {

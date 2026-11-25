@@ -123,6 +123,13 @@ let
     networking.firewall.backend = "iptables";
     networking.firewall.package = pkgs.iptables;
   };
+  netnsBitcoind = {
+    services.bitcoind.enable = true;
+    nix-bitcoin.netns-isolation.enable = true;
+  };
+  # Whether netns-isolation rejects a node that forwards for other networks
+  netnsRejectsForwarding = module: lib.any (lib.hasInfix "so this node forwards traffic for other networks")
+    (failedAssertions (evaluate { imports = [ netnsBitcoind module ]; }));
   mempool = evaluate { services.mempool.enable = true; };
   mempoolRpcPassword = evaluate {
     services.mempool = {
@@ -978,6 +985,15 @@ let
       ];
       expected = [ true true false ];
     };
+    # Before 0.2.1, the host forwarded traffic between all its interfaces with netns-isolation
+    testVersioningNetnsForwarding = {
+      expr = map (hasNotice "the host now forwards only the traffic of the") [
+        netnsBitcoind
+        { imports = [ netnsBitcoind ]; nix-bitcoin.netns-isolation.restrictForwarding = false; }
+        { services.bitcoind.enable = true; }
+      ];
+      expected = [ true false false ];
+    };
     testHistoricalNetworkMigrationPaths = {
       expr = map (case: let
         notices = (evaluate {
@@ -1096,6 +1112,42 @@ let
     testNetnsAllowsNftablesWithIptablesPackage = {
       expr = failedAssertions netnsNftablesIptablesPackage;
       expected = [];
+    };
+    testNetnsRejectsDeclaredForwarding = {
+      expr = map netnsRejectsForwarding [
+        {}
+        { networking.nat.enable = true; }
+        { services.tailscale = { enable = true; useRoutingFeatures = "server"; }; }
+        { boot.kernel.sysctl."net.ipv4.conf.all.forwarding" = 1; }
+        { boot.kernel.sysctl."net.ipv4.conf.all.forwarding" = "1"; }
+        { boot.kernel.sysctl."net.ipv4.conf.all.forwarding" = 2; }
+        { boot.kernel.sysctl."net.ipv4.conf.all.forwarding" = false; }
+        { boot.kernel.sysctl."net.ipv4.conf.all.forwarding" = "0"; }
+        {
+          networking.nat.enable = true;
+          nix-bitcoin.netns-isolation.restrictForwarding = false;
+        }
+      ];
+      expected = [ false true true true true true false false false ];
+    };
+    # The forwarding rules have a unit of their own, which exists only with
+    # `restrictForwarding`
+    testNetnsForwardRules = {
+      expr = map (module: let
+        services = (evaluate { imports = [ module ]; }).systemd.services;
+      in {
+        drops = lib.hasInfix "-A nb-netns-forward -j DROP" (services.nb-netns-forward.script or "");
+        bridge = services ? nb-netns-bridge;
+      }) [
+        netnsBitcoind
+        { imports = [ netnsBitcoind ]; nix-bitcoin.netns-isolation.restrictForwarding = false; }
+        { services.bitcoind.enable = true; }
+      ];
+      expected = [
+        { drops = true; bridge = true; }
+        { drops = false; bridge = true; }
+        { drops = false; bridge = false; }
+      ];
     };
     testWireguardRejectsNftablesWithIptablesBackend = {
       expr = map (lib.hasInfix "need `iptables` on the firewall service's PATH")
