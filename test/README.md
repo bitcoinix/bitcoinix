@@ -91,6 +91,9 @@ a VM to report evaluation failures. Migration cases check released errors,
 unreleased warnings, rejection of future config versions, and the null opt-out.
 They override the internal released-version option to test both sides of release
 finalization even after `version.nix` advances.
+To check the migration guidance Nix prints for an empty LND RPC host, run
+`./test/ci/check-lnd-rpc-error.sh`. CI runs this alongside the module checks
+because `builtins.tryEval` discards the error text.
 
 [runner-tests.py](./runner-tests.py) loads the assembled suite and checks test
 selection, ordering, registration errors, and interactive dispatch using a

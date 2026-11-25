@@ -1158,6 +1158,42 @@ let
       expected = [ true ];
     };
     testLightningSeparatePorts = { expr = failedAssertions localLightning; expected = []; };
+    testLndRpcEndpoint = let
+      endpoint = rpcAddress: let
+        lnd = (evaluate {
+          services.lnd = { enable = true; inherit rpcAddress; rpcPort = 10010; };
+        }).services.lnd;
+      in {
+        inherit (lnd) rpcEndpoint;
+        inherit (lnd.certificate) extraIPs;
+      };
+    in {
+      expr = map endpoint [ "127.0.0.1" "::" "[::1]" "0.0.0.0" ];
+      expected = [
+        { rpcEndpoint = "127.0.0.1:10010"; extraIPs = []; }
+        { rpcEndpoint = "[::]:10010"; extraIPs = [ "::" ]; }
+        { rpcEndpoint = "[::1]:10010"; extraIPs = [ "::1" ]; }
+        { rpcEndpoint = "0.0.0.0:10010"; extraIPs = [ "0.0.0.0" ]; }
+      ];
+    };
+    testLndRejectsMalformedRpcAddress = {
+      expr = lib.all (rpcAddress: !(builtins.tryEval (evaluate {
+        services.lnd = { enable = true; inherit rpcAddress; };
+      }).services.lnd.rpcEndpoint).success) [
+        "" "[" "]" "[]" "[::1" "::1]" "[[::1]]" "a[b]c"
+        " " "[ ]" "127.0.0.1 " "\t::1" "a\nb" "a\rb"
+        (builtins.fromJSON ''"\u00a0"'') (builtins.fromJSON ''"[\u2003]"'')
+      ];
+      expected = true;
+    };
+    testLndEmptyRpcHostNotice = let
+      notice = enable: rpcAddress: hasNotice "An empty LND RPC host" {
+        services.lnd = { inherit enable rpcAddress; };
+      };
+    in {
+      expr = [ (notice true "") (notice true "[]") (notice true "::") (notice false "") ];
+      expected = [ true true false false ];
+    };
     testLndconnectKeepsLocalAddresses = {
       expr = getRestAddresses localLightning;
       expected = [ "127.0.0.1" "127.0.0.1" ];

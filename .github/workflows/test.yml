@@ -124,6 +124,8 @@ jobs:
             bash helper/check-release-notes.sh "$finalized" "$BASE_COMMIT"
       - name: Check flake and run fast tests
         run: nix flake check --all-systems
+      - name: Check the empty LND RPC host diagnostic
+        run: ./test/ci/check-lnd-rpc-error.sh
       - name: Evaluate the CVE scan target and scanner
         run: |
           nix eval --impure --raw --expr '(import ./test/ci/scan-node.nix).drvPath'
