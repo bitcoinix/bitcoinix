@@ -98,7 +98,7 @@ let
     };
     externalip = lib.findFirst (lib.hasInfix "externalip=") ""
       (lib.splitString "\n" config.systemd.services.lnd.preStart);
-  in lib.head (builtins.match ''.*externalip=\$\(.*\)(.*)"'' externalip);
+  in lib.head (builtins.match ''.*externalip=\$publicAddress(.*)"'' externalip);
   netns = evaluate {
     imports = [ lightning ];
     services.lnd.port = 9736;
@@ -571,6 +571,14 @@ let
         nix-bitcoin.secretsDir = "@secretsDir@";
       };
     }).systemd.services.bitcoind.preStart.content;
+
+  # The public address read of bitcoind, lnd and clightning, run by the check
+  # below with `set -e`, like systemd runs preStart
+  publicAddressRead = cmd: pkgs.writeText "read-public-address" ''
+    set -e
+    ${base.config.nix-bitcoin.lib.readPublicAddress "lnd" cmd}
+    echo "address: $publicAddress"
+  '';
 
   # The build check of RTL's address, run by the check below
   rtlAddressCheck = address: lib.head (builtins.filter (check: check.name == "check-rtl-address")
@@ -1091,6 +1099,72 @@ let
         { services.lnd.getPublicAddressCmd = "echo 203.0.113.10:19735"; }
       ];
       expected = [ ":9736" ":9735" ":9736" "" ];
+    };
+    # Before 0.2.1, bitcoind, lnd and clightning used the output of a failed custom
+    # command. Without their onion address, they already failed later.
+    testVersioningPublicAddressCommandMustSucceed = let
+      phrase = name: "${name} now fails to start when `services.${name}.getPublicAddressCmd` fails";
+      custom = "echo 203.0.113.10";
+      lndCustom = {
+        services.lnd = { enable = true; getPublicAddressCmd = custom; };
+      };
+    in {
+      expr = {
+        # lnd also failed without its onion address before, after it opened the wallet
+        lndOnion = hasNoticeAt "0.2.0" (phrase "lnd") {
+          services.lnd.enable = true;
+          nix-bitcoin.onionServices.lnd.public = true;
+        };
+        lndCustom = hasNoticeAt "0.2.0" (phrase "lnd") lndCustom;
+        lndNoAddress = hasNoticeAt "0.2.0" (phrase "lnd") { services.lnd.enable = true; };
+        bitcoindCustom = hasNoticeAt "0.2.0" (phrase "bitcoind") {
+          services.bitcoind = { enable = true; getPublicAddressCmd = custom; };
+        };
+        bitcoindOnion = hasNoticeAt "0.2.0" (phrase "bitcoind") {
+          services.bitcoind.enable = true;
+          nix-bitcoin.onionServices.bitcoind.public = true;
+        };
+        clightningCustom = hasNoticeAt "0.2.0" (phrase "clightning") {
+          services.clightning = { enable = true; getPublicAddressCmd = custom; };
+        };
+        clightningOnion = hasNoticeAt "0.2.0" (phrase "clightning") {
+          services.clightning.enable = true;
+          nix-bitcoin.onionServices.clightning.public = true;
+        };
+        # A custom command also replaces the onion command
+        bitcoindOnionAndCustom = hasNoticeAt "0.2.0" (phrase "bitcoind") {
+          services.bitcoind = { enable = true; getPublicAddressCmd = lib.mkForce custom; };
+          nix-bitcoin.onionServices.bitcoind.public = true;
+        };
+        lndDisabled = hasNoticeAt "0.2.0" (phrase "lnd") {
+          nix-bitcoin.onionServices.lnd.public = true;
+        };
+        acknowledged = hasNoticeAt "0.2.1" (phrase "lnd") {
+          imports = [ lndCustom ];
+          nix-bitcoin.versioning.releasedVersion = "0.2.1";
+        };
+      };
+      expected = {
+        lndOnion = false; lndCustom = true; lndNoAddress = false; bitcoindCustom = true;
+        bitcoindOnion = false; clightningCustom = true; clightningOnion = false;
+        bitcoindOnionAndCustom = true; lndDisabled = false; acknowledged = false;
+      };
+    };
+    # The address is read before preStart builds and writes the config, see
+    # `publicAddressRead` for what the read does
+    testPublicAddressReadFirst = let
+      cmd = "echo 203.0.113.10";
+      readsFirst = name: let
+        config = evaluate { services.${name} = { enable = true; getPublicAddressCmd = cmd; }; };
+        parts = lib.splitString (config.nix-bitcoin.lib.readPublicAddress name cmd)
+          config.systemd.services.${name}.preStart;
+        before = lib.head parts;
+      # Not inside `conf=$(...)`, where `set -e` doesn't catch a failure either
+      in lib.length parts == 2 && !lib.hasInfix "$(" before && !lib.hasInfix "install " before
+        && lib.hasInfix "$publicAddress" (lib.last parts);
+    in {
+      expr = map readsFirst [ "bitcoind" "lnd" "clightning" ];
+      expected = [ true true true ];
     };
     testNetnsRESTAllowed = { expr = failedAssertions netns; expected = []; };
     testUnbeholdenWalletRejectsAllowedClientsWithNetns = {
@@ -2512,6 +2586,20 @@ else
         ${replicationGenerator} || fail "the $identity identity failed"
         [[ $(< $key.pub) == kept ]] || fail "the .pub of the $identity identity was changed"
       done
+    )
+
+    # The public address read stops the script when the command fails, also after
+    # it printed an address, and when it prints nothing
+    (
+      fail() { echo "Public address read: $*" >&2; exit 1; }
+      [[ $(bash ${publicAddressRead "echo 203.0.113.10 # comment"}) == "address: 203.0.113.10" ]] \
+        || fail "a working command didn't give its address"
+      if bash ${publicAddressRead "echo 203.0.113.10; false"} > read.out; then fail "a failing command was accepted"; fi
+      [[ ! -s read.out ]] || fail "a failing command went on: $(< read.out)"
+      if bash ${publicAddressRead "true"} > read.out 2> read.err; then fail "an empty address was accepted"; fi
+      [[ ! -s read.out ]] || fail "an empty address went on: $(< read.out)"
+      grep -qx "Error: services.lnd.getPublicAddressCmd printed no address" read.err \
+        || fail "unexpected error: $(< read.err)"
     )
 
     # udevd sorts its rule files by name. On NixOS it reads them from

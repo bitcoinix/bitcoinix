@@ -87,8 +87,9 @@ in {
       #   staging dir is located in the data dir, which is not writable by users.
       #
       # The hostname file content is spliced into config files
-      # (`externalip=$(cat ...)` in bitcoin.conf and lnd.conf, `announce-addr=`
-      # for clightning). So only accept exactly one v3 onion address.
+      # (`externalip=` in bitcoin.conf and lnd.conf, `announce-addr=` for
+      # clightning, see `readPublicAddress` in ../pkgs/lib.nix). So only accept
+      # exactly one v3 onion address.
       # Invalid files are skipped and the service fails after writing the
       # remaining addresses.
       script = ''

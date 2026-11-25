@@ -264,6 +264,9 @@ let
       in if cfg.lnd.enable && onion.enable && onion.public && mapping != null then {
         addressFile = "${config.nix-bitcoin.onionAddresses.dataDir}/services/lnd";
         inherit (mapping) port;
+        inherit (cfg.lnd) user;
+        conf = "${cfg.lnd.dataDir}/lnd.conf";
+        preStart = toString config.systemd.services.lnd.serviceConfig.ExecStartPre;
       } else null;
 
       tests.onion-addresses = config.nix-bitcoin.onionAddresses.access != {};

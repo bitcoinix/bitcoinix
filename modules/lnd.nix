@@ -108,6 +108,7 @@ let
       description = ''
         Bash expression which outputs the public service address to announce to peers.
         If left empty, no address is announced.
+        The service fails to start when the command fails or prints nothing.
       '';
     };
     user = mkOption {
@@ -244,11 +245,13 @@ in {
       # runtime; the sockets fall back to plain TCP.
       environment.GODEBUG = "multipathtcp=0";
       preStart = ''
+        ${optionalString (cfg.getPublicAddressCmd != "")
+          (nbLib.readPublicAddress "lnd" cfg.getPublicAddressCmd)}
         conf=$(
           cat ${configFile}
           echo "bitcoind.rpcpass=$(cat ${secretsDir}/bitcoin-rpcpassword-public)"
           ${optionalString (cfg.getPublicAddressCmd != "") ''
-            echo "externalip=$(${cfg.getPublicAddressCmd})${onionPortSuffix}"
+            echo "externalip=$publicAddress${onionPortSuffix}"
           ''}
         )
         install -T -m 600 <(echo "$conf") '${cfg.dataDir}/lnd.conf'

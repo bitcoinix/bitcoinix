@@ -54,6 +54,7 @@ let
         description = ''
           Bash expression which outputs the public service address to announce to peers.
           If left empty, no address is announced.
+          The service fails to start when the command fails or prints nothing.
         '';
       };
       extraConfig = mkOption {
@@ -613,12 +614,14 @@ in {
           ''
         ) (builtins.attrNames cfg.rpc.users);
       in ''
+        ${optionalString (cfg.getPublicAddressCmd != "")
+          (nbLib.readPublicAddress "bitcoind" cfg.getPublicAddressCmd)}
         cfg=$(
           cat ${configFile}
           ${extraRpcauth}
           echo
           ${optionalString (cfg.getPublicAddressCmd != "") ''
-            echo "externalip=$(${cfg.getPublicAddressCmd})"
+            echo "externalip=$publicAddress"
           ''}
         )
         # Always replace the file. Older versions let the operator write the data
