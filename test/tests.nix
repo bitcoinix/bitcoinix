@@ -691,7 +691,6 @@ let
       imports = [ scenarios.regtestBase ];
       services.cdk-mintd = {
         enable = true;
-        url = "https://mint.example.org";
         settings.mint_info.name = "Bitcoinix test mint";
       };
     };
@@ -709,16 +708,32 @@ let
       imports = with scenarios; [ cdk-mintd-cln netnsBase ];
     };
 
-    cdk-mintd-onchain = { config, pkgs, ... }: {
+    cdk-mintd-onchain = { config, pkgs, extendModules, ... }: {
       imports = with scenarios; [ cdk-mintd-cln netnsBase ];
       services.cdk-mintd.onchain.enable = true;
       services.cdk-mintd.settings.bdk.num_confs = 1;
+      services.cdk-mintd.settings.bdk.wallet_rescan_from_height = 0;
+      # Exercise the configured service group independently of the passwd group.
+      services.cdk-mintd.group = "mint-service";
+      users.users.cdk-mintd.group = mkForce "mint-login";
+      users.groups.mint-login = {};
       services.backups.enable = true;
       # The general backup fixture is mainnet-only and creates its own wallet.
       tests.backups = mkForce false;
       # Even an extraFiles entry must not include the live mint or partial copies.
       services.backups.extraFiles = [ config.services.cdk-mintd.dataDir "/var/lib/cdk-mintd-backup" ];
       environment.systemPackages = [ pkgs.sqlite ];
+      security.pam.loginLimits = [{ domain = "*"; type = "-"; item = "nofile"; value = "4096"; }];
+      systemd.services.cdk-mintd-backup.serviceConfig.LimitNOFILE = 1024;
+      test.data.cdk-mintd-recovery-pre-start = config.nix-bitcoin.lib.script "cdk-wallet-recovery" (
+        (extendModules { modules = [{ services.cdk-mintd.onchain.allowNewWallet = mkForce true; }]; })
+          .config.systemd.services.cdk-mintd.preStart
+      );
+      test.data.cdk-mintd-ipv6-pre-start = (extendModules { modules = [{
+        services.cdk-mintd = { backend = mkForce "lnd"; address = mkForce "::"; };
+        services.lnd.rpcAddress = mkForce "::";
+        services.bitcoind.rpc.address = mkForce "::";
+      }]; }).config.systemd.services.cdk-mintd.preStart;
       # Pause copying deterministically to test starts and cancellation mid-backup.
       systemd.services.cdk-mintd-backup.path = mkBefore [
         (pkgs.writeShellScriptBin "tar" ''

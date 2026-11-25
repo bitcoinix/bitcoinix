@@ -22,15 +22,21 @@ let
       default = 8085;
       description = "HTTP listen port.";
     };
-    url = mkOption {
-      type = types.str;
-      example = "https://mint.example.org";
-      description = "Public URL of the mint, as used by Cashu wallets.";
-    };
     dataDir = mkOption {
       type = types.path;
       default = "/var/lib/cdk-mintd";
       description = "Persistent mint database, configuration state and optional BDK wallet.";
+    };
+    allowNewMint = mkOption {
+      type = types.bool;
+      default = false;
+      description = ''
+        Allow initializing an empty database after a mint has already been
+        initialized on this node. Only use this to deliberately replace a mint
+        with a new signing seed, never to recover missing mint data. Reusing a
+        seed without its spent-proof database can allow double spending. Set
+        back to false after initialization. The first mint needs no override.
+      '';
     };
     seedFile = mkOption {
       type = types.str;
@@ -75,7 +81,7 @@ let
         Additional CDK TOML settings, such as mint metadata, payment limits and
         fees. See the upstream cdk-mintd example.config.toml for the packaged
         version. Never put secret values here: this document is public in the
-        Nix store. The module manages the listener, URL, signing seed, SQLite
+        Nix store. The module manages the listener, signing seed, SQLite
         database, backend selection and backend connection settings. Those
         values take precedence over this option. Remote signing is disabled.
         Nix configuration changes replace the stored CDK configuration before
@@ -114,6 +120,14 @@ let
   cli = "${mintd} --work-dir ${escapeShellArg cfg.dataDir}";
   defaultSeed = cfg.seedFile == "${secretsDir}/cdk-mintd-seed";
   defaultMnemonic = cfg.onchain.mnemonicFile == "${secretsDir}/cdk-mintd-bdk-mnemonic";
+  # Kept outside dataDir, owned by root and included in the node's backups.
+  stateDir = "/var/lib/nixos/cdk-mintd";
+  dataPath = toString (/. + cfg.dataDir);
+  bracketIPv6 = addr: if hasInfix ":" addr && !hasPrefix "[" addr then "[${addr}]" else addr;
+  configState = pkgs.writeText "cdk-mintd-config-state.json" (builtins.toJSON {
+    config = configFile;
+    allowNewWallet = cfg.onchain.enable && cfg.onchain.allowNewWallet;
+  });
 
   configFile = toml.generate "cdk-mintd.toml" (recursiveUpdate
     # Inactive backends must not retain settings, particularly secret references.
@@ -121,8 +135,7 @@ let
       info = removeAttrs (cfg.settings.info or {}) [ "mnemonic" ];
     }) ({
       info = {
-        inherit (cfg) url;
-        listen_host = cfg.address;
+        listen_host = bracketIPv6 cfg.address;
         listen_port = cfg.port;
         seed = "file:${cfg.seedFile}";
       };
@@ -135,9 +148,9 @@ let
       onchain.onchain_backend = if cfg.onchain.enable then "bdk" else "none";
     } // (if isLnd then {
       lnd = (cfg.settings.lnd or {}) // {
-        address = "https://${nbLib.addressWithPort lnd.rpcAddress lnd.rpcPort}";
+        address = "https://${bracketIPv6 (nbLib.address lnd.rpcAddress)}:${toString lnd.rpcPort}";
         cert_file = lnd.certPath;
-        macaroon_file = "/run/lnd/cdk-mintd.macaroon";
+        macaroon_file = "/run/cdk-mintd/lnd.macaroon";
       };
     } else {
       cln = (cfg.settings.cln or {}) // { rpc_path = "${cln.networkDir}/lightning-rpc"; };
@@ -146,7 +159,7 @@ let
         mnemonic = "file:${cfg.onchain.mnemonicFile}";
         network = bitcoind.network;
         chain_source_type = "bitcoinrpc";
-        bitcoind_rpc_host = nbLib.address bitcoind.rpc.address;
+        bitcoind_rpc_host = bracketIPv6 (nbLib.address bitcoind.rpc.address);
         bitcoind_rpc_port = bitcoind.rpc.port;
         bitcoind_rpc_user = bitcoind.rpc.users.public.name;
         bitcoind_rpc_password = "file:/run/cdk-mintd/bitcoin-rpcpassword";
@@ -177,8 +190,13 @@ in {
       { assertion = hasPrefix "/" cfg.seedFile && (!cfg.onchain.enable || hasPrefix "/" cfg.onchain.mnemonicFile);
         message = "cdk-mintd seedFile and onchain.mnemonicFile must be absolute paths.";
       }
+      { assertion = dataPath != "/" && dataPath != stateDir
+          && !hasPrefix "${dataPath}/" stateDir && !hasPrefix "${stateDir}/" dataPath;
+        message = "cdk-mintd dataDir must not overlap ${stateDir}, which holds the root-owned initialization guard.";
+      }
     ];
 
+    services.cdk-mintd.settings.info.logging.output = mkDefault "stderr";
     services.lnd = mkIf isLnd {
       enable = true;
       macaroons.cdk-mintd = {
@@ -198,26 +216,47 @@ in {
         ++ optional cfg.onchain.enable "bitcoind.service";
       preStart = ''
         umask 077
+        ${optionalString isLnd ''
+          # lnd owns /run/lnd. Do not let a substituted symlink make CDK send
+          # a mint secret to lnd as the macaroon header.
+          dd if=/run/lnd/cdk-mintd.macaroon of=/run/cdk-mintd/lnd.macaroon \
+            iflag=nofollow,fullblock bs=65536 count=1 status=none
+          test -s /run/cdk-mintd/lnd.macaroon
+        ''}
         ${optionalString cfg.onchain.enable ''
           # CDK's file references preserve newlines; Core's RPC password doesn't.
           password=$(cat ${secretsDir}/bitcoin-rpcpassword-public)
           printf '%s' "$password" > /run/cdk-mintd/bitcoin-rpcpassword
         ''}
         # CDK >= 0.18 reads its configuration from the database. Remember which
-        # Nix document was imported so a restart doesn't reapply it or discard
+        # Nix document and wallet-creation flag were imported so a restart doesn't
+        # reapply them or discard
         # the pending first-wallet creation permission after a failed start.
-        if [[ $(readlink nix-config || true) != ${configFile} ]]; then
-          if ${cli} config show > /dev/null; then
+        # Always check the database, even if its config marker survived data loss.
+        if ${cli} config show > /dev/null; then
+          if [[ $(readlink nix-config || true) != ${configState} ]]; then
             ${cli} config apply --file ${configFile} \
               ${optionalString (cfg.onchain.enable && cfg.onchain.allowNewWallet) "--allow-new-bdk-wallet"}
-          else
-            # CDK refuses this for a DB with existing mint/keyset state.
-            ${cli} config init --new-mint --file ${configFile}
           fi
-          ln -sfn ${configFile} nix-config
+        else
+          ${optionalString (!cfg.allowNewMint) ''
+            if [[ -e ${stateDir}/initialized ]]; then
+              echo "Refusing to recreate an initialized mint. Restore its database and signing secrets; a seed alone cannot recover spent-proof state." >&2
+              exit 1
+            fi
+          ''}
+          # CDK also refuses this for a DB with existing mint/keyset state.
+          ${cli} config init --new-mint --file ${configFile}
         fi
+        ln -sfn ${configState} nix-config
       '';
       serviceConfig = nbLib.defaultHardening // {
+        # Record initialization before the daemon can serve any payments. The
+        # service user cannot remove this marker when its database is lost.
+        ExecStartPre = mkAfter [ (nbLib.rootScript "cdk-mintd-record-initialization" ''
+          install -d -m 0755 -o root -g root ${stateDir}
+          touch ${stateDir}/initialized
+        '') ];
         ExecStart = cli;
         User = cfg.user;
         Group = cfg.group;
@@ -243,8 +282,8 @@ in {
     users.groups.${cfg.group} = {};
 
     nix-bitcoin.secrets = {
-      cdk-mintd-seed = mkIf defaultSeed { user = cfg.user; };
-      cdk-mintd-bdk-mnemonic = mkIf (cfg.onchain.enable && defaultMnemonic) { user = cfg.user; };
+      cdk-mintd-seed = mkIf defaultSeed { inherit (cfg) user group; };
+      cdk-mintd-bdk-mnemonic = mkIf (cfg.onchain.enable && defaultMnemonic) { inherit (cfg) user group; };
     };
     nix-bitcoin.generateSecretsCmds.cdk-mintd = optionalString defaultSeed ''
       if isAbsent cdk-mintd-seed; then

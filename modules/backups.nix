@@ -227,6 +227,8 @@ let
   mint = config.services.cdk-mintd;
   mintBackupDir = "/var/lib/cdk-mintd-backup";
   mintBackupRuntimeDir = "/run/cdk-mintd-backup";
+  mintBackupLock = "/run/lock/cdk-mintd-backup.lock";
+  asMint = "setpriv --reuid=${escapeShellArg mint.user} --regid=${escapeShellArg mint.group} --init-groups --";
   mintBackupManifest = pkgs.writeText "cdk-mintd-backup-manifest.json" (builtins.toJSON {
     format = 1;
     inherit (mint) dataDir seedFile;
@@ -267,6 +269,11 @@ in {
         # A failed dump fails the unit, but only after all other files have been
         # backed up, so that a database problem doesn't block e.g. channel backups.
         preStart = ''
+          ${optionalString mint.enable ''
+            # Also invalidate the previous snapshot if the dump unit cannot
+            # start at all (masked, start-limited or failing unit setup).
+            rm -rf -- ${mintBackupDir}/current
+          ''}
           for unit in ${toString dumpServices}; do
             if ! ${config.systemd.package}/bin/systemctl start "$unit"; then
               echo "$unit" >> "$RUNTIME_DIRECTORY/failed-dumps"
@@ -284,11 +291,15 @@ in {
           # Run postStart after the backup has finished
           Type = "oneshot";
           RuntimeDirectory = "duplicity";
+          # Invalidate old mint snapshots inside duplicity's read-only sandbox.
+          # The staging directory may not exist before the first backup.
+          ReadWritePaths = optional mint.enable "-${mintBackupDir}";
         };
       };
 
       systemd.tmpfiles.rules = optional backupWallets
-        "d '${walletBackupDir}' 0700 ${bitcoind.user} ${bitcoind.group} - -";
+        "d '${walletBackupDir}' 0700 ${bitcoind.user} ${bitcoind.group} - -"
+        ++ optional mint.enable "f ${mintBackupLock} 0600 root root - -";
 
       systemd.services.bitcoind-wallet-backup = mkIf backupWallets {
         description = "Copy the loaded bitcoind wallets for the backup";
@@ -304,11 +315,18 @@ in {
         };
       };
 
-      # A backend restart or manual start must not start the mint while copying.
-      # Set the marker before stopping; the synchronous stop also waits for any
-      # startup that passed this condition before the marker was created.
+      # Remember starts during a copy instead of silently dropping them. The
+      # lock serializes start requests with creating/removing the backup marker.
+      # It is never held while waiting for a mint start/stop job.
       systemd.services.cdk-mintd = mkIf mint.enable {
-        unitConfig.ConditionPathExists = "!${mintBackupRuntimeDir}/in-progress";
+        serviceConfig.ExecCondition = nbLib.rootScript "cdk-mintd-backup-condition" ''
+          exec 9>${mintBackupLock}
+          ${pkgs.util-linux}/bin/flock 9
+          if [[ -e ${mintBackupRuntimeDir}/in-progress ]]; then
+            touch ${mintBackupRuntimeDir}/restart
+            exit 1
+          fi
+        '';
       };
 
       systemd.services.cdk-mintd-backup = mkIf mint.enable {
@@ -320,6 +338,8 @@ in {
           umask 077
           # A failed run must not leave yesterday's copy looking current.
           rm -rf -- "$STATE_DIRECTORY/current" "$STATE_DIRECTORY/.next"
+          exec 9>${mintBackupLock}
+          flock 9
           touch "$RUNTIME_DIRECTORY/in-progress"
           state=$(systemctl is-active cdk-mintd.service) || true
           case $state in
@@ -327,19 +347,25 @@ in {
             inactive|failed) ;;
             *) echo "Error: cdk-mintd is $state" >&2; exit 1 ;;
           esac
+          # A start waiting for its backend still has ActiveState=inactive.
+          job=$(systemctl show -p Job --value cdk-mintd.service)
+          if [[ -n $job && $job != 0 ]]; then
+            touch "$RUNTIME_DIRECTORY/restart"
+          fi
+          flock -u 9
           systemctl stop cdk-mintd.service
 
           mkdir "$STATE_DIRECTORY/.next"
           # The mint can write its data dir, so root must not traverse it.
           # tar preserves symlinks without following them; the only files root
           # writes have fixed names inside its own private staging directory.
-          runuser -u ${escapeShellArg mint.user} -- \
-            tar -C ${escapeShellArg mint.dataDir} -cf - . > "$STATE_DIRECTORY/.next/data.tar"
-          runuser -u ${escapeShellArg mint.user} -- \
+          ${asMint} \
+            tar --sparse -C ${escapeShellArg mint.dataDir} -cf - . > "$STATE_DIRECTORY/.next/data.tar"
+          ${asMint} \
             cat -- ${escapeShellArg mint.seedFile} > "$STATE_DIRECTORY/.next/seed"
           test -s "$STATE_DIRECTORY/.next/seed"
           ${optionalString mint.onchain.enable ''
-            runuser -u ${escapeShellArg mint.user} -- \
+            ${asMint} \
               cat -- ${escapeShellArg mint.onchain.mnemonicFile} > "$STATE_DIRECTORY/.next/bdk-mnemonic"
             test -s "$STATE_DIRECTORY/.next/bdk-mnemonic"
           ''}
@@ -348,12 +374,16 @@ in {
           mv -T "$STATE_DIRECTORY/.next" "$STATE_DIRECTORY/current"
         '';
         # Runs on success, failure and cancellation, even if the main script
-        # was killed. No ordering dependency on the mint: start can finish here.
+        # was killed. Queue the restart without making a good snapshot depend
+        # on the mint or its backend successfully starting.
         postStop = ''
           rm -rf -- "$STATE_DIRECTORY/.next"
+          exec 9>${mintBackupLock}
+          flock 9
           rm -f -- "$RUNTIME_DIRECTORY/in-progress"
           if [[ -e $RUNTIME_DIRECTORY/restart ]]; then
-            systemctl start cdk-mintd.service
+            systemctl start --no-block cdk-mintd.service || \
+              echo "Could not queue cdk-mintd restart; check its journal." >&2
           fi
         '';
         serviceConfig = nbLib.defaultHardening // {
@@ -362,6 +392,7 @@ in {
           StateDirectoryMode = "0700";
           RuntimeDirectory = "cdk-mintd-backup";
           RuntimeDirectoryMode = "0700";
+          ReadWritePaths = [ mintBackupLock ];
           UMask = "0077";
           TimeoutStartSec = "15min";
           PrivateNetwork = true;

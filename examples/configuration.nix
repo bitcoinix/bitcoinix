@@ -198,7 +198,6 @@
   # services.cdk-mintd = {
   #   enable = true;
   #   backend = "lnd"; # or "clightning"
-  #   url = "https://mint.example.org";
   #   onchain.enable = false;
   # };
 

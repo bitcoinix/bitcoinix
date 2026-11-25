@@ -8,7 +8,6 @@ Cashu ecash backed by your local LND or Core Lightning node. The service uses
 services.cdk-mintd = {
   enable = true;
   backend = "lnd"; # or "clightning"
-  url = "https://mint.example.org";
   settings.mint_info.name = "My Cashu mint";
 };
 ```
@@ -26,7 +25,7 @@ different Lightning ports; both default to 9735.
 ## Access
 
 The HTTP API listens on `127.0.0.1:8085` by default. Put a reverse proxy with HTTPS
-in front of it and set `url` to the address wallets will use. The module opens no
+in front of it and give wallets the public HTTPS URL. The module opens no
 firewall ports. With namespace isolation, use the address shown by
 `nodeinfo | jq -r '.["cdk-mintd"].local_address'` as the proxy target.
 The mint namespace can reach LND when selected and Bitcoin Core when on-chain
@@ -39,6 +38,8 @@ payment API or chain server.
 
 Check the service with `journalctl -u cdk-mintd` and query its HTTP `/v1/info`
 endpoint. See [the options](options.md) for listen addresses, paths and settings.
+Logs go to the journal by default, without accumulating daily files in `dataDir`.
+CDK 0.18.3 does not advertise the public URL through `info.url`.
 
 ## Optional on-chain payments
 
@@ -51,7 +52,7 @@ services.cdk-mintd.onchain.enable = true;
 This creates a separate BDK wallet, using the local Bitcoin Core RPC for scanning
 and broadcasting. It does not use the Lightning node's on-chain wallet. The
 Bitcoin Core node must be unpruned. CDK 0.18.3 supports mainnet, signet and regtest
-here, but not testnet4. Deposits require three confirmations by default; configure
+here, but not testnet4. Deposits require six confirmations by default; configure
 `services.cdk-mintd.settings.bdk.num_confs` to change this.
 
 When adding on-chain support **after the mint has already started**, also set
@@ -71,9 +72,18 @@ The signing seed is raw text, not hex-decoded; preserve every byte, including it
 trailing newline. The BDK secret is a separate BIP39 mnemonic.
 
 CDK stores configuration in its SQLite database. Before the first start the
-module runs `config init --new-mint`; when the generated Nix configuration
-changes, it runs `config apply`. It records the imported document in
-`dataDir/nix-config`. Configure metadata and fees through `settings`; direct
+module runs `config init --new-mint`; when the generated Nix configuration or
+`onchain.allowNewWallet` changes, it runs `config apply`. It records both in
+`dataDir/nix-config`. A root-owned marker at
+`/var/lib/nixos/cdk-mintd/initialized` prevents a missing database or changed
+`dataDir` from silently creating a replacement mint with the old signing seed.
+Keep this marker with the node's state when migrating hosts; automated backups
+include it under `var/lib/nixos`. If the entire node state is lost, restore the
+mint before enabling the service. Only when deliberately replacing a mint, use a
+**new signing seed**, an empty data directory and temporary `allowNewMint = true`.
+Never use this option to recover a mint with outstanding ecash.
+
+Configure metadata and fees through `settings`; direct
 changes through CDK's management tools can be replaced by a later Nix deployment.
 The module manages backend connections and signing settings. Keep secrets out of
 `settings`, which is world-readable in the Nix store.
@@ -90,9 +100,10 @@ Enable `services.backups.enable = true;` to include the mint. Before each duplic
 backup, `cdk-mintd-backup` stops the mint, archives its complete data directory,
 and copies its signing seed and, when on-chain support is enabled, BDK mnemonic.
 This includes custom `seedFile` and `onchain.mnemonicFile` paths even when
-`nix-bitcoin.generateSecrets` is off. It then restarts a previously running mint;
-an intentionally stopped mint stays stopped. Payments are unavailable during
-staging, but the mint resumes before duplicity uploads the backup.
+`nix-bitcoin.generateSecrets` is off. It then queues a restart for a previously
+running or starting mint, including start requests made during the copy. An
+intentionally stopped mint stays stopped unless a new start is requested.
+Payments are unavailable during staging; uploading does not wait for mint startup.
 
 The root-only staging directory `/var/lib/cdk-mintd-backup/current` contains:
 
@@ -101,9 +112,10 @@ The root-only staging directory `/var/lib/cdk-mintd-backup/current` contains:
 - `manifest.json`: original data and secret paths; `created-at`: snapshot time.
 
 Duplicity archives this snapshot and excludes the live mint directory and partial
-staging, even if listed in `services.backups.extraFiles`. A failed copy removes the
-old snapshot so it cannot be mistaken for a current one, restarts a previously
-running mint, and makes duplicity fail **after** backing up the other services.
+staging, even if listed in `services.backups.extraFiles`. The old snapshot is
+removed before starting the backup hook, so even a hook that cannot start leaves
+no stale snapshot. A failed copy queues the mint's restart and makes duplicity
+fail **after** backing up the other services.
 Check `journalctl -u cdk-mintd-backup -u duplicity` on failure. Do not store your own
 files in `/var/lib/cdk-mintd-backup`.
 
@@ -114,28 +126,54 @@ can still be too old: payments and spent proofs recorded after `created-at` are
 missing. Do not reopen a mint from an outdated snapshot without reconciling that
 missing state and its liabilities.
 
-1. Restore `var/lib/cdk-mintd-backup/current` from duplicity to a temporary,
-   root-only directory. Retain the original mint data and secrets until recovery
-   has been verified.
-2. Stop `cdk-mintd` and pause scheduled backups. Check `manifest.json` against your
-   Nix configuration. Create an **empty** data directory owned by the configured
-   mint user and group, mode `0700`.
-3. Extract `data.tar` **as the mint user**, never as root, so archived symlinks
-   cannot redirect privileged writes. For the default user and directory, stream
-   the root-only archive to the unprivileged extractor:
+1. Open a root shell (`sudo -s`). Pause scheduled backups with
+   `systemctl stop duplicity.timer` if the timer is enabled. Wait for any running
+   `duplicity` and `cdk-mintd-backup` jobs to finish, then prevent new backup jobs
+   and mint starts throughout recovery. NixOS installs units in `/etc`, which
+   takes precedence over ordinary `systemctl mask --runtime` masks. Use the
+   higher-priority runtime unit directory:
 
    ```bash
-   sudo cat /path/to/restored/current/data.tar | sudo runuser -u cdk-mintd -- \
-     tar --no-same-owner -xf - -C /var/lib/cdk-mintd
+   install -d -m 0755 /run/systemd/system.control
+   for unit in duplicity cdk-mintd-backup cdk-mintd; do
+     ln -s /dev/null "/run/systemd/system.control/$unit.service"
+   done
+   systemctl daemon-reload
+   systemctl show -p LoadState duplicity cdk-mintd-backup cdk-mintd
+   systemctl stop cdk-mintd.service
+   ```
+
+   Confirm all three show `LoadState=masked` before continuing. These masks last
+   until reboot; keep the node running until recovery finishes.
+2. Restore `var/lib/cdk-mintd-backup/current` from duplicity to a temporary,
+   root-only directory. With `--path-to-restore var/lib/cdk-mintd-backup/current`,
+   files such as `data.tar` are directly inside the target directory, without a
+   `current/` subdirectory. Retain the original mint data and secrets until
+   recovery has been verified. Check `manifest.json` against your Nix
+   configuration. Create an **empty** data directory owned by the configured
+   mint user and group, mode `0700`.
+3. Extract `data.tar` **as the mint user**, never as root, so archived symlinks
+   cannot redirect privileged writes. From the root shell, for the default user,
+   group and directory:
+
+   ```bash
+   umask 077
+   setpriv --reuid=cdk-mintd --regid=cdk-mintd --init-groups -- \
+     tar --no-same-owner --no-same-permissions -xf - -C /var/lib/cdk-mintd \
+     < /path/to/restored/data.tar
    ```
 
 4. Restore `seed` to `seedFile` and, if present, `bdk-mnemonic` to
    `onchain.mnemonicFile`, owned by the configured mint user/group with mode
    `0440`. Preserve their bytes. Restore the entire data archive, including the
    BDK wallet, from the **same snapshot**, rather than mixing database versions.
-5. Start the mint while external access remains blocked. Check its journal, mint
-   keys, quotes and wallet state. Resume scheduled backups and public access only
-   after resolving any state lost since the snapshot.
+5. Remove `/run/systemd/system.control/cdk-mintd.service`, run
+   `systemctl daemon-reload`, and start the mint while external access remains
+   blocked. Check its journal, mint keys, quotes and wallet state. Only after
+   resolving any state lost since the snapshot, remove the `duplicity.service`
+   and `cdk-mintd-backup.service` masks from the same directory, run
+   `systemctl daemon-reload`, resume the backup timer if previously enabled, and
+   reopen public access.
 
 Restore the BDK wallet database together with its mnemonic. For last-resort
 mnemonic-only recovery, follow CDK's

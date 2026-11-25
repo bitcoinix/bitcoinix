@@ -6,7 +6,6 @@ let
       enable = true;
       inherit backend;
       onchain.enable = onchain;
-      url = "https://mint.example.org";
     };
   };
   disabled = evaluate {};
@@ -39,7 +38,7 @@ in lib.nameValuePair "testCdkMintd-${backend}-${lib.boolToString onchain}" {
     requires = [ "${backend}.service" ] ++ lib.optional onchain "bitcoind.service";
     user = "cdk-mintd";
     hardened = "strict";
-    address = "169.254.1.35";
+    address = "169.254.1.36";
     connections = [ "nginx" ] ++ lib.optional (backend == "lnd") "lnd"
       ++ lib.optional onchain "bitcoind";
   };
@@ -115,7 +114,7 @@ in lib.nameValuePair "testCdkMintd-${backend}-${lib.boolToString onchain}" {
       config.systemd.services ? cdk-mintd-backup) [
         {}
         { services.backups.enable = true; }
-        { services.cdk-mintd = { enable = true; url = "https://mint.example.org"; }; }
+        { services.cdk-mintd.enable = true; }
       ];
     expected = [ false false false ];
   };
@@ -141,5 +140,16 @@ in lib.nameValuePair "testCdkMintd-${backend}-${lib.boolToString onchain}" {
         services.cdk-mintd.dataDir = path;
       }))) [ "/" "/var/lib" "/var/lib/cdk-mintd-backup" "/var/lib/cdk-mintd-backup/current/../data" ];
     expected = [ true true true true ];
+  };
+  testCdkMintdInitializationGuardOverlap = {
+    expr = map (path: lib.any (lib.hasInfix "root-owned initialization guard")
+      (failedAssertions (mint "lnd" false { services.cdk-mintd.dataDir = path; })))
+      [ "/" "/var/lib/nixos" "/var/lib/nixos/./cdk-mintd" "/var/lib/nixos/cdk-mintd/data" ];
+    expected = [ true true true true ];
+  };
+  testCdkMintdLogging = {
+    expr = map (module: (mint "lnd" false module).services.cdk-mintd.settings.info.logging.output)
+      [ {} { services.cdk-mintd.settings.info.logging.output = "both"; } ];
+    expected = [ "stderr" "both" ];
   };
 }

@@ -492,7 +492,7 @@ in {
         ];
       };
       cdk-mintd = {
-        id = 35;
+        id = 36;
         connections = [ "nginx" ]
           ++ optional (config.services.cdk-mintd.backend == "lnd") "lnd"
           ++ optional config.services.cdk-mintd.onchain.enable "bitcoind";
