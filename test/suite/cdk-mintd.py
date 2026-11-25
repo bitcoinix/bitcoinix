@@ -51,16 +51,30 @@ def test_cdk_mintd():
     # A private directory (e.g. restored under umask 077) must not hide the
     # marker and authorize a new mint. Check read and search permission failures.
     guard_dir = os.path.dirname(guard)
-    for mode in ["700", "744"]:
-        succeed(f"chmod {mode} {guard_dir}", "systemctl reset-failed cdk-mintd")
+
+    def refuse_initialization():
+        succeed("systemctl reset-failed cdk-mintd")
         machine.fail("systemctl start cdk-mintd")
         machine.fail(f"test -e {directory}/cdk-mintd.sqlite")
         succeed("systemctl stop cdk-mintd")
+
+    for mode in ["700", "744"]:
+        succeed(f"chmod {mode} {guard_dir}")
+        refuse_initialization()
     succeed(f"chmod 755 {guard_dir}", f"mv {guard_dir} {guard_dir}.saved")
-    machine.fail("systemctl start cdk-mintd")
-    machine.fail(f"test -e {directory}/cdk-mintd.sqlite")
-    succeed("systemctl stop cdk-mintd", f"mv {guard_dir}.saved {guard_dir}",
-            "systemctl reset-failed cdk-mintd")
+    refuse_initialization()
+    # All of these pass a read/search permission check but are unsafe guards.
+    succeed(f"install -m 755 /dev/null {guard_dir}")
+    refuse_initialization()
+    succeed(f"rm {guard_dir}", f"install -d -m 755 {guard_dir}.target",
+            f"ln -s {guard_dir}.target {guard_dir}")
+    refuse_initialization()
+    succeed(f"rm {guard_dir}", f"rmdir {guard_dir}.target",
+            f"install -d -m 755 -o {data['user']} -g {data['group']} {guard_dir}")
+    refuse_initialization()
+    succeed(f"chown root:root {guard_dir}", f"chmod 777 {guard_dir}")
+    refuse_initialization()
+    succeed(f"rmdir {guard_dir}", f"mv {guard_dir}.saved {guard_dir}", "systemctl reset-failed cdk-mintd")
     machine.fail("systemctl start cdk-mintd")
     succeed("journalctl -u cdk-mintd | grep -F 'Refusing to recreate an initialized mint'",
             "systemctl stop cdk-mintd", f"rm -rf {directory}",
@@ -104,13 +118,14 @@ def test_cdk_mintd_onchain():
     # Inspect the actual generated TOML for IPv6 endpoints. The LND module's own
     # IPv6 listener support is covered separately by its endpoint changes.
     import tomllib
-    config_file = re.search(r"config init --new-mint --file (\S+)", test_data["cdk-mintd-ipv6-pre-start"])
-    assert config_file is not None
-    ipv6 = tomllib.loads(succeed(f"cat {config_file.group(1)}"))
-    assert ipv6["info"]["listen_host"] == "[::]", ipv6
-    assert ipv6["lnd"]["address"] == "https://[::1]:10009", ipv6
-    assert ipv6["bdk"]["bitcoind_rpc_host"] == "[::1]", ipv6
-    assert ipv6["info"]["logging"]["output"] == "stderr", ipv6
+    for pre_start in test_data["cdk-mintd-ipv6-pre-starts"]:
+        config_file = re.search(r"config init --new-mint --file (\S+)", pre_start)
+        assert config_file is not None
+        ipv6 = tomllib.loads(succeed(f"cat {config_file.group(1)}"))
+        assert ipv6["info"]["listen_host"] == "[::]", ipv6
+        assert ipv6["lnd"]["address"] == "https://[::1]:10009", ipv6
+        assert ipv6["bdk"]["bitcoind_rpc_host"] == "[::1]", ipv6
+        assert ipv6["info"]["logging"]["output"] == "stderr", ipv6
     # On-chain quotes require a public key for mint authorization.
     body = {"amount": 10000, "unit": "sat",
             "pubkey": "0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798"}
@@ -204,6 +219,9 @@ def test_cdk_mintd_backup():
     machine.fail(f"runuser -u {user} -- cat {current}/seed")
     assert int(succeed(f"stat -c %s {current}/data.tar")) < 64 * 1024 * 1024
     archived = files()
+    guard = "/var/lib/nixos/cdk-mintd/initialized"
+    assert guard.lstrip('/') in archived, archived
+    assert "secrets/cdk-mintd-seed" not in archived, archived
     assert f"{directory.lstrip('/')}/cdk-mintd.sqlite" not in archived, archived
     assert f"{stage.lstrip('/')}/.next" not in archived, archived
     for file in ["data.tar", "seed", "bdk-mnemonic", "manifest.json", "created-at"]:
@@ -226,8 +244,13 @@ def test_cdk_mintd_backup():
     succeed(f"systemctl restart {data['backend']}")
     machine.fail("systemctl start cdk-mintd")
     machine.fail(f"test -e {directory}/cdk-mintd.sqlite")
-    succeed(f"umask 077; setpriv --reuid={user} --regid={group} --init-groups -- "
-            f"tar --no-same-owner --no-same-permissions -xf - -C {directory} < {restored}/data.tar",
+    # A protected deployment without supplied secrets fails setup-secrets and
+    # leaves /secrets inaccessible until the secrets target is started again.
+    succeed(f"mv {data['seedFile']} /tmp/cdk-seed.saved")
+    machine.fail("systemctl restart setup-secrets")
+    assert_full_match("stat -c %a /secrets", "700\n")
+    succeed(f"(umask 077; setpriv --reuid={user} --regid={group} --init-groups -- "
+            f"tar --no-same-owner --no-same-permissions -xf - -C {directory} < {restored}/data.tar)",
             f"install -o {user} -g {group} -m 440 {restored}/seed {data['seedFile']}",
             f"install -o {user} -g {group} -m 440 {restored}/bdk-mnemonic {data['mnemonicFile']}")
     assert_full_match(f"stat -c '%a' {directory}/wide-mode", "700\n")
@@ -236,7 +259,11 @@ def test_cdk_mintd_backup():
     assert_full_match(f"readlink {directory}/root-link", "/root/cdk-backup-canary\n")
     assert_full_match("cat /root/cdk-backup-canary", "root-secret\n")
     assert succeed(f"sha256sum {data['seedFile']}").split()[0] == seed_hash
-    succeed("mv /tmp/cdk-initialized.saved /var/lib/nixos/cdk-mintd/initialized")
+    succeed(f"{duplicity} restore --path-to-restore {guard.lstrip('/')} {destination} /tmp/cdk-initialized.restored",
+            f"install -o root -g root -m 600 /tmp/cdk-initialized.restored {guard}",
+            "systemctl start nix-bitcoin-secrets.target",
+            "rm /tmp/cdk-initialized.saved /tmp/cdk-initialized.restored /tmp/cdk-seed.saved")
+    succeed(f"runuser -u {user} -- test -r {data['seedFile']}")
     unmask("duplicity", "cdk-mintd-backup", "cdk-mintd")
     succeed("systemctl start cdk-mintd")
     ready()
@@ -349,3 +376,107 @@ def test_cdk_mintd_backup():
             "systemctl start duplicity")
     ready()
     assert f"{current.lstrip('/')}/data.tar" in files()
+
+
+@test("cdk-mintd-backup-shutdown")
+def test_cdk_mintd_backup_shutdown():
+    data = test_data["cdk-mintd"]
+    backend = data["backend"]
+    stage = "/var/lib/cdk-mintd-backup"
+    barrier = "/run/cdk-shutdown-barrier"
+    pause_copy = f"{data['dataDir']}/pause-backup"
+    url = f"http://{ip('cdk-mintd')}:{data['port']}/v1/info"
+
+    def ready():
+        machine.wait_until_succeeds("test $(systemctl show -P ActiveState cdk-mintd) = active")
+        machine.wait_until_succeeds(f"curl -fsS {url}")
+        if backend == "lnd":
+            wait_for_lnd_server()
+
+    # Hold the mint in deactivating while it still has a live daemon. No archive
+    # may begin here, and the restart must survive termination of the backup.
+    ready()
+    machine.succeed(
+        "mkdir -p /run/systemd/system/cdk-mintd.service.d\n"
+        "cat > /run/systemd/system/cdk-mintd.service.d/slow-stop.conf <<'EOF'\n"
+        "[Service]\nTimeoutStopSec=60s\n"
+        f"ExecStop=/bin/sh -c 'while test -e {barrier}; do /run/current-system/sw/bin/sleep 0.1; done'\n"
+        "EOF\n"
+        # This dependent lets a stop be queued while the mint is still active,
+        # so --job-mode=fail must reject the conflicting restart transaction.
+        "cat > /run/systemd/system/cdk-shutdown-blocker.service <<'EOF'\n"
+        "[Unit]\nRequires=cdk-mintd.service\nAfter=cdk-mintd.service\n"
+        "[Service]\nType=oneshot\nRemainAfterExit=yes\nExecStart=/run/current-system/sw/bin/true\n"
+        f"ExecStop=/bin/sh -c 'while test -e {barrier}; do /run/current-system/sw/bin/sleep 0.1; done'\n"
+        "EOF\nsystemctl daemon-reload"
+    )
+    for action in ["cancel", "timeout"]:
+        if action == "timeout":
+            machine.succeed(
+                "mkdir -p /run/systemd/system/cdk-mintd-backup.service.d\n"
+                "printf '[Service]\\nTimeoutStartSec=3s\\n' > /run/systemd/system/cdk-mintd-backup.service.d/timeout.conf\n"
+                "systemctl daemon-reload"
+            )
+        succeed(f"touch {barrier}", "systemctl start --no-block cdk-mintd-backup")
+        machine.wait_until_succeeds("test $(systemctl show -P SubState cdk-mintd) = stop")
+        machine.fail(f"test -e {stage}/.next")
+        if action == "cancel":
+            succeed("systemctl stop --no-block cdk-mintd-backup")
+        else:
+            machine.wait_until_succeeds("test $(systemctl show -P Result cdk-mintd-backup) = timeout")
+        succeed(f"rm {barrier}")
+        ready()
+        machine.fail(f"test -e {stage}/current")
+        machine.fail(f"test -e {stage}/.next")
+        if action == "timeout":
+            succeed("rm /run/systemd/system/cdk-mintd-backup.service.d/timeout.conf", "systemctl daemon-reload")
+        succeed("systemctl reset-failed cdk-mintd-backup cdk-mintd")
+
+    # A stop arriving either before the restart transaction or during its stop
+    # half must win, including stops of dependencies pulled in by the mint.
+    for stop_first in [False, True]:
+        for target in ["cdk-mintd", backend, "bitcoind"]:
+            succeed(f"touch {barrier} {pause_copy}", f"rm -f {stage}/restart-status")
+            if stop_first:
+                succeed("systemctl start cdk-shutdown-blocker", f"touch {stage}/pause-state-check")
+            succeed("systemctl start --no-block cdk-mintd-backup")
+            if stop_first:
+                machine.wait_until_succeeds(f"test -e {stage}/state-checked")
+            else:
+                machine.wait_until_succeeds("test $(systemctl show -P SubState cdk-mintd) = stop")
+            machine.fail(f"test -e {stage}/.next")
+            succeed(f"systemctl stop --no-block {target}")
+            machine.wait_until_succeeds(f"systemctl list-jobs --no-legend {target}.service | grep -w stop")
+            if stop_first:
+                succeed(f"rm {stage}/pause-state-check")
+                machine.wait_until_succeeds(f"test -s {stage}/restart-status")
+                assert int(succeed(f"cat {stage}/restart-status")) != 0
+            succeed(f"rm {barrier}", f"systemctl stop {target}")
+            machine.wait_until_succeeds(f"test -d {stage}/.next")
+            assert_full_match("systemctl show -P ActiveState cdk-mintd", "inactive\n")
+            succeed(f"rm {pause_copy}", "systemctl start cdk-mintd-backup")
+            assert_full_match(f"systemctl show -P ActiveState {target}", "inactive\n")
+            assert_full_match("systemctl show -P ActiveState cdk-mintd", "inactive\n")
+            if stop_first:
+                succeed(f"rm {stage}/state-checked")
+            succeed("systemctl reset-failed cdk-mintd cdk-mintd-backup",
+                    f"systemctl start bitcoind {backend} cdk-mintd")
+            ready()
+
+    # If the stop finishes before the restart is submitted, there is no job to
+    # conflict with. try-restart must still leave the mint and backends stopped.
+    for target in ["cdk-mintd", backend, "bitcoind"]:
+        succeed(f"touch {stage}/pause-state-check {pause_copy}",
+                "systemctl start --no-block cdk-mintd-backup")
+        machine.wait_until_succeeds(f"test -e {stage}/state-checked")
+        succeed(f"systemctl stop {target}", f"rm {stage}/pause-state-check")
+        machine.wait_until_succeeds(f"test -d {stage}/.next")
+        succeed(f"rm {pause_copy}", "systemctl start cdk-mintd-backup")
+        assert_full_match(f"systemctl show -P ActiveState {target}", "inactive\n")
+        assert_full_match("systemctl show -P ActiveState cdk-mintd", "inactive\n")
+        succeed(f"rm {stage}/state-checked", "systemctl reset-failed cdk-mintd cdk-mintd-backup",
+                f"systemctl start bitcoind {backend} cdk-mintd")
+        ready()
+    succeed(f"rm {stage}/restart-status",
+            "rm /run/systemd/system/cdk-mintd.service.d/slow-stop.conf /run/systemd/system/cdk-shutdown-blocker.service",
+            "systemctl daemon-reload")

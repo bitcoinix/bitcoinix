@@ -78,9 +78,10 @@ module runs `config init --new-mint`; when the generated Nix configuration or
 `/var/lib/nixos/cdk-mintd/initialized` prevents a missing database or changed
 `dataDir` from silently creating a replacement mint with the old signing seed.
 Keep this marker with the node's state when migrating hosts; automated backups
-include it under `var/lib/nixos`. Its directory must be root-owned and readable
-and searchable by the mint user (mode `0755`). Startup refuses an absent or
-inaccessible marker directory rather than treating its marker as missing.
+include it under `var/lib/nixos`. Its directory and `/var/lib/nixos` must be real,
+root-owned directories, readable and searchable by the mint user and not writable
+by other users (mode `0755`). Startup refuses missing, inaccessible or unsafe
+guard paths rather than treating their marker as missing.
 On a replacement host, install the recovery masks below **before the first
 deployment that enables the service**, even if `/secrets` is already restored.
 This needs no mint account; the protected deployment creates the user and group
@@ -105,10 +106,12 @@ Enable `services.backups.enable = true;` to include the mint. Before each duplic
 backup, `cdk-mintd-backup` stops the mint, archives its complete data directory,
 and copies its signing seed and, when on-chain support is enabled, BDK mnemonic.
 This includes custom `seedFile` and `onchain.mnemonicFile` paths even when
-`nix-bitcoin.generateSecrets` is off. A previously running mint gets a start job
-queued before copying. Systemd keeps it, and any other start requests, waiting
+`nix-bitcoin.generateSecrets` is off. A previously running mint gets a restart
+queued before shutdown, so cancellation during shutdown cannot lose its start.
+Systemd keeps that start, and any other start requests, waiting
 until the backup finishes. A stop requested during copying cancels that pending
-start; cleanup does not restart the mint afterwards. An intentionally stopped
+start; stops of the mint or its backends during shutdown also take precedence.
+Cleanup does not restart the mint afterwards. An intentionally stopped
 mint stays stopped unless a new start is requested.
 Payments are unavailable during staging; uploading does not wait for mint startup.
 
@@ -155,8 +158,9 @@ missing state and its liabilities.
    Confirm all three show `LoadState=masked` before continuing. On a new host,
    now deploy the configuration enabling the mint to create its user, group and
    data directory. Keep the masks in place, and check `LoadState=masked` again
-   after deployment. These masks last until reboot; keep the node running until
-   recovery finishes.
+   after deployment. If a backup timer is configured, stop `duplicity.timer`
+   again immediately after deployment, which may have started it. These masks
+   last until reboot; keep the node running until recovery finishes.
 
    Also restore `var/lib/nixos/cdk-mintd/initialized` from the backup when
    available. It is outside the `current` snapshot. Keep its parent directory
@@ -174,22 +178,30 @@ missing state and its liabilities.
    group and directory:
 
    ```bash
-   umask 077
-   setpriv --reuid=cdk-mintd --regid=cdk-mintd --init-groups -- \
-     tar --no-same-owner --no-same-permissions -xf - -C /var/lib/cdk-mintd \
-     < /path/to/restored/data.tar
+   (
+     umask 077
+     setpriv --reuid=cdk-mintd --regid=cdk-mintd --init-groups -- \
+       tar --no-same-owner --no-same-permissions -xf - -C /var/lib/cdk-mintd \
+       < /path/to/restored/data.tar
+   )
    ```
 
 4. Restore `seed` to `seedFile` and, if present, `bdk-mnemonic` to
    `onchain.mnemonicFile`, owned by the configured mint user/group with mode
    `0440`. Preserve their bytes. Restore the entire data archive, including the
    BDK wallet, from the **same snapshot**, rather than mixing database versions.
+   When `nix-bitcoin.setupSecrets` is enabled, restore all declared secrets and
+   run `systemctl start nix-bitcoin-secrets.target` successfully before starting
+   the mint. In particular, with `generateSecrets = false`, deployment can fail
+   on missing supplied secrets and leave `secretsDir` locked to mode `0700`;
+   restarting the target after restoration reapplies the required access.
 5. Remove `/run/systemd/system.control/cdk-mintd.service`, run
    `systemctl daemon-reload`, and start the mint while external access remains
    blocked. Check its journal, mint keys, quotes and wallet state. Only after
    resolving any state lost since the snapshot, remove the `duplicity.service`
    and `cdk-mintd-backup.service` masks from the same directory, run
-   `systemctl daemon-reload`, resume the backup timer if previously enabled, and
+   `systemctl daemon-reload`, run `systemctl reset-failed duplicity.timer` and
+   `systemctl start duplicity.timer` if scheduled backups are configured, and
    reopen public access.
 
 Restore the BDK wallet database together with its mnemonic. For last-resort

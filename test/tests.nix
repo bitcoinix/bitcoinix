@@ -386,12 +386,14 @@ let
           inherit (config.nix-bitcoin.pkgs) bitcoind electrs fulcrum rtl;
           clightning = cfg.clightning.package;
           lnd = cfg.lnd.package;
+          cdk-mintd = cfg.cdk-mintd.package;
           btcpayserver = cfg.btcpayserver.package;
           mempool = cfg.mempool.package;
         });
 
       tests.backups = cfg.backups.enable;
       tests.cdk-mintd-backup = cfg.backups.enable && cfg.cdk-mintd.enable;
+      tests.cdk-mintd-backup-shutdown = cfg.backups.enable && cfg.cdk-mintd.enable;
       test.data.backups = {
         inherit (cfg.backups) with-bulk-data;
         bitcoindDir = cfg.bitcoind.dataDir;
@@ -689,6 +691,7 @@ let
 
     cdk-mintd-lnd = {
       imports = [ scenarios.regtestBase ];
+      nix-bitcoin.nodeinfo.enable = true;
       services.cdk-mintd = {
         enable = true;
         settings.mint_info.name = "Bitcoinix test mint";
@@ -710,6 +713,22 @@ let
 
     cdk-mintd-onchain = { config, pkgs, extendModules, ... }: {
       imports = with scenarios; [ cdk-mintd-cln netnsBase ];
+      # Boot without the legacy activation script that creates /var/lib/nixos.
+      services.userborn.enable = true;
+      # Supply secrets once; recovery must repair setup-secrets after restoring
+      # a missing secret, and cannot depend on /secrets being in the archive.
+      nix-bitcoin.generateSecrets = mkForce false;
+      nix-bitcoin.setupSecrets = true;
+      systemd.services.supply-test-secrets = {
+        requiredBy = [ "setup-secrets.service" ];
+        before = [ "setup-secrets.service" ];
+        serviceConfig = { Type = "oneshot"; RemainAfterExit = true; };
+        script = ''
+          install -d -m 0700 /secrets
+          cd /secrets
+          ${config.nix-bitcoin.generateSecretsScript}
+        '';
+      };
       services.cdk-mintd.onchain.enable = true;
       services.cdk-mintd.settings.bdk.num_confs = 1;
       services.cdk-mintd.settings.bdk.wallet_rescan_from_height = 0;
@@ -730,11 +749,11 @@ let
         (extendModules { modules = [{ services.cdk-mintd.onchain.allowNewWallet = mkForce true; }]; })
           .config.systemd.services.cdk-mintd.preStart
       );
-      test.data.cdk-mintd-ipv6-pre-start = (extendModules { modules = [{
+      test.data.cdk-mintd-ipv6-pre-starts = map (address: (extendModules { modules = [{
         services.cdk-mintd = { backend = mkForce "lnd"; address = mkForce "::"; };
-        services.lnd.rpcAddress = mkForce "::";
-        services.bitcoind.rpc.address = mkForce "::";
-      }]; }).config.systemd.services.cdk-mintd.preStart;
+        services.lnd.rpcAddress = mkForce address;
+        services.bitcoind.rpc.address = mkForce address;
+      }]; }).config.systemd.services.cdk-mintd.preStart) [ "::" "[::]" "::1" "[::1]" ];
       # Pause copying deterministically to test starts and cancellation mid-backup.
       systemd.services.cdk-mintd-backup.path = mkBefore [
         (pkgs.writeShellScriptBin "systemctl" ''
@@ -744,6 +763,12 @@ let
             ${config.systemd.package}/bin/systemctl "$@" || status=$?
             touch "$STATE_DIRECTORY/state-checked"
             while [[ -e $STATE_DIRECTORY/pause-state-check ]]; do sleep 0.1; done
+            exit "$status"
+          fi
+          if [[ $1 == try-restart ]]; then
+            status=0
+            ${config.systemd.package}/bin/systemctl "$@" || status=$?
+            echo "$status" > "$STATE_DIRECTORY/restart-status"
             exit "$status"
           fi
           exec ${config.systemd.package}/bin/systemctl "$@"

@@ -330,16 +330,30 @@ in {
           state=$(systemctl is-active cdk-mintd.service) || true
           case $state in
             active|activating|reloading)
-              systemctl stop cdk-mintd.service
-              # Queue this before copying, not in postStop: an operator's stop
-              # during the copy must be able to replace the pending start.
-              systemctl start --no-block cdk-mintd.service
+              # Submit both halves together: cancellation while the mint shuts
+              # down must not lose its restart. Don't replace a pending stop
+              # of the mint or its dependencies; later stops can cancel this job.
+              # try-restart also leaves it down if a stop completed since the
+              # state check above, without pulling its dependencies back up.
+              if ! systemctl try-restart --no-block --job-mode=fail cdk-mintd.service; then
+                systemctl stop cdk-mintd.service
+              fi
               ;;
             # Don't cancel a start waiting for its backend or for this backup.
             # No new start is needed for a stopped or failed mint.
             inactive|failed) ;;
             *) echo "Error: cdk-mintd is $state" >&2; exit 1 ;;
           esac
+
+          # The restart's start half waits for this unit. Archive only after
+          # the stop half has completed, including ExecStopPost cleanup.
+          while true; do
+            state=$(systemctl is-active cdk-mintd.service) || true
+            case $state in
+              inactive|failed) break ;;
+              *) sleep 0.1 ;;
+            esac
+          done
 
           mkdir "$STATE_DIRECTORY/.next"
           # The mint can write its data dir, so root must not traverse it.

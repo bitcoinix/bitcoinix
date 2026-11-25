@@ -124,6 +124,7 @@ let
   stateDir = "/var/lib/nixos/cdk-mintd";
   dataPath = toString (/. + cfg.dataDir);
   bracketIPv6 = addr: if hasInfix ":" addr && !hasPrefix "[" addr then "[${addr}]" else addr;
+  connectAddress = addr: bracketIPv6 (nbLib.address (removeSuffix "]" (removePrefix "[" addr)));
   configState = pkgs.writeText "cdk-mintd-config-state.json" (builtins.toJSON {
     config = configFile;
     allowNewWallet = cfg.onchain.enable && cfg.onchain.allowNewWallet;
@@ -148,7 +149,7 @@ let
       onchain.onchain_backend = if cfg.onchain.enable then "bdk" else "none";
     } // (if isLnd then {
       lnd = (cfg.settings.lnd or {}) // {
-        address = "https://${bracketIPv6 (nbLib.address lnd.rpcAddress)}:${toString lnd.rpcPort}";
+        address = "https://${connectAddress lnd.rpcAddress}:${toString lnd.rpcPort}";
         cert_file = lnd.certPath;
         macaroon_file = "/run/cdk-mintd/lnd.macaroon";
       };
@@ -159,7 +160,7 @@ let
         mnemonic = "file:${cfg.onchain.mnemonicFile}";
         network = bitcoind.network;
         chain_source_type = "bitcoinrpc";
-        bitcoind_rpc_host = bracketIPv6 (nbLib.address bitcoind.rpc.address);
+        bitcoind_rpc_host = connectAddress bitcoind.rpc.address;
         bitcoind_rpc_port = bitcoind.rpc.port;
         bitcoind_rpc_user = bitcoind.rpc.users.public.name;
         bitcoind_rpc_password = "file:/run/cdk-mintd/bitcoin-rpcpassword";
@@ -210,21 +211,28 @@ in {
 
     systemd.tmpfiles.rules = [
       "d '${cfg.dataDir}' 0700 ${cfg.user} ${cfg.group} - -"
+      "d /var/lib/nixos 0755 root root - -"
       "d ${stateDir} 0755 root root - -"
     ];
     systemd.services.cdk-mintd = {
       wantedBy = [ "multi-user.target" ];
-      requires = [ "${cfg.backend}.service" ] ++ optional cfg.onchain.enable "bitcoind.service";
+      bindsTo = [ "${cfg.backend}.service" ] ++ optional cfg.onchain.enable "bitcoind.service";
       after = [ "${cfg.backend}.service" "nix-bitcoin-secrets.target" ]
         ++ optional cfg.onchain.enable "bitcoind.service";
       preStart = ''
         umask 077
-        # A failed stat must not be interpreted as a missing initialization
-        # marker. This directory is created by tmpfiles even for a new mint.
-        if [[ ! -r ${stateDir} || ! -x ${stateDir} ]]; then
-          echo "Cannot inspect ${stateDir}; refusing to start the mint. Restore this root-owned directory's access permissions (0755) and check its parent directories." >&2
-          exit 1
-        fi
+        # Validate the guard and its parent before CDK can create a database.
+        # In particular, ENOTDIR or a user-replaceable directory must never be
+        # interpreted as a missing marker. Tmpfiles creates these for new mints.
+        for dir in /var/lib/nixos ${stateDir}; do
+          guardMode=$(stat -c %a "$dir")
+          if [[ ! -d $dir || -L $dir || ! -r $dir || ! -x $dir ]] ||
+             [[ $(stat -c %u "$dir") != 0 ]] ||
+             (( (8#$guardMode & 8#022) != 0 )); then
+            echo "Unsafe initialization guard directory $dir; refusing to start the mint. Restore a real, root-owned directory with mode 0755 and its original initialization marker." >&2
+            exit 1
+          fi
+        done
         ${optionalString isLnd ''
           # lnd owns /run/lnd. Do not let a substituted symlink make CDK send
           # a mint secret to lnd as the macaroon header.
@@ -263,7 +271,6 @@ in {
         # Record initialization before the daemon can serve any payments. The
         # service user cannot remove this marker when its database is lost.
         ExecStartPre = mkAfter [ (nbLib.rootScript "cdk-mintd-record-initialization" ''
-          install -d -m 0755 -o root -g root ${stateDir}
           touch ${stateDir}/initialized
         '') ];
         ExecStart = cli;
@@ -278,9 +285,11 @@ in {
         RestartSec = "10s";
       } // nbLib.allowedIPAddresses cfg.tor.enforce;
     };
-    # Like RTL: wantedBy on lnd would restart it on a clean STOPPING=1 exit.
+    # Like RTL: don't pull stopped dependencies back up from a backend hook.
+    # BindsTo + After refuses the mint start if another dependency is inactive.
+    # wantedBy on lnd would restart it on a clean STOPPING=1 exit.
     systemd.services.${cfg.backend}.serviceConfig.ExecStartPost = [
-      "-+${config.systemd.package}/bin/systemctl start --no-block cdk-mintd.service"
+      "-+${config.systemd.package}/bin/systemctl start --no-block --job-mode=ignore-requirements cdk-mintd.service"
     ];
 
     users.users.${cfg.user} = {
