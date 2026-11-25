@@ -479,6 +479,12 @@ in {
           optional nodes.lnd.enable "lnd" ++
           optional nodes.clightning.enable "clightning";
       };
+      lightning-terminal = {
+        id = 37;
+        connections = [ "lnd" ]
+          ++ optional (config.services.lightning-terminal.faraday.enable
+            && config.services.lightning-terminal.faraday.connectBitcoin) "bitcoind";
+      };
       fulcrum = {
         id = 31;
         connections = [ "bitcoind" ];
@@ -530,6 +536,7 @@ in {
     services.btcpayserver.address = netns.btcpayserver.address;
 
     services.rtl.address = netns.rtl.address;
+    services.lightning-terminal.address = netns.lightning-terminal.address;
 
     services.mempool.address = netns.mempool.address;
     services.mempool.frontend.address = netns.nginx.address;

@@ -128,6 +128,7 @@ NixOS modules ([src](modules/modules.nix))
   * [lndconnect](https://github.com/LN-Zap/lndconnect): connect your wallet to LND or
     Core Lightning [via WireGuard](./docs/services.md#use-zeus-mobile-lightning-wallet-via-wireguard) or
     [Tor](./docs/services.md#use-zeus-mobile-lightning-wallet-via-tor)
+  * [Lightning Terminal (litd)](https://github.com/lightninglabs/lightning-terminal): web interface, Lightning Node Connect gateway, and subserver manager for LND
   * [Ride The Lightning (RTL)](https://github.com/Ride-The-Lightning/RTL): web interface for LND and Core Lightning
   * [mempool](https://github.com/mempool/mempool): Bitcoin visualizer, explorer, and API service
   * [Unbeholden LNURL](https://github.com/unbeholdendev/unbeholden-lnurl): Lightning Addresses, vouchers, notifications and Nostr zaps for LND or Core Lightning

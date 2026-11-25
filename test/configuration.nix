@@ -512,7 +512,7 @@ let
     value = "bitcoinix-test-private-setting=1";
     empty = "";
     module = {};
-  }) [ "bitcoind" "clightning" "lnd" "fulcrum" ] ++ map (node: {
+  }) [ "bitcoind" "clightning" "lnd" "lightning-terminal" "fulcrum" ] ++ map (node: {
     name = "rtl-${node}";
     enablePath = [ "services" "rtl" "nodes" node "enable" ];
     optionPath = [ "services" "rtl" "nodes" node "extraConfig" ];
@@ -1158,6 +1158,156 @@ let
       expected = [ true ];
     };
     testLightningSeparatePorts = { expr = failedAssertions localLightning; expected = []; };
+    testLightningTerminalDefaults = let
+      cfg = evaluate { services.lightning-terminal = { enable = true; group = "lit-group"; }; };
+      domainCfg = evaluate {
+        services.lightning-terminal = {
+          enable = true;
+          address = "192.168.1.20";
+          certificate.extraDomains = [ "lit.local" ];
+        };
+      };
+      torClnOnly = evaluate { imports = [ ../modules/presets/enable-tor.nix ]; services.clightning.enable = true; };
+    in {
+      expr = {
+        lndEnabled = cfg.services.lnd.enable;
+        rpcMiddleware = cfg.services.lnd.rpcMiddleware.enable;
+        hasMacaroon = cfg.services.lnd.macaroons ? lightning-terminal;
+        txindex = cfg.services.bitcoind.txindex;
+        extraIPs = cfg.services.lightning-terminal.certificate.extraIPs;
+        secretGroup = cfg.nix-bitcoin.secrets.lightning-terminal-password.group;
+        secretPerms = cfg.nix-bitcoin.secrets.lightning-terminal-password.permissions;
+        keyPerms = cfg.nix-bitcoin.secrets.lightning-terminal-key.permissions;
+        domainExtraIPs = domainCfg.services.lightning-terminal.certificate.extraIPs;
+        domainExtraDomains = domainCfg.services.lightning-terminal.certificate.extraDomains;
+        torPresetDoesNotEnableLit = torClnOnly.services.lightning-terminal.enable;
+      };
+      expected = {
+        lndEnabled = true;
+        rpcMiddleware = true;
+        hasMacaroon = true;
+        txindex = false;
+        extraIPs = [ "::1" ];
+        secretGroup = "lit-group";
+        secretPerms = "400";
+        keyPerms = "400";
+        domainExtraIPs = [ "::1" "192.168.1.20" ];
+        domainExtraDomains = [ "lit.local" ];
+        torPresetDoesNotEnableLit = false;
+      };
+    };
+    testLightningTerminalIPv6AndTorNetns = let
+      ipv6Cfg = evaluate {
+        imports = [ ../modules/presets/enable-tor.nix ];
+        nix-bitcoin.nodeinfo.enable = true;
+        services.lightning-terminal = {
+          enable = true;
+          address = "[::]";
+          faraday.connectBitcoin = true;
+        };
+        services.bitcoind.rpc = {
+          address = "::1";
+          allowip = [ "::1" ];
+        };
+      };
+      torNetnsCfg = evaluate {
+        imports = [ ../modules/presets/enable-tor.nix ];
+        nix-bitcoin.netns-isolation.enable = true;
+        services.lightning-terminal = {
+          enable = true;
+          faraday.connectBitcoin = true;
+        };
+      };
+      torWildcardNetnsCfg = evaluate {
+        nix-bitcoin.netns-isolation.enable = true;
+        services.lightning-terminal = { enable = true; tor.proxy = true; };
+        services.tor.client.socksListenAddress = lib.mkForce { addr = "0.0.0.0"; port = 9050; IsolateDestAddr = true; };
+      };
+      torWildcardCfg = evaluate {
+        services.lightning-terminal = { enable = true; tor.proxy = true; };
+        services.tor.client.socksListenAddress = { addr = "0.0.0.0"; port = 9050; IsolateDestAddr = true; };
+      };
+      torIPv6WildcardCfg = evaluate {
+        services.lightning-terminal = { enable = true; tor.proxy = true; };
+        services.tor.client.socksListenAddress = { addr = "[::]"; port = 9050; IsolateDestAddr = true; };
+      };
+      torNullCfg = evaluate {
+        services.lightning-terminal = { enable = true; tor.proxy = true; };
+        services.tor.client.socksListenAddress = { addr = null; port = 9050; IsolateDestAddr = true; };
+      };
+      tunnelAddr = c: (builtins.head c.services.tor.settings.HTTPTunnelPort).addr;
+      env = torNetnsCfg.systemd.services.lightning-terminal.environment;
+      ipv6OnionMap = builtins.head ipv6Cfg.services.tor.relay.onionServices.lightning-terminal.map;
+    in {
+      expr = {
+        ipv6Txindex = ipv6Cfg.services.bitcoind.txindex;
+        ipv6ExtraIPs = ipv6Cfg.services.lightning-terminal.certificate.extraIPs;
+        ipv6Assertions = failedAssertions ipv6Cfg;
+        ipv6OnionTarget = ipv6OnionMap.target.addr;
+        ipv6NoProxy = ipv6Cfg.systemd.services.lightning-terminal.environment.NO_PROXY;
+        ipv6LocalAddress = ipv6Cfg.nix-bitcoin.lib.addressWithPort ipv6Cfg.services.lightning-terminal.address ipv6Cfg.services.lightning-terminal.port;
+        torProxy = env.HTTPS_PROXY;
+        torNetnsTunnelAddr = tunnelAddr torNetnsCfg;
+        torWildcardNetnsProxy = torWildcardNetnsCfg.systemd.services.lightning-terminal.environment.HTTPS_PROXY;
+        torWildcardNetnsTunnelAddr = tunnelAddr torWildcardNetnsCfg;
+        torWildcardProxy = torWildcardCfg.systemd.services.lightning-terminal.environment.HTTPS_PROXY;
+        torWildcardTunnelAddr = tunnelAddr torWildcardCfg;
+        torIPv6WildcardProxy = torIPv6WildcardCfg.systemd.services.lightning-terminal.environment.HTTPS_PROXY;
+        torIPv6WildcardTunnelAddr = tunnelAddr torIPv6WildcardCfg;
+        torNullProxy = torNullCfg.systemd.services.lightning-terminal.environment.HTTPS_PROXY;
+        torNullTunnelAddr = tunnelAddr torNullCfg;
+        noProxy = env.NO_PROXY;
+        nbBrPorts = torNetnsCfg.networking.firewall.interfaces.nb-br.allowedTCPPorts;
+        onionPort = (builtins.head torNetnsCfg.services.tor.relay.onionServices.lightning-terminal.map).port;
+      };
+      expected = {
+        ipv6Txindex = true;
+        ipv6ExtraIPs = [ "::1" ];
+        ipv6Assertions = [];
+        ipv6OnionTarget = "[::1]";
+        ipv6NoProxy = "127.0.0.1,::1,localhost,::";
+        ipv6LocalAddress = "[::1]:8443";
+        torProxy = "http://169.254.1.10:9080";
+        torNetnsTunnelAddr = "169.254.1.10";
+        torWildcardNetnsProxy = "http://169.254.1.10:9080";
+        torWildcardNetnsTunnelAddr = "169.254.1.10";
+        torWildcardProxy = "http://127.0.0.1:9080";
+        torWildcardTunnelAddr = "127.0.0.1";
+        torIPv6WildcardProxy = "http://[::1]:9080";
+        torIPv6WildcardTunnelAddr = "[::1]";
+        torNullProxy = "http://127.0.0.1:9080";
+        torNullTunnelAddr = "127.0.0.1";
+        noProxy = "127.0.0.1,::1,localhost,169.254.1.37,169.254.1.14,169.254.1.12";
+        nbBrPorts = [ 7656 9050 9080 ];
+        onionPort = 443;
+      };
+    };
+    testLightningTerminalAssertions = {
+      expr = map (mod: failedAssertions (evaluate ({
+        services.lightning-terminal.enable = true;
+      } // mod)) != []) [
+        { services.lightning-terminal = { enable = true; address = ""; }; }
+        { services.lightning-terminal = { enable = true; address = " "; }; }
+        { services.lightning-terminal = { enable = true; address = "lit.local"; }; }
+        { services.lightning-terminal = { enable = true; address = "[::1"; }; }
+        { services.lightning-terminal = { enable = true; address = "127.0.0.1:8443"; }; }
+        { services.lightning-terminal = { enable = true; address = ":8443"; }; }
+        { services.lightning-terminal = { enable = true; address = ":::"; }; }
+        { services.lightning-terminal = { enable = true; address = "999.999.999.999"; }; }
+        { services.lightning-terminal = { enable = true; address = "1.2.3"; }; }
+        { services.lightning-terminal = { enable = true; address = "fe80::1%eth0"; }; }
+        { services.lightning-terminal = { enable = true; address = "[fe80::1%eth0]"; }; }
+        { services.lightning-terminal = { enable = true; port = 0; }; }
+        { services.lightning-terminal = { enable = true; tor.proxy = true; torHttpTunnelPort = 0; }; }
+        { services.bitcoind.prune = 1000; services.lightning-terminal = { enable = true; faraday.connectBitcoin = true; }; }
+        { services.bitcoind.txindex = lib.mkForce false; services.lightning-terminal = { enable = true; faraday.connectBitcoin = true; }; }
+        { services.bitcoind.network = "regtest"; services.lightning-terminal = { enable = true; loop.enable = true; }; }
+        { services.bitcoind.network = "regtest"; services.lightning-terminal = { enable = true; pool.enable = true; }; }
+        { services.bitcoind.network = "regtest"; services.lightning-terminal = { enable = true; autopilot.enable = true; }; }
+        { services.bitcoind.network = "mainnet"; services.lightning-terminal = { enable = true; loop.enable = true; pool.enable = true; autopilot.enable = true; }; }
+      ];
+      expected = [ true true true true true true true true true true true true true true true true true true false ];
+    };
     testLndRpcEndpoint = let
       endpoint = rpcAddress: let
         lnd = (evaluate {

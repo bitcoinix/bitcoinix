@@ -41,6 +41,7 @@ jq -r '
     "fulcrum": gh("cculianu/Fulcrum"; "v"),
     "hwi": gh("bitcoin-core/HWI"; ""),
     "krops": "https://cgit.krebsco.de/krops/tree/CHANGELOG.md?h=v@VERSION@",
+    "lightning-terminal": gh("lightninglabs/lightning-terminal"; "v"),
     "lnd": gh("lightningnetwork/lnd"; "v"),
     "lndconnect": gh("LN-Zap/lndconnect"; "v"),
     "lndinit": gh("lightninglabs/lndinit"; "v"),

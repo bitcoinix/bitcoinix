@@ -14,7 +14,7 @@ def test_restart_bitcoind():
     # back. An explicit stop must keep everything down.
     # unbeholden-lnurl `requires` its backend, which starts it again.
     dependents = [
-        unit for unit in ["lnd", "clightning", "electrs", "unbeholden-lnurl"] if unit in enabled_tests
+        unit for unit in ["lnd", "clightning", "electrs", "unbeholden-lnurl", "lightning-terminal"] if unit in enabled_tests
     ]
 
     def state(unit):
@@ -396,7 +396,11 @@ def test_lnd_restart_on_clean_exit():
         succeed(f"systemctl stop {unit}")
     assert_running("lnd")
     before = succeed("systemctl show -P InvocationID lnd").strip()
-    succeed("runuser -u operator -- lncli stop")
+    rc, out = machine.execute("runuser -u operator -- lncli stop 2>&1")
+    # With rpcmiddleware enabled (e.g. lightning-terminal), StopDaemon calls
+    # RequestShutdown() before returning StopResponse, which can close the
+    # middleware stream first and return "interceptor RPC client quit".
+    assert rc == 0 or "interceptor RPC client quit" in out, (rc, out)
     # Right after `lncli stop`, lnd may still be active (shutting down).
     # Poll for a new invocation instead of polling `is-active`.
     machine.wait_until_succeeds(f"[[ $(systemctl show -P InvocationID lnd) != '{before}' ]]")

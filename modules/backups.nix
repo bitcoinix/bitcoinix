@@ -107,6 +107,35 @@ let
       (escapeGlob "/var/cache/clightning-replication")
     ++ [ (escapeGlob "${normalisePath config.services.lnd.dataDir}/graph") ];
 
+  lit = config.services.lightning-terminal;
+  # Use Python's sqlite3 C binding rather than pkgs.sqlite's CLI shell so
+  # sqlite.bin does not enter the runtime closure scanned by test/ci/scan-node.nix.
+  sqliteBackup = pkgs.writeScript "sqlite-backup.py" ''
+    #!${pkgs.python3}/bin/python3
+    from contextlib import closing
+    import sqlite3
+    import sys
+    from urllib.parse import quote
+
+    src, dst = sys.argv[1], sys.argv[2]
+    src_uri = f"file:{quote(src, safe='/')}?mode=rw"
+    with closing(sqlite3.connect(src_uri, timeout=30.0, uri=True)) as src_db, closing(sqlite3.connect(dst)) as dst_db:
+        src_db.backup(dst_db)
+  '';
+  # litd and its subservers write their databases while the backup runs.
+  # Exclude the live files and back up the consistent snapshots in `db-backups/` instead.
+  litLiveDatabases = let
+    base = escapeGlob (normalisePath lit.dataDir);
+  in optionals lit.enable (
+    concatMap (rel: [ "${base}/${rel}" "${base}/${rel}-*" ]) [
+      "*/litd.db"
+      "faraday/*/faraday.db"
+      "loop/*/loop_sqlite.db"
+      "pool/*/pool.db"
+      "tapd/data/*/tapd.db"
+    ] ++ [ "${base}/db-backups/**.tmp*" ]
+  );
+
   # duplicity fails on a selection outside its root
   underBackupRoot = path:
     hasPrefix "${escapeGlob (removeSuffix "/" (normalisePath config.services.duplicity.root))}/" path;
@@ -116,7 +145,7 @@ let
   # The first match determines inclusion or exclusion.
   # The channel databases come first, so that `extraFiles` can't include them.
   includeFileList = builtins.toFile "filelist.txt" ''
-    ${concatMapStringsSep "\n" (path: "- ${path}") (filter underBackupRoot channelDatabases)}
+    ${concatMapStringsSep "\n" (path: "- ${path}") (filter underBackupRoot (channelDatabases ++ litLiveDatabases))}
 
     ${builtins.concatStringsSep "\n" cfg.extraFiles}
 
@@ -128,6 +157,7 @@ let
     ${config.services.bitcoind.dataDir}
     ${config.services.clightning.dataDir}
     ${config.services.lnd.dataDir}
+    ${lit.dataDir}
     ${optionalString config.services.unbeholden-lnurl.enable config.services.unbeholden-lnurl.dataDir}
     ${optionalString cfg.with-bulk-data "${config.services.electrs.dataDir}"}
     ${config.services.nbxplorer.dataDir}
@@ -213,7 +243,8 @@ let
     exit $status
   '';
   dumpServices = postgresqlBackupServices
-    ++ optional (backupWallets && localBitcoind) "bitcoind-wallet-backup.service";
+    ++ optional (backupWallets && localBitcoind) "bitcoind-wallet-backup.service"
+    ++ optional lit.enable "lightning-terminal-backup.service";
 in {
   inherit options;
 
@@ -293,6 +324,93 @@ in {
            writeSecret backup-encryption-env echo "PASSPHRASE=$backupPassphrase"
         fi
       '';
+
+      systemd.services.lightning-terminal-backup = mkIf lit.enable {
+        description = "Snapshot Lightning Terminal databases before backup";
+        script = ''
+          umask 077
+          shopt -s nullglob
+          mkdir -p db-backups
+          status=0
+          for rel in */litd.db faraday/*/faraday.db loop/*/loop_sqlite.db tapd/data/*/tapd.db; do
+            case $rel in
+              db-backups/litd.db|faraday/litd.db|loop/litd.db|pool/litd.db|tapd/litd.db) continue ;;
+            esac
+            if [[ ! -f $rel || -L $rel || ! $rel =~ ^[a-z0-9/_.-]+$ ]]; then
+              echo "Error: Refusing non-regular Lightning Terminal database path '$rel'" >&2
+              status=1
+              continue
+            fi
+            dest="db-backups/$rel"
+            mkdir -p -- "$(dirname -- "$dest")"
+            rm -f -- "$dest.tmp" "$dest.tmp"-*
+            if ${pkgs.coreutils}/bin/timeout --kill-after=10s 120s ${sqliteBackup} "$rel" "$dest.tmp"; then
+              sync -- "$dest.tmp"
+              mv -fT -- "$dest.tmp" "$dest"
+            else
+              echo "Error: Can't snapshot Lightning Terminal database '$rel'" >&2
+              rm -f -- "$dest.tmp" "$dest.tmp"-*
+              status=1
+            fi
+          done
+          # Pool uses bbolt, which holds an exclusive flock while litd runs.
+          # Snapshot pool.db when litd is stopped; otherwise fail the dump unit
+          # (preserving any prior snapshot) so duplicity reports failed-dumps
+          # after archiving all other files.
+          for rel in pool/*/pool.db; do
+            if [[ ! -f $rel || -L $rel || ! $rel =~ ^[a-z0-9/_.-]+$ ]]; then
+              echo "Error: Refusing non-regular Lightning Terminal database path '$rel'" >&2
+              status=1
+              continue
+            fi
+            dest="db-backups/$rel"
+            mkdir -p -- "$(dirname -- "$dest")"
+            rm -f -- "$dest.tmp"
+            rc=0
+            if { exec 9< "$rel"; } 2>/dev/null; then
+              ${pkgs.util-linux}/bin/flock --shared --nonblock --conflict-exit-code 75 9 || rc=$?
+              if [[ $rc == 0 ]]; then
+                if ! cp -f -- /proc/self/fd/9 "$dest.tmp" || [[ ! -s $dest.tmp ]]; then
+                  rc=1
+                fi
+              fi
+              exec 9<&-
+            else
+              rc=1
+            fi
+            if [[ $rc == 0 ]]; then
+              sync -- "$dest.tmp"
+              mv -fT -- "$dest.tmp" "$dest"
+            elif [[ $rc == 75 ]]; then
+              echo "Error: Lightning Pool database '$rel' is locked by running litd; stop lightning-terminal.service before starting duplicity.service" >&2
+              rm -f -- "$dest.tmp"
+              status=1
+            else
+              echo "Error: Can't snapshot Lightning Terminal database '$rel'" >&2
+              rm -f -- "$dest.tmp"
+              status=1
+            fi
+          done
+          # Remove snapshots whose live source database path was deleted
+          while IFS= read -r -d "" snap; do
+            rel=''${snap#db-backups/}
+            [[ -e $rel || -L $rel ]] || rm -f -- "$snap"
+          done < <(find db-backups -type f ! -name '*.tmp*' -print0)
+          sync -- db-backups
+          exit "$status"
+        '';
+        serviceConfig = nbLib.defaultHardening // {
+          Type = "oneshot";
+          User = lit.user;
+          Group = lit.group;
+          WorkingDirectory = lit.dataDir;
+          ReadWritePaths = [ lit.dataDir ];
+          UMask = "0077";
+          PrivateNetwork = true;
+          RestrictAddressFamilies = "AF_UNIX";
+          TimeoutStartSec = "10min";
+        };
+      };
 
       # The nbxplorer database holds the private keys of BTCPay hot wallets
       services.backups.postgresqlDatabases = mkIf config.services.btcpayserver.enable [

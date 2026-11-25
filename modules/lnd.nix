@@ -78,6 +78,7 @@ let
         '';
       };
     };
+    rpcMiddleware.enable = mkEnableOption "the LND gRPC middleware interceptor interface";
     extraConfig = mkOption {
       type = types.lines;
       default = "";
@@ -193,6 +194,7 @@ let
     bitcoind.zmqpubrawtx=${zmqHandleSpecialAddress bitcoind.zmqpubrawtx}
 
     wallet-unlock-password-file=${secretsDir}/lnd-wallet-password
+    ${optionalString cfg.rpcMiddleware.enable "rpcmiddleware.enable=true"}
 
     ${cfg.extraConfig}
   '';

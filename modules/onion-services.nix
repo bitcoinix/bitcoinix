@@ -72,7 +72,9 @@ in {
           in nbLib.mkOnionService {
             port = if externalPort != null then externalPort else service.port;
             target.port = service.onionPort or service.port;
-            target.addr = nbLib.address service.address;
+            target.addr = let
+              resolved = nbLib.address (removePrefix "[" (removeSuffix "]" service.address));
+            in if hasInfix ":" resolved then "[${resolved}]" else resolved;
           }
         );
       };
@@ -117,6 +119,9 @@ in {
         unbeholden-lnurl.externalPort = 80;
         rtl = {
           externalPort = 80;
+        };
+        lightning-terminal = {
+          externalPort = 443;
         };
         mempool-frontend = {
           externalPort = 80;

@@ -27,6 +27,7 @@ TEST_PHASES = (
         "rtl-credentials",
         "rtl-backend-certs",
         "rtl-permissions",
+        "lightning-terminal",
         "mempool",
         "unbeholden-wallet",
         "unbeholden-lnurl",

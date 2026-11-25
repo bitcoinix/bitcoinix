@@ -44,6 +44,7 @@ let
     inherit (nbPkgs) bitcoind electrs fulcrum rtl;
     clightning = config.services.clightning.package;
     lnd = config.services.lnd.package;
+    lightning-terminal = config.services.lightning-terminal.package;
     btcpayserver = config.services.btcpayserver.package;
     mempool = config.services.mempool.package;
   };
@@ -212,6 +213,7 @@ in {
       fulcrum = mkInfo "";
       btcpayserver = mkInfo "";
       rtl = mkInfo "";
+      lightning-terminal = mkInfo "";
       mempool = mkInfo "";
       mempool-frontend = name: cfg: mkInfoLong {
         inherit name cfg;

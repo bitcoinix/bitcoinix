@@ -40,6 +40,7 @@ let self = {
       electrs
       extra-container
       fulcrum
+      lightning-terminal
       lnd
       lndconnect
       lndinit
