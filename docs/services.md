@@ -1315,7 +1315,7 @@ Things to know:
   To restore, stop `rbitcoin-space`, delete `mainnet.sqlite-wal` and `mainnet.sqlite-shm`
   in `dataDir`, copy the backup to `mainnet.sqlite`, `chown rbitcoin-space:rbitcoin-space`
   it and start the service. See upstream's
-  [DEPLOY.md](https://github.com/smolcars/rbitcoin-space/blob/v0.4.0/docs/DEPLOY.md#the-data-directory).
+  [DEPLOY.md](https://github.com/smolcars/rbitcoin-space/blob/v0.5.0/docs/DEPLOY.md#the-data-directory).
   The store's migrations are one-way: an older rbitcoin.space refuses a store that a
   newer one migrated (`store_open_failed`). So back the store up before an upgrade, and
   to downgrade, restore the backup made before the upgrade. Emptying `dataDir` also
@@ -1325,7 +1325,7 @@ Things to know:
   off, along with the projected blocks and fee recommendations.
 - **Other settings.** `services.rbitcoin-space.settings` takes the explorer's environment
   variables, documented in
-  [CONFIG.md](https://github.com/smolcars/rbitcoin-space/blob/v0.4.0/docs/CONFIG.md). They
+  [CONFIG.md](https://github.com/smolcars/rbitcoin-space/blob/v0.5.0/docs/CONFIG.md). They
   are copied to the world-readable Nix store. Lightning gossip and the Ark pages connect to
   the internet, so they fail with `services.rbitcoin-space.tor.enforce`, which
   `secure-node.nix` sets.

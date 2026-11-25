@@ -10,13 +10,13 @@
 , writableTmpDirAsHomeHook
 }:
 let
-  version = "0.4.0";
+  version = "0.5.0";
 
   src = fetchFromGitHub {
     owner = "smolcars";
     repo = "rbitcoin-space";
     tag = "v${version}";
-    hash = "sha256-35sWNU0IUIxMSLiSYTDPE2IabGQyqXHU69XKzDLPbHc=";
+    hash = "sha256-yDicdA+Mq4LQHgFlRM9JzbMaJXIvnn4LRMf4FP0sn3I=";
   };
 
   # The frontend is built separately from the server, as upstream's Dockerfile does.
@@ -49,7 +49,7 @@ let
       outputHashAlgo = "sha256";
       # Depends on the bun version too: a bun update in nixpkgs can change
       # this hash
-      outputHash = "sha256-/pubBcFTberuH+f6QTkxfYg/06VastNDk5bLb82vXzQ=";
+      outputHash = "sha256-7P2y95DOgxDqDoFYSX5x8v7SszmeiHWup5tFdtkK1dM=";
     };
 
     nativeBuildInputs = [ bun nodejs ];
@@ -75,13 +75,13 @@ rustPlatform.buildRustPackage {
   pname = "rbitcoin-space";
   inherit version src;
 
-  cargoHash = "sha256-KWVHJJpU8vTzsZ5ero6ON0f34fvYZ+uLmbQMIw48zLw=";
+  cargoHash = "sha256-ZwRP1QD2zvTGPvsnW9bQMVY3/M5RFvzF/dJPxjCBG0E=";
 
   cargoBuildFlags = [ "-p" "rbitcoin-space" ];
 
   # The commit of tag v${version}, reported at /healthz. The source archive has no .git,
   # and build.rs only accepts a full commit hash.
-  SOURCE_REVISION = "f17bcf9bf796b962f89694aa460c162c373ca985";
+  SOURCE_REVISION = "6c0012ecc79f71a20221244b2a70aa50966748b3";
 
   # Upstream CI runs the suite on every merge; several tests need a regtest rbitcoin
   # node or a browser, so the package only builds the server.
