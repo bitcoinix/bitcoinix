@@ -59,6 +59,9 @@ TEST_PHASES = (
         "setup-secrets",
         "setup-secrets-supplied",
     )),
+    ("teardown", (
+        "netns-bridge-restart",
+    )),
 )
 
 tests = {}

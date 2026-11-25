@@ -299,6 +299,23 @@ and services without `tor.enforce` can reach your LAN. With it enabled:
   the WireGuard preset or firewalld. It needs the iptables firewall backend and a firewall
   package with `bin/iptables`. `networking.nftables` can stay enabled if you set
   `networking.firewall.backend = "iptables"` and `networking.firewall.package = pkgs.iptables`.
+  Then put your own nftables rules in `networking.nftables.tables` and set
+  `networking.nftables.flushRuleset = false`. Flushing the ruleset deletes the bridge's NAT
+  rule, the forwarding rules and the host firewall. It's on by default when
+  `networking.nftables.ruleset` or `rulesetFile` is set or `system.stateVersion` is older
+  than 23.11. Don't name a table `nat`, `filter` or `mangle` in the `ip` family or `filter` or
+  `mangle` in the `ip6` family, since iptables keeps its rules there. The host firewall keeps
+  its reverse path check in the `mangle` tables. If you fix either of these on a running node
+  or turn off `networking.nftables`, reboot once after deploying, since the old deletions
+  still run once. Or run `systemctl reload-or-restart firewall.service`,
+  `systemctl reload-or-restart nb-netns-forward.service` and
+  `systemctl restart nb-netns-bridge.service` in this order. Skip the first command without
+  `networking.firewall.enable` and the second without
+  `nix-bitcoin.netns-isolation.restrictForwarding`. The flush and the table names don't
+  matter when netns-isolation and the firewall run `pkgs.iptables-legacy`, whose rules live
+  outside the nftables ruleset. Setting it as `networking.firewall.package` does both, but
+  the default kernel lacks the legacy xtables it needs (see
+  [WireGuard firewall compatibility](services.md#wireguard-firewall-compatibility)).
 
 # Migrate existing services to bitcoinix
 

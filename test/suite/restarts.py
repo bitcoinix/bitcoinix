@@ -534,3 +534,86 @@ def test_lnd_macaroon_revocation():
     machine.wait_until_succeeds("[[ $(systemctl show -P ActiveState lnd) == inactive ]]")
     succeed("systemctl start lnd", *[f"systemctl start {unit}" for unit in timers])
     machine.wait_until_succeeds(f"{lncli} getinfo")
+
+
+# Impure: restarts and stops nb-netns-bridge, which restarts and stops every
+# namespaced service
+@test("netns-bridge-restart")
+def test_netns_bridge_restart():
+    services = test_data["netns-bridge-restart"]
+
+    def nat_rules():
+        return succeed("iptables -w -t nat -S POSTROUTING")
+
+    def wait_for_lnd():
+        # lnd restarts and stops with its namespace. Let its start finish first.
+        if services["lnd"]:
+            machine.wait_for_unit("lnd")
+            wait_for_lnd_server()
+
+    # The timer would start the bridge again through charge-lnd's namespace
+    if services["charge-lnd"]:
+        succeed("systemctl stop charge-lnd.timer")
+    # Earlier tests may have left these stopped
+    succeed("systemctl start nb-netns-bridge",
+            *[f"systemctl start {unit}" for unit in ("bitcoind", "lnd") if services[unit]])
+
+    rules = nat_rules()
+    [masquerade] = [rule for rule in rules.splitlines() if rule.endswith("-j MASQUERADE")]
+
+    # `flush ruleset` in nftables deletes the rule while the bridge is up.
+    # The restart must still work and add the rule again.
+    succeed("iptables -w -t nat " + masquerade.replace("-A ", "-D ", 1))
+    wait_for_lnd()
+    succeed("systemctl restart nb-netns-bridge")
+    assert_no_failure("nb-netns-bridge")
+    assert nat_rules() == rules
+    if services["bitcoind"]:
+        machine.wait_until_succeeds("runuser -u operator -- bitcoin-cli getnetworkinfo")
+
+    # A stop leaves neither the rule nor the bridge behind
+    wait_for_lnd()
+    succeed("systemctl stop nb-netns-bridge")
+    assert masquerade not in nat_rules().splitlines()
+    machine.fail("ip link show nb-br")
+
+    # Reloading nb-netns-forward restores both the chain and a flushed FORWARD jump
+    if services["restrict-forwarding"]:
+        forward_rules = succeed("iptables -w -S FORWARD && iptables -w -S nb-netns-forward")
+        succeed("iptables -w -D FORWARD -j nb-netns-forward",
+                "iptables -w -F nb-netns-forward",
+                "iptables -w -X nb-netns-forward",
+                "systemctl reload-or-restart nb-netns-forward")
+        assert_no_failure("nb-netns-forward")
+        assert succeed("iptables -w -S FORWARD && iptables -w -S nb-netns-forward") == forward_rules
+
+    # A start deletes the bridge that a failed stop left behind with its address
+    # and an IPv6 link-local address
+    bridge_address = f"{test_data['netns-bridge-ip']}/24"
+    succeed("ip link add name nb-br type bridge",
+            "ip link set nb-br up",
+            f"ip addr add {bridge_address} dev nb-br",
+            "ip addr add fe80::1/64 dev nb-br nodad",
+            "systemctl start nb-netns-bridge")
+    assert nat_rules() == rules
+
+    # A start fails and leaves another link named nb-br alone
+    succeed("systemctl stop nb-netns-bridge")
+    for kind, addresses in (
+        ("dummy", [bridge_address]),
+        ("bridge", []),
+        ("bridge", [bridge_address, "192.0.2.1/24"]),
+    ):
+        succeed(f"ip link add name nb-br type {kind}")
+        for address in addresses:
+            succeed(f"ip addr add {address} dev nb-br")
+        succeed("systemctl reset-failed nb-netns-bridge || true")
+        machine.fail("systemctl start nb-netns-bridge")
+        machine.wait_until_succeeds(current_run_log_has_string("nb-netns-bridge", "Link nb-br exists, but it"))
+        assert_matches("ip -d link show nb-br", rf"\n\s+{kind} ")
+        shown_addresses = succeed("ip -o -4 addr show dev nb-br")
+        for address in addresses:
+            assert f" inet {address} " in shown_addresses
+        succeed("ip link del nb-br")
+    succeed("systemctl reset-failed nb-netns-bridge", "systemctl start nb-netns-bridge")
+    assert nat_rules() == rules
