@@ -24,8 +24,9 @@ test functions live. The split into files preserves the original execution order
 | `services` | Check services, credentials, and connection URLs. Checks that temporarily alter files or restart services restore them before returning. The existing `stop-electrs` exception leaves electrs stopped to silence mainnet logs. |
 | `network-and-hardening` | Check namespace reachability and running services' mounts before the disruptive phase stops bitcoind and its dependents. `netns-forwarding` adds and deletes its own network namespaces, and reloads and restarts `nb-netns-forward` without restarting the namespaced services. |
 | `disruptive` | `bitcoind-group-read` restarts bitcoind many times and changes ACLs in its data dir, so it runs only in the `bitcoindGroupRead` scenario, without services that depend on bitcoind. `backups` stops bitcoind and its dependents. `restart-bitcoind` explicitly starts the units it exercises; `config-replace` starts each unit before testing its generated config; `clnrest-admin-rune` starts clightning before restarting it with broken admin rune files. `lnd-wallet-init` starts lnd on a new data dir, then on the restored original one. `rtl-stops-with-backend` starts RTL and its backends before it stops and terminates each backend, and leaves them running. |
-| `post-restart` | `regtest` waits for service readiness and synchronization after the restart checks. `lnd-restart-on-clean-exit` follows synchronization; `lnd-macaroon-revocation` restarts lnd and deletes macaroon root keys; `trustedcoin` checks the plugin's logs. |
+| `post-restart` | `regtest` waits for service readiness and synchronization after the restart checks. `lnd-restart-on-clean-exit` follows synchronization; `lnd-macaroon-revocation` restarts lnd and deletes macaroon root keys; `trustedcoin` checks the plugin's logs. CDK's Lightning and on-chain tests then mine blocks, mint ecash and verify payouts, after the fixture-height checks. The LND scenarios use a Core Lightning peer for ordinary and explicit-route MPP melts, including under netns isolation. |
 | `secrets` | Restart `setup-secrets` and check supplied-secret failures after all service checks, because each run temporarily restricts access to the secrets directory. |
+| `recovery` | Exercise CDK snapshot restoration and shutdown races after the secrets checks. These tests are enabled by `cdk-mintd-onchain`, which supplies the required secrets and pause wrappers. Recovery deliberately fails `setup-secrets` with a missing seed, then restarts that service to restore access before starting the secrets target. |
 | `teardown` | `netns-bridge-restart` restarts and stops `nb-netns-bridge`, which restarts and stops every namespaced service, so it runs after all other built-in tests and leaves those services stopped. |
 | `extra` | Tests registered by `test.extraTestScript` run last, in registration order, as before. They must account for the preceding service stops and restarts. |
 
@@ -152,6 +153,11 @@ and SAM port. Both scenarios run in CI and in `./run-tests.sh buildable`.
 # When no scenario is specified, scenario `default` is used.
 ./run-tests.sh build
 ```
+
+`-s cdk-mintd` selects the `cdk-mintd-lnd` regtest fixture, including its
+Lightning peer and payment tests. Use `cdk-mintd-cln` or `cdk-mintd-onchain`
+for the other mint configurations.
+
 #### Debugging
 ```bash
 # Start a shell inside a test VM. No tests are executed.

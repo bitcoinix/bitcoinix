@@ -62,3 +62,14 @@ When bitcoind doesn't run during a backup, there are no copies, and the wallet f
 are consistent. If a copy fails, or bitcoind is starting or stopping, the `duplicity`
 unit fails after the backup. With the `bitcoind-remote.nix` preset, the wallets are
 on the other node, and the backup makes no copies.
+
+## Cashu mint
+
+When `cdk-mintd` is enabled, the backup briefly stops it to stage its complete data
+and signing secrets in `/var/lib/cdk-mintd-backup/current`. A previously running
+or starting mint is queued to restart before uploading; a stopped mint stays
+stopped unless a new start is requested during staging. Duplicity includes
+the snapshot and excludes live mint databases. A stop during staging cancels a
+pending mint restart. Copy failures still back up the other services, then fail
+the backup. See [mint backup and recovery](../services/cdk-mint.md#automated-backups)
+for the snapshot layout, custom secrets and the risks of restoring outdated spent-proof state.

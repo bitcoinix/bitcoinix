@@ -491,6 +491,13 @@ in {
           config.services.mempool.electrumServer
         ];
       };
+      cdk-mintd = {
+        id = 36;
+        connections = [ "nginx" ]
+          ++ optional (config.services.cdk-mintd.backend == "lnd") "lnd"
+          ++ optional config.services.cdk-mintd.onchain.enable "bitcoind";
+        # Core Lightning uses a Unix socket.
+      };
       unbeholden-lnurl = {
         id = 34;
         connections = [ config.services.unbeholden-lnurl.backend "nginx" ];
@@ -533,6 +540,8 @@ in {
 
     services.mempool.address = netns.mempool.address;
     services.mempool.frontend.address = netns.nginx.address;
+
+    services.cdk-mintd.address = netns.cdk-mintd.address;
 
     services.unbeholden-lnurl.address = netns.unbeholden-lnurl.address;
 

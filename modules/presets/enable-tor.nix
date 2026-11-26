@@ -30,6 +30,7 @@ in {
     # These services don't make outgoing connections but we restrict them to
     # Tor just to be safe.
     #
+    cdk-mintd = defaultEnforceTor;
     electrs = defaultEnforceTor;
     fulcrum = defaultEnforceTor;
     nbxplorer = defaultEnforceTor;

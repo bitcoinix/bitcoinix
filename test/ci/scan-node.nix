@@ -46,6 +46,9 @@ in
       # Keeps lndconnect in the scan. The WireGuard preset no longer needs it.
       services.lnd.lndconnect.enable = true;
       services.charge-lnd.enable = true;
+      services.cdk-mintd.enable = true;
+      # Include the BIP39 mnemonic generator used for the optional BDK wallet.
+      services.cdk-mintd.onchain.enable = true;
 
       services.electrs.enable = true;
       services.fulcrum.enable = true;

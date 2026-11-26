@@ -89,6 +89,10 @@ jobs:
           - setup-secrets
           - unbeholden-wallet-electrs
           - unbeholden-wallet-electrs-netns
+          - cdk-mintd-lnd
+          - cdk-mintd-lnd-netns
+          - cdk-mintd-cln-netns
+          - cdk-mintd-onchain
           - unbeholden-lnurl-lnd
           - unbeholden-lnurl-cln-netns
           - i2p

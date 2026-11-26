@@ -5,6 +5,7 @@ builtins.concatStringsSep "\n\n" ((map builtins.readFile [
   ../tests.py
   ../suite/helpers.py
   ../suite/services.py
+  ../suite/cdk-mintd.py
   ../suite/security.py
   ../suite/networking.py
   ../suite/backups.py

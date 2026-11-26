@@ -44,6 +44,8 @@ let
         (mkIfTest "secrets-no-argv" [ strace ])
         # Talks to the Electrum relay
         (mkIfTest "unbeholden-wallet" [ websocat ])
+        # Check that initialization guards reject ACL write access.
+        (mkIfTest "cdk-mintd" [ acl ])
       ]);
 
       tests.bitcoind = cfg.bitcoind.enable;
@@ -164,7 +166,7 @@ let
           ++ optional cfg.unbeholden-wallet.enable "unbeholden-wallet"
           ++ optional (cfg.btcpayserver.enable && cfg.nbxplorer.tor.enforce) "nbxplorer"
           ++ filter (service: cfg.${service}.enable && cfg.${service}.tor.enforce) [
-            "bitcoind" "btcpayserver" "clightning" "electrs" "fulcrum" "lnd" "mempool" "rtl" "unbeholden-lnurl"
+            "bitcoind" "btcpayserver" "clightning" "electrs" "fulcrum" "lnd" "mempool" "rtl" "unbeholden-lnurl" "cdk-mintd"
           ];
         # The complete allow list of each restricted unit
         allow = [ "127.0.0.1/32" "::1/128" ]
@@ -227,6 +229,20 @@ let
       services.mempool = {
         electrumServer = "fulcrum";
         settings.MEMPOOL.POOLS_JSON_URL = mkIf config.test.noConnections "disable-pool-fetching";
+      };
+
+      tests.cdk-mintd = cfg.cdk-mintd.enable;
+      test.data.cdk-mintd = optionalAttrs cfg.cdk-mintd.enable {
+        inherit (cfg.cdk-mintd) port backend dataDir user group seedFile;
+        mnemonicFile = cfg.cdk-mintd.onchain.mnemonicFile;
+        onchain = cfg.cdk-mintd.onchain.enable;
+        generatedSeed = config.nix-bitcoin.generateSecrets && config.nix-bitcoin.setupSecrets
+          && (config.nix-bitcoin.secrets ? cdk-mintd-seed);
+        cli = "${cfg.cdk-mintd.package}/bin/cdk-mintd --work-dir ${cfg.cdk-mintd.dataDir}";
+        walletCli = "${cfg.cdk-mintd.package}/bin/cdk-cli";
+        peerPort = cfg.clightning.port;
+        lndCli = lib.optionalString (cfg.cdk-mintd.backend == "lnd")
+          "${cfg.lnd.package}/bin/lncli --rpcserver ${lib.escapeShellArg cfg.lnd.rpcEndpoint} --tlscertpath ${lib.escapeShellArg cfg.lnd.certPath} --macaroonpath /run/cdk-mintd/lnd.macaroon";
       };
 
       tests.unbeholden-lnurl = cfg.unbeholden-lnurl.enable;
@@ -377,6 +393,7 @@ let
           inherit (config.nix-bitcoin.pkgs) bitcoind electrs fulcrum rtl;
           clightning = cfg.clightning.package;
           lnd = cfg.lnd.package;
+          cdk-mintd = cfg.cdk-mintd.package;
           btcpayserver = cfg.btcpayserver.package;
           mempool = cfg.mempool.package;
         });
@@ -675,6 +692,126 @@ let
         clightning = true;
         lnconnect-onion-clnrest = true;
       };
+    };
+
+    # The service-name shortcut needs the same regtest invoice/payment fixture.
+    cdk-mintd = scenarios.cdk-mintd-lnd;
+
+    cdk-mintd-lnd = { config, ... }: {
+      imports = [ scenarios.regtestBase ];
+      nix-bitcoin.nodeinfo.enable = true;
+      # Exercise the shared gRPC endpoint against the actual TLS certificate.
+      # Netns isolation overrides this with LND's namespace address.
+      services.lnd.rpcAddress = mkDefault "::";
+      # A second Lightning node provides real channel liquidity and receives
+      # melts. The CLN-backed scenarios use this node as their mint backend.
+      services.clightning.enable = true;
+      tests.cdk-mintd-lightning = config.services.cdk-mintd.backend == "lnd";
+      nix-bitcoin.netns-isolation.services.clightning.connections =
+        lib.optional (config.services.cdk-mintd.backend == "lnd") "lnd";
+      services.cdk-mintd = {
+        enable = true;
+        settings.mint_info.name = "Bitcoinix test mint";
+      };
+    };
+
+    cdk-mintd-cln = {
+      imports = [ scenarios.cdk-mintd-lnd ];
+      services.cdk-mintd.backend = "clightning";
+    };
+
+    cdk-mintd-lnd-netns = {
+      imports = with scenarios; [ cdk-mintd-lnd netnsBase ];
+    };
+
+    cdk-mintd-cln-netns = {
+      imports = with scenarios; [ cdk-mintd-cln netnsBase ];
+    };
+
+    cdk-mintd-onchain = { config, pkgs, extendModules, ... }: {
+      imports = with scenarios; [ cdk-mintd-cln netnsBase ];
+      # These tests depend on the supplied secrets, recovery variants and
+      # pause wrappers below, rather than just an enabled mint or backup service.
+      tests.cdk-mintd-onchain = true;
+      tests.cdk-mintd-backup = true;
+      tests.cdk-mintd-backup-shutdown = true;
+      # Boot without the legacy activation script that creates /var/lib/nixos.
+      services.userborn.enable = true;
+      # Supply secrets once; recovery must repair setup-secrets after restoring
+      # a missing secret, and cannot depend on /secrets being in the archive.
+      nix-bitcoin.generateSecrets = mkForce false;
+      nix-bitcoin.setupSecrets = true;
+      systemd.services.supply-test-secrets = {
+        requiredBy = [ "setup-secrets.service" ];
+        before = [ "setup-secrets.service" ];
+        serviceConfig = { Type = "oneshot"; RemainAfterExit = true; };
+        script = ''
+          install -d -m 0700 /secrets
+          cd /secrets
+          ${config.nix-bitcoin.generateSecretsScript}
+        '';
+      };
+      services.cdk-mintd.onchain.enable = true;
+      services.cdk-mintd.settings.bdk.num_confs = 1;
+      services.cdk-mintd.settings.bdk.wallet_rescan_from_height = 0;
+      # Exercise the configured service group independently of the passwd group.
+      services.cdk-mintd.group = "mint-service";
+      users.users.cdk-mintd.group = mkForce "mint-login";
+      users.groups.mint-login = {};
+      services.backups.enable = true;
+      # The general backup fixture is mainnet-only and creates its own wallet.
+      tests.backups = mkForce false;
+      # Even an extraFiles entry must not include the live mint or partial copies.
+      services.backups.extraFiles = [ config.services.cdk-mintd.dataDir "/var/lib/cdk-mintd-backup" ];
+      environment.systemPackages = [ pkgs.sqlite ];
+      security.pam.loginLimits = [{ domain = "*"; type = "-"; item = "nofile"; value = "4096"; }];
+      systemd.services.cdk-mintd-backup.serviceConfig.LimitNOFILE = 1024;
+      systemd.services.cdk-mintd-backup.serviceConfig.TimeoutStartSec = mkForce "45s";
+      test.data.cdk-mintd-recovery-pre-start = config.nix-bitcoin.lib.script "cdk-wallet-recovery" (
+        (extendModules { modules = [{ services.cdk-mintd.onchain.allowNewWallet = mkForce true; }]; })
+          .config.systemd.services.cdk-mintd.preStart
+      );
+      test.data.cdk-mintd-ipv6-pre-starts = map (address: (extendModules { modules = [{
+        services.cdk-mintd = { backend = mkForce "lnd"; address = mkForce "::"; };
+        services.lnd.rpcAddress = mkForce address;
+        services.bitcoind.rpc.address = mkForce address;
+      }]; }).config.systemd.services.cdk-mintd.preStart) [ "::" "[::]" "::1" "[::1]" ];
+      # Pause copying deterministically to test starts and cancellation mid-backup.
+      systemd.services.cdk-mintd-backup.path = mkBefore [
+        (pkgs.writeShellScriptBin "systemctl" ''
+          if [[ $1 == is-active && $2 == cdk-mintd.service && -e $STATE_DIRECTORY/pause-before-state-check ]]; then
+            touch "$STATE_DIRECTORY/before-state-checked"
+            while [[ -e $STATE_DIRECTORY/pause-before-state-check ]]; do sleep 0.1; done
+          fi
+          # Inject a backend start after the snapshot of the mint's state.
+          if [[ $1 == is-active && $2 == cdk-mintd.service && -e $STATE_DIRECTORY/pause-state-check ]]; then
+            status=0
+            ${config.systemd.package}/bin/systemctl "$@" || status=$?
+            touch "$STATE_DIRECTORY/state-checked"
+            while [[ -e $STATE_DIRECTORY/pause-state-check ]]; do sleep 0.1; done
+            exit "$status"
+          fi
+          if [[ $1 == try-restart || $1 == stop ]]; then
+            # Hold a rejected transaction while the driver checks that existing
+            # start/reload jobs survive. The next attempt uses real systemd.
+            status=0
+            if [[ $1 == try-restart && -e $STATE_DIRECTORY/reject-restart ]]; then
+              status=1
+            else
+              ${config.systemd.package}/bin/systemctl "$@" || status=$?
+            fi
+            statusFile="$STATE_DIRECTORY/''${1#try-}-status"
+            echo "$status" > "$statusFile.next"
+            mv -T "$statusFile.next" "$statusFile"
+            exit "$status"
+          fi
+          exec ${config.systemd.package}/bin/systemctl "$@"
+        '')
+        (pkgs.writeShellScriptBin "tar" ''
+          while [[ -e ${config.services.cdk-mintd.dataDir}/pause-backup ]]; do sleep 0.1; done
+          exec ${pkgs.gnutar}/bin/tar "$@"
+        '')
+      ];
     };
 
     unbeholden-lnurl-lnd = { config, ... }: {

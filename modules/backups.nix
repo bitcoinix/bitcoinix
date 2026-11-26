@@ -12,8 +12,12 @@ let
         To further configure the backup, you can set NixOS options `services.duplicity.*`.
         The `services.duplicity.cleanup.*` options are particularly useful.
 
-        If a database dump or a bitcoind wallet copy fails, the `duplicity` unit
+        If a database dump or a wallet/mint snapshot fails, the `duplicity` unit
         still backs up all other files and then fails.
+
+        When cdk-mintd is enabled, briefly stop it to snapshot its complete data
+        directory and signing secrets, then restart it if it was running. Only
+        the staged copy is archived, never the live mint databases.
 
         The backup leaves out the Lightning channel databases, because restoring a
         copy of them can lose all funds in their channels. See
@@ -118,6 +122,13 @@ let
   includeFileList = builtins.toFile "filelist.txt" ''
     ${concatMapStringsSep "\n" (path: "- ${path}") (filter underBackupRoot channelDatabases)}
 
+    ${optionalString mint.enable (concatStringsSep "\n" (
+      # Before extraFiles: never include live mint data or partial snapshots.
+      optional (underBackupRoot (escapeGlob (normalisePath mint.dataDir))) "- ${escapeGlob (normalisePath mint.dataDir)}"
+      ++ optional (underBackupRoot mintBackupDir) "${mintBackupDir}/current"
+      ++ optional (underBackupRoot mintBackupDir) "- ${mintBackupDir}"
+    ))}
+
     ${builtins.concatStringsSep "\n" cfg.extraFiles}
 
     ${optionalString (!cfg.with-bulk-data) (concatMapStringsSep "\n" (dir: ''
@@ -212,12 +223,33 @@ let
     mv -T "$dir/wallet-names.json.tmp" "$dir/wallet-names.json"
     exit $status
   '';
+
+  mint = config.services.cdk-mintd;
+  mintBackupDir = "/var/lib/cdk-mintd-backup";
+  asMint = "setpriv --reuid=${escapeShellArg mint.user} --regid=${escapeShellArg mint.group} --init-groups --";
+  mintBackupManifest = pkgs.writeText "cdk-mintd-backup-manifest.json" (builtins.toJSON {
+    format = 1;
+    inherit (mint) dataDir seedFile;
+    mnemonicFile = if mint.onchain.enable then mint.onchain.mnemonicFile else null;
+  });
+  # These two directories must not overlap: staging removes old snapshots.
+  overlapsMintStaging = path: let
+    p = normalisePath path;
+  in p == "/" || p == mintBackupDir || hasPrefix "${mintBackupDir}/" p || hasPrefix "${p}/" mintBackupDir;
+
   dumpServices = postgresqlBackupServices
-    ++ optional (backupWallets && localBitcoind) "bitcoind-wallet-backup.service";
+    ++ optional (backupWallets && localBitcoind) "bitcoind-wallet-backup.service"
+    ++ optional mint.enable "cdk-mintd-backup.service";
 in {
   inherit options;
 
   config = mkIf cfg.enable {
+      assertions = optional mint.enable {
+        assertion = !any overlapsMintStaging ([ mint.dataDir mint.seedFile ]
+          ++ optional mint.onchain.enable mint.onchain.mnemonicFile);
+        message = "cdk-mintd data and secrets must not overlap ${mintBackupDir}, which is reserved for backup staging.";
+      };
+
       environment.systemPackages = [ pkgs.duplicity ];
 
       services.duplicity = {
@@ -235,6 +267,11 @@ in {
         # A failed dump fails the unit, but only after all other files have been
         # backed up, so that a database problem doesn't block e.g. channel backups.
         preStart = ''
+          ${optionalString mint.enable ''
+            # Also invalidate the previous snapshot if the dump unit cannot
+            # start at all (masked, start-limited or failing unit setup).
+            rm -rf -- ${mintBackupDir}/current
+          ''}
           for unit in ${toString dumpServices}; do
             if ! ${config.systemd.package}/bin/systemctl start "$unit"; then
               echo "$unit" >> "$RUNTIME_DIRECTORY/failed-dumps"
@@ -252,6 +289,9 @@ in {
           # Run postStart after the backup has finished
           Type = "oneshot";
           RuntimeDirectory = "duplicity";
+          # Invalidate old mint snapshots inside duplicity's read-only sandbox.
+          # The staging directory may not exist before the first backup.
+          ReadWritePaths = optional mint.enable "-${mintBackupDir}";
         };
       };
 
@@ -269,6 +309,88 @@ in {
           ReadWritePaths = [ walletBackupDir ];
           # The unit only talks to bitcoind. `localhost` covers an RPC address like 0.0.0.0.
           IPAddressAllow = [ "localhost" bitcoind.rpc.address ];
+        };
+      };
+
+      # Keep starts queued in systemd until the snapshot job finishes, including
+      # on failure or cancellation. A later stop can cancel a pending start.
+      systemd.services.cdk-mintd = mkIf mint.enable {
+        after = [ "cdk-mintd-backup.service" ];
+      };
+
+      systemd.services.cdk-mintd-backup = mkIf mint.enable {
+        description = "Stage consistent CDK mint data and signing secrets for backup";
+        after = [ "nix-bitcoin-secrets.target" ];
+        path = [ config.systemd.package pkgs.util-linux pkgs.gnutar ];
+        script = ''
+          export HOME=/var/empty
+          umask 077
+          # A failed run must not leave yesterday's copy looking current.
+          rm -rf -- "$STATE_DIRECTORY/current" "$STATE_DIRECTORY/.next"
+          # Recheck until all mint processes, including ExecStopPost, are gone.
+          # A try-restart may become a no-op if the mint starts shutting down
+          # between the state check and the transaction. Retry after transitions
+          # instead of waiting forever for a newly active mint to stop itself.
+          while true; do
+            state=$(systemctl is-active cdk-mintd.service) || true
+            case $state in
+              active|activating|reloading)
+                # Submit both halves together so cancellation cannot lose the
+                # restart. Never replace conflicting jobs: they may include a
+                # start or reload that must survive.
+                # A completed stop remains stopped; pending stops take priority.
+                # try-restart silently succeeds without a job for masked units.
+                if [[ $(systemctl show -P LoadState cdk-mintd.service) == masked ]] ||
+                   ! systemctl try-restart --no-block --job-mode=fail cdk-mintd.service; then
+                  # A running but masked mint cannot restart, but can be stopped
+                  # and copied. Have systemd atomically reject conflicting jobs,
+                  # including starts/reloads arriving after the failed restart.
+                  systemctl stop --no-block --job-mode=fail cdk-mintd.service || true
+                fi
+                ;;
+              deactivating) ;; # Wait for an existing stop, without restarting it.
+              # Starts queued behind this snapshot remain systemd jobs.
+              inactive|failed) break ;;
+              *) echo "Error: cdk-mintd is $state" >&2; exit 1 ;;
+            esac
+            sleep 0.1
+          done
+
+          mkdir "$STATE_DIRECTORY/.next"
+          # The mint can write its data dir, so root must not traverse it.
+          # tar preserves symlinks without following them; the only files root
+          # writes have fixed names inside its own private staging directory.
+          ${asMint} \
+            tar --sparse -C ${escapeShellArg mint.dataDir} -cf - . > "$STATE_DIRECTORY/.next/data.tar"
+          ${asMint} \
+            cat -- ${escapeShellArg mint.seedFile} > "$STATE_DIRECTORY/.next/seed"
+          test -s "$STATE_DIRECTORY/.next/seed"
+          ${optionalString mint.onchain.enable ''
+            ${asMint} \
+              cat -- ${escapeShellArg mint.onchain.mnemonicFile} > "$STATE_DIRECTORY/.next/bdk-mnemonic"
+            test -s "$STATE_DIRECTORY/.next/bdk-mnemonic"
+          ''}
+          cp ${mintBackupManifest} "$STATE_DIRECTORY/.next/manifest.json"
+          date --iso-8601=seconds > "$STATE_DIRECTORY/.next/created-at"
+          mv -T "$STATE_DIRECTORY/.next" "$STATE_DIRECTORY/current"
+        '';
+        # Runs on success, failure and cancellation, even if the main script
+        # was killed. The pending start remains under systemd's control, so
+        # cleanup never overrides a stop requested during the snapshot.
+        postStop = ''
+          rm -rf -- "$STATE_DIRECTORY/.next"
+        '';
+        serviceConfig = nbLib.defaultHardening // {
+          Type = "oneshot";
+          StateDirectory = "cdk-mintd-backup";
+          StateDirectoryMode = "0700";
+          UMask = "0077";
+          TimeoutStartSec = "15min";
+          PrivateNetwork = true;
+          RestrictAddressFamilies = "AF_UNIX";
+          # Drop to the real mint uid/gid for every read of mint-owned files.
+          PrivateUsers = false;
+          CapabilityBoundingSet = [ "CAP_SETUID" "CAP_SETGID" ];
         };
       };
 

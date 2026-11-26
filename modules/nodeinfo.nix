@@ -44,6 +44,7 @@ let
     inherit (nbPkgs) bitcoind electrs fulcrum rtl;
     clightning = config.services.clightning.package;
     lnd = config.services.lnd.package;
+    cdk-mintd = config.services.cdk-mintd.package;
     btcpayserver = config.services.btcpayserver.package;
     mempool = config.services.mempool.package;
   };
@@ -208,6 +209,7 @@ in {
         inherit name cfg;
         systemdServiceName = "clightning";
       };
+      cdk-mintd = mkInfo "";
       electrs = mkInfo "";
       fulcrum = mkInfo "";
       btcpayserver = mkInfo "";

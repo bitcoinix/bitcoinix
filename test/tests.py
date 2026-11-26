@@ -30,6 +30,7 @@ TEST_PHASES = (
         "mempool",
         "unbeholden-wallet",
         "unbeholden-lnurl",
+        "cdk-mintd",
         "nodeinfo",
         "secure-node",
         "onion-addresses",
@@ -54,10 +55,16 @@ TEST_PHASES = (
         "lnd-restart-on-clean-exit",
         "lnd-macaroon-revocation",
         "trustedcoin",
+        "cdk-mintd-lightning",
+        "cdk-mintd-onchain",
     )),
     ("secrets", (
         "setup-secrets",
         "setup-secrets-supplied",
+    )),
+    ("recovery", (
+        "cdk-mintd-backup",
+        "cdk-mintd-backup-shutdown",
     )),
     ("teardown", (
         "netns-bridge-restart",
