@@ -324,6 +324,7 @@ buildable=(
     btcpayserverClightning
     wireguard-lndconnect
     wireguardIptablesLegacy
+    lightning-terminal
     trustedcoin
 )
 buildable() { buildTests buildable "$@"; }

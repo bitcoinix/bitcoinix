@@ -44,6 +44,7 @@ let
         (mkIfTest "secrets-no-argv" [ strace ])
         # Talks to the Electrum relay
         (mkIfTest "unbeholden-wallet" [ websocat ])
+        (mkIfTest "lightning-terminal" [ curl sqlite ])
       ]);
 
       tests.bitcoind = cfg.bitcoind.enable;
@@ -164,7 +165,7 @@ let
           ++ optional cfg.unbeholden-wallet.enable "unbeholden-wallet"
           ++ optional (cfg.btcpayserver.enable && cfg.nbxplorer.tor.enforce) "nbxplorer"
           ++ filter (service: cfg.${service}.enable && cfg.${service}.tor.enforce) [
-            "bitcoind" "btcpayserver" "clightning" "electrs" "fulcrum" "lnd" "mempool" "rtl" "unbeholden-lnurl"
+            "bitcoind" "btcpayserver" "clightning" "electrs" "fulcrum" "lightning-terminal" "lnd" "mempool" "rtl" "unbeholden-lnurl"
           ];
         # The complete allow list of each restricted unit
         allow = [ "127.0.0.1/32" "::1/128" ]
@@ -361,6 +362,26 @@ let
 
       tests.charge-lnd = cfg.charge-lnd.enable;
 
+      tests.lightning-terminal = cfg.lightning-terminal.enable;
+      test.data.lightning-terminal = optionalAttrs cfg.lightning-terminal.enable {
+        inherit (cfg.lightning-terminal) address port dataDir networkDir user certPath;
+        backupEnabled = cfg.backups.enable;
+        hasBlocks = (config.test.data.num_blocks or 0) > 0;
+        enabledSubservers = [ "lit" "accounts" ]
+          ++ optional cfg.lightning-terminal.faraday.enable "faraday"
+          ++ optional cfg.lightning-terminal.loop.enable "loop"
+          ++ optional cfg.lightning-terminal.pool.enable "pool"
+          ++ optional cfg.lightning-terminal.taproot-assets.enable "taproot-assets";
+        onion = let
+          svc = config.services.tor.relay.onionServices.lightning-terminal or null;
+        in if svc == null then null else let
+          mapping = builtins.head svc.map;
+        in {
+          inherit (mapping) port target;
+          hostnameFile = "${config.nix-bitcoin.onionAddresses.dataDir}/${config.nix-bitcoin.operator.name}/lightning-terminal";
+        };
+      };
+
       tests.electrs = cfg.electrs.enable;
 
       services.fulcrum.port = 50002;
@@ -377,6 +398,7 @@ let
           inherit (config.nix-bitcoin.pkgs) bitcoind electrs fulcrum rtl;
           clightning = cfg.clightning.package;
           lnd = cfg.lnd.package;
+          lightning-terminal = cfg.lightning-terminal.package;
           btcpayserver = cfg.btcpayserver.package;
           mempool = cfg.mempool.package;
         });
@@ -612,6 +634,19 @@ let
           "$cli" generatetoaddress ${toString config.test.data.num_blocks} "$address"
         fi
       '';
+    };
+
+    lightning-terminal = {
+      imports = with scenarios; [ secureNode netnsBase regtestBase ];
+      services.lightning-terminal = {
+        enable = true;
+        faraday.connectBitcoin = true;
+        taproot-assets.enable = true;
+      };
+      services.backups.enable = true;
+      # `test_backups` assumes mainnet paths; `test_lightning_terminal` runs
+      # `duplicity.service` directly against regtest SQLite databases here.
+      tests.backups = mkForce false;
     };
 
     # The WireGuard preset with iptables-legacy next to nftables, as docs/services.md

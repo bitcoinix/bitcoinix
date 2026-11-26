@@ -23,7 +23,7 @@ The revision is baked into the `nodeinfo` script, so every bitcoinix update prod
 new system generation and boot entry, even when no package changed; no service restarts.
 Set `nix-bitcoin.revision = null;` to opt out.
 
-The entries of bitcoind, clightning, lnd, electrs, fulcrum, btcpayserver, rtl and mempool
+The entries of bitcoind, clightning, lnd, lightning-terminal, electrs, fulcrum, btcpayserver, rtl and mempool
 include the `version` of the package the service runs.
 
 Without arguments `nodeinfo` prints all entries. Arguments change that:
@@ -140,7 +140,7 @@ default. See the Backups section in
 and the [module](https://github.com/bitcoinix/bitcoinix/blob/master/modules/backups.nix)
 for the options.
 
-The backup includes the data directories of bitcoind, lnd, Core Lightning, NBXplorer
+The backup includes the data directories of bitcoind, lnd, Lightning Terminal, Core Lightning, NBXplorer
 and BTCPay Server, dumps of the BTCPay Server databases, `/var/lib/tor`,
 `/var/lib/nixos` and, with `nix-bitcoin.generateSecrets`, the secrets directory.
 It leaves out the mainnet, signet and testnet4 blockchains and their indexes
@@ -346,6 +346,94 @@ Two-factor authentication that you set up in RTL stays on across restarts. If yo
 lose the authenticator, delete `RTL-Config.json` in RTL's data dir
 (`/var/lib/rtl` by default) and restart RTL. bitcoinix then writes a new one
 without the 2FA secret.
+
+### Connect to Lightning Terminal
+
+Lightning Terminal (`services.lightning-terminal`) runs `litd` in remote mode against
+`services.lnd`. It serves the local HTTPS web UI, manages Lightning Node Connect (LNC)
+sessions for `https://terminal.lightning.engineering/`, and runs integrated subservers.
+
+#### Web interface
+
+Lightning Terminal listens for HTTPS on `127.0.0.1:8443` by default. Open an SSH tunnel,
+then visit `https://localhost:8443` in your browser:
+
+```shell
+ssh -L 8443:127.0.0.1:8443 operator@bitcoin-node
+```
+
+With `netns-isolation`, use the address from
+`nodeinfo | jq -r '.["lightning-terminal"].local_address'` instead, e.g.
+`169.254.1.37:8443`.
+
+With the `secure-node.nix` or `enable-tor.nix` preset, Lightning Terminal also has an
+onion service on port 443. Open `https://<onion_address>` in Tor Browser, using the
+address from `nodeinfo | jq -r '.["lightning-terminal"].onion_address'`. Because the
+generated certificate covers `localhost` and the local listener IP rather than the `.onion`
+domain, Tor Browser prompts to accept the self-signed certificate on first visit (verify
+its fingerprint against `$secretsDir/lightning-terminal-cert`, or use the SSH tunnel to
+`https://localhost:8443`).
+
+The UI password is in `$secretsDir/lightning-terminal-password`, and the TLS certificate
+is in `$secretsDir/lightning-terminal-cert`.
+See: [Secrets dir](./configuration.md#secrets-dir)
+
+#### Pair with terminal.lightning.engineering (Lightning Node Connect)
+
+Create a pairing session with `litcli`:
+
+```shell
+litcli sessions add --label="web" --type=admin
+```
+
+Copy `pairing_secret_mnemonic` from the JSON output into
+`https://terminal.lightning.engineering/`. List sessions with
+`litcli sessions list all`, and revoke a session with
+`litcli sessions revoke --localpubkey=<hex_local_public_key>` (`litcli sessions list all`
+prints `local_public_key` in base64, which you can decode to hex with
+`printf '%s' '<base64_local_public_key>' | base64 -d | od -An -tx1 | tr -d '[:space:]'`).
+
+When `services.lightning-terminal.tor.proxy` is on (enabled by `enable-tor.nix` and
+`secure-node.nix`), `litd` routes outgoing gRPC and HTTP connections (including LNC
+mailbox sessions, Loop, Pool, and Autopilot) through Tor's HTTP CONNECT tunnel
+(`services.lightning-terminal.torHttpTunnelPort`, default `9080`).
+
+#### Subservers, credentials, and backups
+
+- `faraday.enable` is `true` by default. Set `faraday.connectBitcoin = true` when Faraday
+  needs direct `bitcoind` transaction lookups. This enables `services.bitcoind.txindex`,
+  which cannot be used with `bitcoind` pruning and triggers a transaction-index build when
+  enabled on an existing node.
+- `loop.enable`, `pool.enable`, `taproot-assets.enable`, and `autopilot.enable` are `false`
+  by default. In remote LND mode, `taproot-assets` supports Taproot Asset wallets and
+  on-chain transfers, while Taproot Asset Lightning channels require upstream integrated
+  LND mode.
+- Lightning Terminal uses a dedicated macaroon (`services.lnd.macaroons.lightning-terminal`)
+  and enables `services.lnd.rpcMiddleware.enable`. Because `litd` needs wallet, channel,
+  signer, and macaroon-baking permissions and intercepts LND RPCs through `rpcMiddleware`
+  (which exposes callers' raw macaroons to the interceptor), treat `lightning-terminal`
+  and its UI password as admin-equivalent for `services.lnd`. Disabling
+  `services.lightning-terminal` deletes its macaroon root key on LND's next start. Also
+  revoke any super macaroons that `litd` baked for LNC sessions or accounts
+  (`lncli listmacaroonids`).
+- When `services.backups.enable` is on, `lightning-terminal-backup.service` writes online
+  SQLite snapshots (`litd.db`, `faraday.db`, `loop_sqlite.db`, `tapd.db`) to `db-backups/`
+  inside `services.lightning-terminal.dataDir` before each `duplicity.service` run, while
+  live database files and WAL/SHM sidecars are excluded. Pool's `pool.db` uses `bbolt`,
+  which holds an exclusive lock while `litd` runs. If `pool.db` is locked during a backup,
+  `duplicity.service` still archives the rest of the node and then reports
+  `lightning-terminal-backup.service` in `failed-dumps`. To take a fresh `pool.db`
+  snapshot, stop `charge-lnd.timer` first if `services.charge-lnd.enable` is on (because
+  `charge-lnd.service` starts `lnd.service`), run `systemctl stop lnd.service` (which stops
+  `lightning-terminal.service` and keeps `lnd` from restarting it), run
+  `systemctl start duplicity.service`, and then start `lnd.service` (and `charge-lnd.timer`
+  if used). To restore from a backup, keep `lnd.service` and
+  `lightning-terminal.service` stopped, restore `services.lightning-terminal.dataDir` into
+  an empty directory (or delete any existing `<path>-wal`, `<path>-shm`, and
+  `<path>-journal` files first), and copy each snapshot from `db-backups/<path>` back to
+  `<path>` as `services.lightning-terminal.user` (e.g.
+  `runuser -u "$litUser" -- cp -f ...`, default user `lightning-terminal`)
+  before starting `lnd.service`.
 
 ### Connect to BTCPay Server
 
@@ -858,7 +946,7 @@ local user and service can then use the Trezor through it.
 
 `services.lnd.macaroons.<name>` gives a service its own macaroon with only the
 permissions it needs. Each time lnd starts, bitcoinix creates the macaroon at
-`/run/lnd/<name>.macaroon`, readable only by `user`. BTCPay Server, charge-lnd, RTL and
+`/run/lnd/<name>.macaroon`, readable only by `user`. BTCPay Server, charge-lnd, Lightning Terminal, RTL and
 Unbeholden LNURL on lnd get their macaroons this way.
 
 ```nix
@@ -912,7 +1000,7 @@ if the macaroon has optional permissions, also add `config.services.lnd.package`
 the triggers.
 
 BTCPay Server reads its macaroon for each request to lnd, and charge-lnd for each
-run. RTL copies its macaroon when it starts, and it restarts with lnd.
+run. RTL and Lightning Terminal copy their macaroons when they start, and they restart with lnd.
 
 #### Revoke a macaroon
 

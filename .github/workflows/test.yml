@@ -86,6 +86,7 @@ jobs:
           - signet
           - testnet4
           - wireguard-lndconnect
+          - lightning-terminal
           - setup-secrets
           - unbeholden-wallet-electrs
           - unbeholden-wallet-electrs-netns

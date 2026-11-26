@@ -180,7 +180,11 @@ let self = {
     else
       addr;
 
-  addressWithPort = addr: port: "${self.address addr}:${toString port}";
+  addressWithPort = addr: port:
+    let
+      resolved = self.address (removePrefix "[" (removeSuffix "]" addr));
+      host = if hasInfix ":" resolved then "[${resolved}]" else resolved;
+    in "${host}:${toString port}";
 
   optionalAttr = cond: name: if cond then name else null;
 

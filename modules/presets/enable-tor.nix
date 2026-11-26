@@ -21,6 +21,7 @@ in {
     bitcoind = defaultEnableTorProxy;
     clightning = defaultEnableTorProxy;
     lnd = defaultEnableTorProxy;
+    lightning-terminal = defaultEnableTorProxy;
     # TODO-EXTERNAL:
     # disable Tor enforcement until btcpayserver can fetch rates over Tor
     # btcpayserver = defaultEnableTorProxy;
@@ -42,5 +43,6 @@ in {
     electrs.enable = defaultTrue;
     fulcrum.enable = defaultTrue;
     rtl.enable = defaultTrue;
+    lightning-terminal.enable = defaultTrue;
   };
 }

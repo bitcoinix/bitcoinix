@@ -46,6 +46,13 @@ in
       # Keeps lndconnect in the scan. The WireGuard preset no longer needs it.
       services.lnd.lndconnect.enable = true;
       services.charge-lnd.enable = true;
+      services.lightning-terminal = {
+        enable = true;
+        taproot-assets.enable = true;
+        loop.enable = true;
+        pool.enable = true;
+        autopilot.enable = true;
+      };
 
       services.electrs.enable = true;
       services.fulcrum.enable = true;

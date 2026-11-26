@@ -19,6 +19,7 @@
     ./charge-lnd.nix
     ./lndconnect.nix # Requires onion-addresses.nix
     ./rtl.nix
+    ./lightning-terminal.nix
     ./mempool.nix
     ./electrs.nix
     ./fulcrum.nix

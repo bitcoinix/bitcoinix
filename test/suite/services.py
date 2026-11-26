@@ -549,7 +549,8 @@ def test_btcpayserver():
 
 
 def rtl_url(address, port):
-    host = f"[{address}]" if ":" in address else address
+    bare = address.strip("[]")
+    host = f"[{bare}]" if ":" in bare else bare
     return f"http://{host}:{port}/rtl"
 
 
@@ -729,6 +730,233 @@ def test_unbeholden_wallet():
     machine.wait_until_succeeds(
         f"echo '{request}' | websocat -n1 ws://{url}/electrum | grep -qi {backend}"
     )
+
+
+@test("lightning-terminal")
+def test_lightning_terminal():
+    data = test_data["lightning-terminal"]
+    assert_running("lightning-terminal")
+    expected_enabled = set(data["enabledSubservers"])
+    has_blocks = data["hasBlocks"]
+
+    def subservers_ready(last_try: bool, prefix: str = "") -> bool:
+        rc, out = machine.execute(f"{prefix}litcli status")
+        if rc != 0:
+            if last_try:
+                raise AssertionError(f"litcli status failed ({rc}): {out}")
+            return False
+        stripped = out.lstrip()
+        dec = json.JSONDecoder()
+        lit_status, end = dec.raw_decode(stripped)
+        lnd_status, _ = dec.raw_decode(stripped[end:].lstrip())
+        sub_servers = lit_status.get("sub_servers", {})
+        state = lnd_status.get("state")
+        if has_blocks:
+            ok = state == "SERVER_ACTIVE" and all(
+                sub_servers.get(name, {}).get("running") is True
+                for name in expected_enabled
+            )
+        else:
+            ok = state in ("RPC_ACTIVE", "SERVER_ACTIVE") and all(
+                sub_servers.get(name, {}).get("disabled") is False
+                and not sub_servers.get(name, {}).get("error")
+                for name in expected_enabled
+            )
+        ok = ok and all(
+            sub_servers.get(name, {}).get("disabled") is True
+            and sub_servers.get(name, {}).get("running") is not True
+            and not sub_servers.get(name, {}).get("error")
+            for name in ("faraday", "loop", "pool", "taproot-assets")
+            if name not in expected_enabled
+        )
+        if last_try and not ok:
+            raise AssertionError((lit_status, lnd_status))
+        return ok
+
+    retry(subservers_ready)
+    assert subservers_ready(True, "runuser -u operator -- ")
+
+    if has_blocks:
+        info = succeed_json("runuser -u operator -- litcli getinfo")
+        assert info["version"]
+
+        # LNC session creation bakes a super macaroon via lnd and returns a pairing phrase
+        added = succeed_json("runuser -u operator -- litcli sessions add --label=web-test --type=admin")
+        session = added["session"]
+        assert len(session["pairing_secret_mnemonic"].split()) >= 10
+        sessions = succeed_json("runuser -u operator -- litcli sessions list all")["sessions"]
+        assert any(s["label"] == "web-test" for s in sessions)
+        raw_pk = session["local_public_key"]
+        pubkey_hex = (
+            raw_pk
+            if len(raw_pk) == 66
+            else succeed(
+                f"printf '%s' {shlex.quote(raw_pk)} | base64 -d | od -An -tx1 | tr -d '[:space:]'"
+            )
+        )
+        assert len(pubkey_hex) == 66, pubkey_hex
+        succeed(f"runuser -u operator -- litcli sessions revoke --localpubkey={shlex.quote(pubkey_hex)}")
+        revoked = succeed_json("runuser -u operator -- litcli sessions list revoked")["sessions"]
+        assert any(s["label"] == "web-test" for s in revoked)
+
+    # HTTPS web interface and TLS certificate verification (both IP SAN and DNS:localhost SAN)
+    address, port, cert = data["address"], data["port"], data["certPath"]
+    host = "127.0.0.1" if address == "0.0.0.0" else ("::1" if address == "::" else address.strip("[]"))
+    bracketed = f"[{host}]" if ":" in host else host
+    html = succeed(f"curl -fsS --cacert {shlex.quote(cert)} https://{bracketed}:{port}/")
+    assert "<html" in html.lower()
+    html_local = succeed(
+        f"curl -fsS --cacert {shlex.quote(cert)} --resolve localhost:{port}:{bracketed} https://localhost:{port}/"
+    )
+    assert "<html" in html_local.lower()
+
+    # UI password authentication on gRPC-Web rejects missing/wrong passwords and accepts uipassword_file
+    for bad_auth in ("", "-u wrong:wrong"):
+        unauth_hdrs = succeed(
+            f"printf '\\0\\0\\0\\0\\0' | curl -fsS -D - -o /dev/null --cacert {shlex.quote(cert)}"
+            f" {bad_auth} -H 'Content-Type: application/grpc-web+proto' -H 'X-Grpc-Web: 1'"
+            f" --data-binary @- https://{bracketed}:{port}/lnrpc.Lightning/GetInfo"
+        )
+        assert "expected 1 macaroon, got 0" in unauth_hdrs, unauth_hdrs
+    auth_body = succeed(
+        "pw=$(cat /secrets/lightning-terminal-password) && "
+        f"printf '\\0\\0\\0\\0\\0' | curl -fsS -D /tmp/lit-auth.hdr --cacert {shlex.quote(cert)}"
+        " -u \"$pw:$pw\" -H 'Content-Type: application/grpc-web+proto' -H 'X-Grpc-Web: 1'"
+        f" --data-binary @- https://{bracketed}:{port}/lnrpc.Lightning/GetInfo | tr -d '\\0'"
+    )
+    auth_hdrs = succeed("cat /tmp/lit-auth.hdr && rm -f /tmp/lit-auth.hdr")
+    assert "grpc-status:" not in auth_hdrs.lower(), auth_hdrs
+    assert "grpc-status:0" in auth_body.replace(" ", "").lower(), auth_body
+    if onion := data["onion"]:
+        # Offline VM: Tor cannot build circuits without directory authorities, so
+        # verify the published hostname, torrc HiddenServicePort, and target listener.
+        machine.wait_for_unit("onion-addresses")
+        assert_matches(f"cat {shlex.quote(onion['hostnameFile'])}", r"^[a-z2-7]{56}\.onion\s*$")
+        target_addr = onion["target"]["addr"]
+        target_port = onion["target"]["port"]
+        torrc = succeed("systemctl cat tor.service | sed -n 's/.* -f \\([^ ]*torrc\\).*/\\1/p' | head -n 1").strip()
+        assert torrc
+        assert_matches(
+            f"cat {shlex.quote(torrc)}",
+            rf"HiddenServicePort {onion['port']} {re.escape(f'{target_addr}:{target_port}')}\b",
+        )
+        onion_bracketed = f"[{target_addr}]" if ":" in target_addr and not target_addr.startswith("[") else target_addr
+        onion_html = succeed(
+            f"curl -fsS --cacert {shlex.quote(cert)} --resolve localhost:{target_port}:{onion_bracketed}"
+            f" https://localhost:{target_port}/"
+        )
+        assert "<html" in onion_html.lower()
+
+    # preStart refuses a symlink planted at /run/lnd/lightning-terminal.macaroon,
+    # even when the symlink target is a valid macaroon readable by lightning-terminal
+    mac = "/run/lnd/lightning-terminal.macaroon"
+    saved_mac = f"{data['dataDir'].rstrip('/')}/saved-lnd.macaroon"
+    lit_user_q = shlex.quote(data["user"])
+    succeed(
+        f"cp -p {mac} /tmp/lit-lnd.macaroon",
+        f"install -m 0400 -o {lit_user_q} {mac} {shlex.quote(saved_mac)}",
+        f"ln -sfn {shlex.quote(saved_mac)} {mac}",
+    )
+    machine.fail("systemctl restart lightning-terminal")
+    succeed(
+        current_run_log_has_string("lightning-terminal", "Too many levels of symbolic links"),
+        f"rm -f {shlex.quote(saved_mac)}",
+        f"mv -fT /tmp/lit-lnd.macaroon {mac}",
+        "systemctl reset-failed lightning-terminal",
+        "systemctl start lightning-terminal",
+    )
+    retry(subservers_ready)
+
+    # Online SQLite snapshots, Pool flock/error handling, and live/sidecar/.tmp exclusions in duplicity
+    if data["backupEnabled"] and has_blocks:
+        lit_data = data["dataDir"].lstrip("/")
+        lit_net = test_data["bitcoinNetwork"]
+        lit_user = shlex.quote(data["user"])
+        stale_tmp = f"{lit_data}/db-backups/{lit_net}/stale.db.tmp"
+        loop_rel = f"loop/{lit_net}/loop_sqlite.db"
+        pool_rel = f"pool/{lit_net}/pool.db"
+        # Keep an open sqlite3 session with wal_autocheckpoint=0 so loop_sqlite.db-wal
+        # and -shm exist on disk while duplicity.service runs.
+        succeed(
+            f"runuser -u {lit_user} -- sh -c '"
+            f"umask 077 && mkdir -p /{lit_data}/db-backups/{lit_net} /{lit_data}/loop/{lit_net} /{lit_data}/pool/{lit_net}"
+            f" && : > /{stale_tmp}"
+            f" && printf pool-snapshot-v1 > /{lit_data}/{pool_rel}"
+            "'",
+            f"runuser -u {lit_user} -- sh -c '"
+            "(echo \"PRAGMA journal_mode=WAL; PRAGMA wal_autocheckpoint=0; CREATE TABLE t(x INT); INSERT INTO t VALUES (1);\"; "
+            f"touch /{lit_data}/wal-ready; sleep 60) | sqlite3 /{lit_data}/{loop_rel}"
+            "' >/dev/null 2>&1 &",
+        )
+        machine.wait_until_succeeds(f"test -f /{lit_data}/wal-ready && test -s /{lit_data}/{loop_rel}-wal")
+        succeed(
+            "systemctl start duplicity.service",
+            f"pkill -u {lit_user} -f 'sqlite3 /{lit_data}/{loop_rel}' || true",
+            f"rm -f /{lit_data}/wal-ready",
+        )
+        archived = set(
+            succeed("export $(cat /secrets/backup-encryption-env); duplicity list-current-files file:///var/lib/localBackups")
+            .splitlines()
+        )
+
+        def has_archived(rel_path: str) -> bool:
+            return any(line.endswith(f" {rel_path}") for line in archived)
+
+        def has_archived_or_sidecar(rel_path: str) -> bool:
+            return any(line.endswith(f" {rel_path}") or f" {rel_path}-" in line for line in archived)
+
+        expected_sqlite_dbs = [f"{lit_net}/litd.db", loop_rel]
+        if "faraday" in expected_enabled:
+            expected_sqlite_dbs.append(f"faraday/{lit_net}/faraday.db")
+        if "taproot-assets" in expected_enabled:
+            expected_sqlite_dbs.append(f"tapd/data/{lit_net}/tapd.db")
+
+        for rel_db in expected_sqlite_dbs:
+            snap = f"{lit_data}/db-backups/{rel_db}"
+            live = f"{lit_data}/{rel_db}"
+            assert has_archived(snap), snap
+            assert not has_archived_or_sidecar(live), live
+            succeed(f"test -s /{snap}")
+            assert_full_match(f"sqlite3 /{snap} 'PRAGMA integrity_check;'", "ok\n")
+        assert_full_match(f"sqlite3 /{lit_data}/db-backups/{loop_rel} 'SELECT x FROM t;'", "1\n")
+
+        pool_snap = f"{lit_data}/db-backups/{pool_rel}"
+        pool_live = f"{lit_data}/{pool_rel}"
+        assert has_archived(pool_snap), pool_snap
+        assert not has_archived_or_sidecar(pool_live), pool_live
+        assert_full_match(f"cat /{pool_snap}", "pool-snapshot-v1")
+        assert not has_archived(stale_tmp), stale_tmp
+
+        # Both an exclusive flock on pool.db (running litd) and an unlocked copy
+        # error (chmod 000) fail lightning-terminal-backup.service (and thus
+        # duplicity.service via failed-dumps) after archiving other files, while
+        # preserving the prior snapshot; removing live DBs prunes stale snapshots.
+        flock_marker = f"{lit_data}/flock-marker"
+        succeed(f"runuser -u {lit_user} -- sh -c 'printf pool-dirty > /{pool_live} && printf ok > /{flock_marker}'")
+        machine.fail(f"flock --exclusive /{pool_live} -c 'systemctl start duplicity.service'")
+        succeed(
+            current_run_log_has_string("lightning-terminal-backup", "is locked by running litd"),
+            current_run_log_has_string("duplicity", "lightning-terminal-backup.service"),
+        )
+        archived_after_fail = set(
+            succeed("export $(cat /secrets/backup-encryption-env); duplicity list-current-files file:///var/lib/localBackups")
+            .splitlines()
+        )
+        assert any(line.endswith(f" {flock_marker}") for line in archived_after_fail), flock_marker
+        assert_full_match(f"cat /{pool_snap}", "pool-snapshot-v1")
+        succeed(
+            "systemctl reset-failed lightning-terminal-backup.service duplicity.service",
+            f"chmod 000 /{pool_live}",
+        )
+        machine.fail("systemctl start lightning-terminal-backup.service")
+        succeed(current_run_log_has_string("lightning-terminal-backup", "snapshot Lightning Terminal database"))
+        assert_full_match(f"cat /{pool_snap}", "pool-snapshot-v1")
+        succeed(
+            "systemctl reset-failed lightning-terminal-backup.service",
+            f"rm -rf /{lit_data}/loop /{lit_data}/pool /{flock_marker}",
+            "systemctl start lightning-terminal-backup.service",
+            f"test ! -e /{pool_snap} && test ! -e /{lit_data}/db-backups/{loop_rel}",
+        )
 
 
 @test("nodeinfo")
