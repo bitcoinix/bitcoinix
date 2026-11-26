@@ -67,7 +67,7 @@ let
   secretsDir = config.nix-bitcoin.secretsDir;
   netns = config.nix-bitcoin.netns-isolation;
   rpcAddress = if netns.enable then netns.netns.cdk-mintd.address else "127.0.0.1";
-  rpcTlsDir = "/run/cdk-mintd/orchard-rpc";
+  rpcTlsDir = "/run/orchard-rpc-tls";
   mintHost = let
     address = nbLib.address (removeSuffix "]" (removePrefix "[" mint.address));
   in if hasInfix ":" address then "[${address}]" else address;
@@ -82,14 +82,14 @@ let
   # The daemon keeps the WAL open. Reapply file ACLs after every restart,
   # including backup snapshots. No directory default ACL is installed.
   grantDatabaseAccess = nbLib.script "orchard-database-access-as-mint" ''
-    for _attempt in $(seq 1 60); do
+    for _attempt in $(seq 1 600); do
       if [[ -f ${escapeShellArg "${database}-wal"} && -f ${escapeShellArg "${database}-shm"} ]]; then
         ${pkgs.acl}/bin/setfacl -P -m g:${databaseGroup}:--x ${escapeShellArg mint.dataDir}
         ${pkgs.acl}/bin/setfacl -P -m g:${databaseGroup}:r-- \
           ${escapeShellArg database} ${escapeShellArg "${database}-wal"} ${escapeShellArg "${database}-shm"}
         exit 0
       fi
-      sleep 1
+      sleep 0.1
     done
     echo "CDK SQLite WAL did not become available for Orchard" >&2
     exit 1
@@ -120,17 +120,68 @@ in {
         enabled = true;
         address = rpcAddress;
         port = cfg.mintRpcPort;
-        tls_dir = rpcTlsDir;
+        tls_dir = "${rpcTlsDir}/server";
         allow_insecure = false;
         allow_mint_quote_payment_override = false;
       };
     };
 
     systemd.tmpfiles.rules = [ "d '${cfg.dataDir}' 0700 ${cfg.user} ${cfg.group} - -" ];
+
+    # Ephemeral local-only mTLS credentials for the CDK management RPC.
+    # Neither service persists or pins these certs, and the CA key is discarded
+    # immediately after signing both leaf certificates.
+    systemd.services.orchard-rpc-tls = {
+      description = "Generate ephemeral mTLS certificates for Orchard CDK management RPC";
+      before = [ "cdk-mintd.service" "orchard.service" ];
+      script = ''
+        set -euo pipefail
+        tmpDir=$(mktemp -d)
+        trap 'rm -rf "$tmpDir"' EXIT
+        ${openssl} req -x509 -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 -nodes \
+          -keyout "$tmpDir/ca.key" -out "$tmpDir/ca.pem" \
+          -days 3650 -sha256 -subj /CN=orchard-rpc-ca \
+          -addext 'basicConstraints=critical,CA:TRUE,pathlen:0' \
+          -addext 'keyUsage=critical,keyCertSign'
+        issue() {
+          local role=$1 ext=$2 usage=$3
+          ${openssl} genpkey -algorithm EC -pkeyopt ec_paramgen_curve:prime256v1 -out "$tmpDir/$role.key"
+          ${openssl} req -new -key "$tmpDir/$role.key" -subj /CN=localhost -out "$tmpDir/$role.csr"
+          printf '%s\n' 'basicConstraints=critical,CA:FALSE' 'keyUsage=critical,digitalSignature' \
+            "extendedKeyUsage=$usage" "$ext" > "$tmpDir/$role.ext"
+          ${openssl} x509 -req -in "$tmpDir/$role.csr" \
+            -CA "$tmpDir/ca.pem" -CAkey "$tmpDir/ca.key" \
+            -set_serial "0x$(${openssl} rand -hex 16)" -days 3650 -sha256 \
+            -extfile "$tmpDir/$role.ext" -out "$tmpDir/$role.pem"
+        }
+        issue server 'subjectAltName=IP:${rpcAddress}' serverAuth
+        issue client 'subjectAltName=DNS:orchard' clientAuth
+        install -d -o ${escapeShellArg mint.user} -g ${escapeShellArg mint.group} -m 0700 ${rpcTlsDir}/server
+        install -o ${escapeShellArg mint.user} -g ${escapeShellArg mint.group} -m 0400 \
+          "$tmpDir/ca.pem" "$tmpDir/server.pem" "$tmpDir/server.key" ${rpcTlsDir}/server/
+        install -d -o ${escapeShellArg cfg.user} -g ${escapeShellArg cfg.group} -m 0700 ${rpcTlsDir}/client
+        install -o ${escapeShellArg cfg.user} -g ${escapeShellArg cfg.group} -m 0400 \
+          "$tmpDir/ca.pem" "$tmpDir/client.pem" "$tmpDir/client.key" ${rpcTlsDir}/client/
+      '';
+      serviceConfig = nbLib.defaultHardening // {
+        Type = "oneshot";
+        RemainAfterExit = true;
+        RuntimeDirectory = "orchard-rpc-tls";
+        RuntimeDirectoryMode = "0711";
+        UMask = "0077";
+        PrivateNetwork = true;
+        RestrictAddressFamilies = "AF_UNIX";
+        # Map real uids to assign server and client certs to their respective users.
+        PrivateUsers = false;
+        CapabilityBoundingSet = [ "CAP_CHOWN" "CAP_FOWNER" "CAP_DAC_OVERRIDE" ];
+      };
+    };
+
     systemd.services.orchard = {
       wantedBy = [ "multi-user.target" ];
       bindsTo = [ "cdk-mintd.service" ];
-      after = [ "cdk-mintd.service" "nix-bitcoin-secrets.target" ];
+      requires = [ "orchard-rpc-tls.service" ];
+      after = [ "cdk-mintd.service" "orchard-rpc-tls.service" "nix-bitcoin-secrets.target" ];
       environment = {
         SERVER_HOST = cfg.address;
         SERVER_PORT = toString cfg.port;
@@ -141,9 +192,9 @@ in {
         MINT_RPC_HOST = rpcAddress;
         MINT_RPC_PORT = toString cfg.mintRpcPort;
         MINT_RPC_MTLS = "true";
-        MINT_RPC_KEY = "${secretsDir}/orchard-rpc-client-key";
-        MINT_RPC_CERT = "${secretsDir}/orchard-rpc-client-cert";
-        MINT_RPC_CA = "${secretsDir}/orchard-rpc-ca-cert";
+        MINT_RPC_KEY = "${rpcTlsDir}/client/client.key";
+        MINT_RPC_CERT = "${rpcTlsDir}/client/client.pem";
+        MINT_RPC_CA = "${rpcTlsDir}/client/ca.pem";
       };
       script = ''
         SETUP_KEY=$(cat ${escapeShellArg cfg.setupKeyFile})
@@ -152,10 +203,10 @@ in {
         exec ${lib.getExe cfg.package}
       '';
       serviceConfig = nbLib.defaultHardening // nbLib.nodejs // {
+        SyslogIdentifier = "orchard";
         User = cfg.user;
         Group = cfg.group;
         SupplementaryGroups = [ databaseGroup ];
-        WorkingDirectory = cfg.dataDir;
         UMask = "0077";
         ReadWritePaths = [ cfg.dataDir ];
         Restart = "on-failure";
@@ -164,18 +215,15 @@ in {
     };
 
     systemd.services.cdk-mintd = {
-      preStart = mkBefore ''
-        mkdir -p ${rpcTlsDir}
-        ln -sfn ${secretsDir}/orchard-rpc-ca-cert ${rpcTlsDir}/ca.pem
-        ln -sfn ${secretsDir}/orchard-rpc-server-cert ${rpcTlsDir}/server.pem
-        ln -sfn ${secretsDir}/orchard-rpc-server-key ${rpcTlsDir}/server.key
-      '';
+      requires = [ "orchard-rpc-tls.service" ];
+      after = [ "orchard-rpc-tls.service" ];
       serviceConfig.ExecStartPost = mkAfter [
         # PrivateUsers maps only the mint's uid/gid, so an ACL naming Orchard's
         # group cannot be set inside that namespace. Leave it with `+`, then
         # immediately drop to the mint user before accessing mint-owned paths.
         (nbLib.rootScript "orchard-database-access" ''
-          exec ${pkgs.util-linux}/bin/runuser -u ${escapeShellArg mint.user} -- ${grantDatabaseAccess}
+          exec ${pkgs.util-linux}/bin/setpriv --reuid=${escapeShellArg mint.user} \
+            --regid=${escapeShellArg mint.group} --clear-groups -- ${grantDatabaseAccess}
         '')
         "-+${config.systemd.package}/bin/systemctl start --no-block --job-mode=ignore-requirements orchard.service"
       ];
@@ -187,47 +235,9 @@ in {
 
     nix-bitcoin.secrets = {
       orchard-setup-key = mkIf defaultSetupKey { inherit (cfg) user group; };
-      orchard-rpc-ca-key = { user = "root"; };
-      orchard-rpc-ca-cert = { user = "root"; permissions = "0444"; };
-      orchard-rpc-server-key = { inherit (mint) user group; };
-      orchard-rpc-server-cert = { inherit (mint) user group; };
-      orchard-rpc-client-key = { inherit (cfg) user group; };
-      orchard-rpc-client-cert = { inherit (cfg) user group; };
     };
-    nix-bitcoin.generateSecretsCmds.orchard = ''
-      ${optionalString defaultSetupKey "makePasswordSecret orchard-setup-key"}
-      makeCert orchard-rpc-ca
-      # Issue separate leaf certificates: neither service receives the CA key
-      # or the other's private key. Regenerate leaves when their address changes
-      # or expiry approaches, preserving the private keys.
-      for role in server client; do
-        name=orchard-rpc-$role
-        if isAbsent "$name-key"; then
-          writeSecret "$name-key" ${openssl} genpkey -algorithm EC -pkeyopt ec_paramgen_curve:prime256v1
-        else
-          checkKey "$name-key" "Orchard's management RPC authentication"
-        fi
-        if [[ $role == server ]]; then
-          extensions='subjectAltName=IP:${rpcAddress}'
-          usage=serverAuth
-        else
-          extensions='subjectAltName=DNS:orchard'
-          usage=clientAuth
-        fi
-        if [[ $name-key -nt $name-cert || orchard-rpc-ca-cert -nt $name-cert ]] ||
-           [[ $(cat "$name-cert-alt-names" 2>/dev/null) != "$extensions" ]] ||
-           ! ${openssl} x509 -checkend 2592000 -noout -in "$name-cert" 2>/dev/null; then
-          tmpDir=$(mktemp -d)
-          ${openssl} req -new -key "$name-key" -subj /CN=localhost -out "$tmpDir/request"
-          printf '%s\n' 'basicConstraints=critical,CA:FALSE' 'keyUsage=critical,digitalSignature' \
-            "extendedKeyUsage=$usage" "$extensions" > "$tmpDir/extensions"
-          writeSecret "$name-cert" ${openssl} x509 -req -in "$tmpDir/request" \
-            -CA orchard-rpc-ca-cert -CAkey orchard-rpc-ca-key \
-            -set_serial "0x$(${openssl} rand -hex 16)" -days 3650 -sha256 -extfile "$tmpDir/extensions"
-          writeSecret "$name-cert-alt-names" echo "$extensions"
-          rm -rf "$tmpDir"
-        fi
-      done
+    nix-bitcoin.generateSecretsCmds.orchard = optionalString defaultSetupKey ''
+      makePasswordSecret orchard-setup-key
     '';
   };
 }

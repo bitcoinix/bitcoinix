@@ -45,19 +45,25 @@ def test_orchard():
     for suffix in ["", "-wal", "-shm"]:
         succeed(f"{as_orchard} test -r {database}{suffix}")
         machine.fail(f"{as_orchard} test -w {database}{suffix}")
-    for path in [data["seedFile"], f"{data['secretsDir']}/orchard-rpc-server-key",
-                 f"{data['secretsDir']}/orchard-rpc-ca-key", "/run/cdk-mintd/lnd.macaroon"]:
-        machine.fail(f"{as_orchard} cat {path}")
+    backend_secret = (
+        "/run/cdk-mintd/lnd.macaroon"
+        if data["mintBackend"] == "lnd"
+        else f"{data['clnNetworkDir']}/lightning-rpc"
+    )
+    for path in [data["seedFile"], f"{data['rpcTlsDir']}/server/server.key", backend_secret]:
+        succeed(f"test -e {path}")
+        machine.fail(f"{as_orchard} test -r {path}")
+    machine.fail(f"find {data['rpcTlsDir']} -name 'ca.key' | grep .")
     machine.fail(f"{as_orchard} test -w {data['mintDataDir']}")
     machine.fail(f"runuser -u nobody -- cat {data['setupKeyFile']}")
     # Check the same RPC with and without credentials, so proto parsing or an
     # unavailable listener cannot make the authentication test pass spuriously.
-    rpc = (f"grpcurl -H 'x-cdk-protocol-version: 1.0.0' -connect-timeout 3 -max-time 5 -cacert {data['secretsDir']}/orchard-rpc-ca-cert "
+    rpc = (f"grpcurl -H 'x-cdk-protocol-version: 1.0.0' -connect-timeout 3 -max-time 5 -cacert {data['rpcTlsDir']}/client/ca.pem "
            f"-import-path {os.path.dirname(data['proto'])} -proto {os.path.basename(data['proto'])}")
     method = f"{data['rpcAddress']}:{data['mintRpcPort']} cdk_mint_management_v1.CdkMint/GetInfo"
     rpc_info = succeed_json(
-        f"{rpc} -cert {data['secretsDir']}/orchard-rpc-client-cert "
-        f"-key {data['secretsDir']}/orchard-rpc-client-key {method}"
+        f"{rpc} -cert {data['rpcTlsDir']}/client/client.pem "
+        f"-key {data['rpcTlsDir']}/client/client.key {method}"
     )
     assert rpc_info["name"] == "Orchard test mint", rpc_info
     machine.fail(f"{rpc} {method}")

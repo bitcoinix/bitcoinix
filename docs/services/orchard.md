@@ -60,25 +60,20 @@ disabled. Changes made through Orchard can be replaced when a changed Nix mint
 configuration is applied. Keep intended persistent settings in
 `services.cdk-mintd.settings`.
 
-Without automatic secret generation, supply `orchard-setup-key` (unless
-using a custom file) and these TLS files through your [secrets setup](../configuration.md):
-
-- `orchard-rpc-ca-key` and `orchard-rpc-ca-cert`;
-- `orchard-rpc-server-key` and `orchard-rpc-server-cert`;
-- `orchard-rpc-client-key` and `orchard-rpc-client-cert`.
-
-Use PEM files with separate server and client keys, signed by the CA. The server
-certificate needs the RPC IP address as a subject alternative name and the
-`serverAuth` extended key usage; the client certificate needs `clientAuth`.
-The CA key is root-only; each service receives only its own private key.
+Without automatic secret generation, supply `orchard-setup-key` (unless using
+`services.orchard.setupKeyFile`) through your [secrets setup](../configuration.md).
+The mutual TLS certificates for the local management RPC are generated
+ephemerally at runtime under `/run/orchard-rpc-tls`, so no manual TLS setup is
+needed.
 
 ## State and recovery
 
 Orchard stores accounts, settings and `crypto.key` in
 `services.orchard.dataDir` (default `/var/lib/orchard`). Back up this
-whole directory while `orchard.service` is stopped, together with its
-secrets. Restore the directory with the configured Orchard user/group and mode
-`0700`. Orchard state is not automatically included in `services.backups`.
+whole directory while `orchard.service` is stopped, together with
+`orchard-setup-key` if you want to keep the initial setup secret. Restore the
+directory with the configured Orchard user/group and mode `0700`. Orchard state
+is not automatically included in `services.backups`.
 
 Use the [CDK backup and recovery procedure](cdk-mint.md#automated-backups) for
 mint state. Orchard's database download does not include the signing secrets or

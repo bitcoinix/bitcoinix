@@ -236,11 +236,13 @@ let
       test.data.orchard = optionalAttrs cfg.orchard.enable {
         inherit (cfg.orchard) port user group dataDir setupKeyFile mintRpcPort;
         rpcAddress = cfg.cdk-mintd.settings.mint_management_rpc.address;
+        rpcTlsDir = "/run/orchard-rpc-tls";
         proto = "${cfg.orchard.package}/lib/cashu-orchard/proto/cdk/cdk-mint-rpc.proto";
         inherit (cfg.cdk-mintd) seedFile;
+        mintBackend = cfg.cdk-mintd.backend;
         mintDataDir = cfg.cdk-mintd.dataDir;
         mintPort = cfg.cdk-mintd.port;
-        secretsDir = config.nix-bitcoin.secretsDir;
+        clnNetworkDir = cfg.clightning.networkDir;
       };
 
       tests.cdk-mintd = cfg.cdk-mintd.enable;
@@ -729,12 +731,13 @@ let
     };
 
     orchard = {
-      imports = [ scenarios.cdk-mintd-lnd ];
+      imports = [ scenarios.regtestBase ];
+      nix-bitcoin.nodeinfo.enable = true;
       services.orchard.enable = true;
+      services.cdk-mintd.settings.mint_info.name = "Bitcoinix test mint";
       # Keep this scenario focused on Orchard; the CDK scenarios cover payments
       # and recovery. Orchard tests exercise both RPC and database access.
       tests.cdk-mintd = mkForce false;
-      tests.cdk-mintd-lightning = mkForce false;
     };
 
     orchard-netns = {

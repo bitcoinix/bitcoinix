@@ -11,26 +11,42 @@ in {
   testOrchardIntegration = {
     expr = let
       unit = plain.systemd.services.orchard;
+      tlsUnit = plain.systemd.services.orchard-rpc-tls;
+      mintUnit = plain.systemd.services.cdk-mintd;
       rpc = plain.services.cdk-mintd.settings.mint_management_rpc;
     in {
       assertions = failedAssertions plain;
       mintEnabled = plain.services.cdk-mintd.enable;
-      rpc = builtins.removeAttrs rpc [ "tls_dir" ];
+      inherit rpc;
       bindsTo = unit.bindsTo;
+      orchardRequiresTls = builtins.elem "orchard-rpc-tls.service" unit.requires;
+      mintRequiresTls = builtins.elem "orchard-rpc-tls.service" mintUnit.requires;
+      tlsPrivateNetwork = tlsUnit.serviceConfig.PrivateNetwork;
+      syslogIdentifier = unit.serviceConfig.SyslogIdentifier;
       readWritePaths = unit.serviceConfig.ReadWritePaths;
       groups = unit.serviceConfig.SupplementaryGroups;
-      environment = lib.getAttrs [ "SERVER_HOST" "SERVER_PORT" "MINT_RPC_MTLS" "MINT_DATABASE" ] unit.environment;
-      caOwner = plain.nix-bitcoin.secrets.orchard-rpc-ca-key.user;
-      serverOwner = plain.nix-bitcoin.secrets.orchard-rpc-server-key.user;
-      clientOwner = plain.nix-bitcoin.secrets.orchard-rpc-client-key.user;
+      environment = lib.getAttrs [ "SERVER_HOST" "SERVER_PORT" "MINT_RPC_MTLS" "MINT_DATABASE" "MINT_RPC_CA" ] unit.environment;
+      secrets = lib.filter (lib.hasPrefix "orchard") (lib.attrNames plain.nix-bitcoin.secrets);
+      setupKeyOwner = plain.nix-bitcoin.secrets.orchard-setup-key.user;
       restartHook = lib.any (lib.hasInfix "--job-mode=ignore-requirements orchard.service")
-        plain.systemd.services.cdk-mintd.serviceConfig.ExecStartPost;
+        mintUnit.serviceConfig.ExecStartPost;
     };
     expected = {
       assertions = [];
       mintEnabled = true;
-      rpc = { enabled = true; address = "127.0.0.1"; port = 8086; allow_insecure = false; allow_mint_quote_payment_override = false; };
+      rpc = {
+        enabled = true;
+        address = "127.0.0.1";
+        port = 8086;
+        tls_dir = "/run/orchard-rpc-tls/server";
+        allow_insecure = false;
+        allow_mint_quote_payment_override = false;
+      };
       bindsTo = [ "cdk-mintd.service" ];
+      orchardRequiresTls = true;
+      mintRequiresTls = true;
+      tlsPrivateNetwork = true;
+      syslogIdentifier = "orchard";
       readWritePaths = [ "/var/lib/orchard" ];
       groups = [ "orchard-mint" ];
       environment = {
@@ -38,10 +54,10 @@ in {
         SERVER_PORT = "3321";
         MINT_RPC_MTLS = "true";
         MINT_DATABASE = "/var/lib/cdk-mintd/cdk-mintd.sqlite";
+        MINT_RPC_CA = "/run/orchard-rpc-tls/client/ca.pem";
       };
-      caOwner = "root";
-      serverOwner = "cdk-mintd";
-      clientOwner = "orchard";
+      secrets = [ "orchard-setup-key" ];
+      setupKeyOwner = "orchard";
       restartHook = true;
     };
   };
@@ -67,10 +83,11 @@ in {
   testOrchardDisabled = {
     expr = {
       unit = disabled.systemd.services ? orchard;
+      tlsUnit = disabled.systemd.services ? orchard-rpc-tls;
       secrets = lib.filter (lib.hasPrefix "orchard") (lib.attrNames disabled.nix-bitcoin.secrets);
       mint = disabled.services.cdk-mintd.enable;
     };
-    expected = { unit = false; secrets = []; mint = false; };
+    expected = { unit = false; tlsUnit = false; secrets = []; mint = false; };
   };
   testOrchardCustom = {
     expr = let config = orchard {
@@ -83,12 +100,10 @@ in {
       services.cdk-mintd = { user = "mint"; group = "mint-group"; dataDir = "/srv/mint"; };
     }; in {
       assertions = failedAssertions config;
-      setupSecret = config.nix-bitcoin.secrets ? orchard-setup-key;
-      client = config.nix-bitcoin.secrets.orchard-rpc-client-key.user;
-      server = config.nix-bitcoin.secrets.orchard-rpc-server-key.user;
+      secrets = lib.filter (lib.hasPrefix "orchard") (lib.attrNames config.nix-bitcoin.secrets);
       database = config.systemd.services.orchard.environment.MINT_DATABASE;
     };
-    expected = { assertions = []; setupSecret = false; client = "orchard"; server = "mint"; database = "/srv/mint/cdk-mintd.sqlite"; };
+    expected = { assertions = []; secrets = []; database = "/srv/mint/cdk-mintd.sqlite"; };
   };
   testOrchardTor = {
     expr = let config = orchard {
