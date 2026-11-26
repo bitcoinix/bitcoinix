@@ -38,7 +38,7 @@ let
     python = nbPython3Packages.python.withPackages (_:
       [ nbPython3Packages.pyln-client nbPython3Packages.packaging ] ++ (plugin.extraPkgs or []));
     script = "${plugin.scriptName or name}.py";
-    drv = pkgs.stdenv.mkDerivation {
+    drv = pkgs.stdenvNoCC.mkDerivation {
       pname = "clightning-plugin-${name}";
       version = "${plugin.version}-${builtins.substring 0 7 src.rev}";
 

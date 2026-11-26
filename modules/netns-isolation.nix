@@ -103,27 +103,19 @@ let
 
   # Symmetric netns connection matrix
   # if clightning.connections = [ "bitcoind" ]; then
-  #   availableNetns.bitcoind = [ "clighting" ];
+  #   availableNetns.bitcoind = [ "clightning" ];
   #   and
-  #   availableNetns.clighting = [ "bitcoind" ];
-  #
-  # TODO-EXTERNAL:
-  # Although negligible for our purposes, this calculation's runtime
-  # is in the order of (number of connections * number of services),
-  # because attrsets and lists are fully copied on each update with '//' or '++'.
-  # This can only be improved with an update in the nix language.
-  #
+  #   availableNetns.clightning = [ "bitcoind" ];
   availableNetns = let
-    # base = { clightning = [ "bitcoind" ]; ... }
-    base = builtins.mapAttrs (n: v:
-      builtins.filter isEnabled v.connections
-    ) enabledServices;
+    edges = concatLists (mapAttrsToList (s1: v:
+      concatMap (s2: [ { from = s1; to = s2; } { from = s2; to = s1; } ])
+        (builtins.filter isEnabled v.connections)
+    ) enabledServices);
+    byService = builtins.groupBy (e: e.from) edges;
   in
-    foldl (xs: s1:
-      foldl (xs: s2:
-        xs // { "${s2}" = xs.${s2} ++ [ s1 ]; }
-      ) xs cfg.services.${s1}.connections
-    ) base (builtins.attrNames base);
+    builtins.mapAttrs (n: _:
+      unique (map (e: e.to) (byService.${n} or []))
+    ) enabledServices;
 
   enabledServices = filterAttrs (n: v: isEnabled n) cfg.services;
   isEnabled = x: config.services.${x}.enable;
@@ -367,13 +359,15 @@ in {
           # services in their namespaces too. The copy is made when the netns
           # is set up, so a later change on the host needs a reboot.
           if [ -e /proc/sys/net/mptcp/enabled ]; then
-            hostMptcp=$(cat /proc/sys/net/mptcp/enabled)
+            read -r hostMptcp < /proc/sys/net/mptcp/enabled
             export hostMptcp
           fi
           exec ${nsenter} --net=/run/netns/${netnsName} ${script "in-netns" setupInNetns}
         '';
 
-        setupInNetns = ''
+        setupInNetns = let
+          torEnforce = config.services.${n}.tor.enforce or false;
+        in ''
           ${ip} link set lo up
           if [ -n "''${hostMptcp:-}" ]; then
             echo "$hostMptcp" > /proc/sys/net/mptcp/enabled
@@ -386,13 +380,16 @@ in {
           ${ip} link set ${veth} up
           ${ip} route add default via ${bridgeIp}
 
-          ${iptables} -w -P INPUT DROP
-          # allow return traffic to outgoing connections initiated by the service itself
-          ${iptables} -w -A INPUT -m conntrack --ctstate ESTABLISHED -j ACCEPT
-          ${iptables} -w -A INPUT -s ${allowedAddresses} -j ACCEPT
-        '' + optionalString (config.services.${n}.tor.enforce or false) ''
-          ${iptables} -w -P OUTPUT DROP
-          ${iptables} -w -A OUTPUT -d ${allowedAddresses} -j ACCEPT
+          # Allow return traffic to outgoing connections initiated by the service itself
+          ${iptables}-restore -w <<'EOF'
+          *filter
+          :INPUT DROP [0:0]
+          :OUTPUT ${if torEnforce then "DROP" else "ACCEPT"} [0:0]
+          -A INPUT -m conntrack --ctstate ESTABLISHED -j ACCEPT
+          -A INPUT -s ${allowedAddresses} -j ACCEPT
+          ${optionalString torEnforce "-A OUTPUT -d ${allowedAddresses} -j ACCEPT"}
+          COMMIT
+          EOF
         '';
         script = name: src: pkgs.writers.writeDash name ''
           set -e
@@ -430,9 +427,7 @@ in {
         };
       };
     in
-      foldl (services: n:
-        services // (makeNetnsServices n netns.${n})
-      ) {} (builtins.attrNames netns)
+      concatMapAttrs makeNetnsServices netns
     );
   }
 

@@ -3,9 +3,10 @@
 let
   commonAttrs = {
     inherit (clightning) src;
-    cargoHash = "sha256-9XUW3exDOJ2WrtMXQysOI1R+jl6unLPHAO4pox8wUoA=";
-
-    depsExtraArgs = {
+    cargoDeps = rustPlatform.fetchCargoVendor {
+      name = "clightning-${clightning.version}";
+      inherit (clightning) src;
+      hash = "sha256-9XUW3exDOJ2WrtMXQysOI1R+jl6unLPHAO4pox8wUoA=";
       nativeBuildInputs = [ unzip ];
       # Vendor the Cargo workspace without running CLN's configure script.
       dontConfigure = true;
