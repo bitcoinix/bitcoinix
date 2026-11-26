@@ -460,19 +460,16 @@ def test_charge_lnd():
     # Check the policy RPC grants without requiring open channels. The admin
     # authenticates this check; the charge-lnd macaroon is the one being checked.
     lnd = test_data["lnd-macaroons"]
-    for rpc in [
+    policy_rpcs = [
         "/lnrpc.Lightning/UpdateChannelPolicy",
         "/routerrpc.Router/UpdateChanStatus",
-    ]:
-        response = request(
-            "POST", "/v1/macaroon/checkpermissions",
-            user=lnd["user"], macaroon=f"{lnd['networkDir']}/admin.macaroon",
-            input_cmd=(
-                "runuser -u charge-lnd -- base64 -w0 /run/lnd/charge-lnd.macaroon | "
-                f"jq -Rs --arg rpc {shlex.quote(rpc)} "
-                "'{macaroon: ., fullMethod: $rpc, check_default_perms_from_full_method: true}'"
-            ),
-        )
+    ]
+    for rpc, response in zip(
+        policy_rpcs,
+        check_lnd_macaroon_permissions(
+            lnd, "/run/lnd/charge-lnd.macaroon", policy_rpcs, macaroon_user="charge-lnd"
+        ),
+    ):
         assert response.get("valid") is True, (rpc, response)
 
     # These requests must fail authorization, rather than just fail because the
@@ -556,16 +553,7 @@ def rtl_url(address, port):
 def assert_rtl_ui(url):
     """RTL's login page, a login, and an API call that needs the login"""
     jar = "/tmp/rtl-cookies"
-    curl = f"curl -fsS -b {jar} -c {jar}"
-    # The page sets the session cookie and the CSRF token that the login needs
-    assert_matches(f"rm -f {jar} && {curl} {url}/", "<title>RTL</title>")
-    csrf = succeed(f"awk '$6 == \"XSRF-TOKEN\" {{ print $7 }}' {jar}").strip()
-    password_hash = succeed("printf %s \"$(cat /secrets/rtl-password)\" | sha256sum").split()[0]
-    login = json.dumps({"authenticateWith": "PASSWORD", "authenticationValue": password_hash})
-    token = succeed_json(
-        f"{curl} -H 'Content-Type: application/json' -H 'X-XSRF-TOKEN: {csrf}'"
-        f" -d {shlex.quote(login)} {url}/api/authenticate"
-    )["token"]
+    _, token = rtl_login(url, jar)
     rtl_config = f"curl -sS -b {jar} -o /dev/null -w '%{{http_code}}' {url}/api/conf/config/rtl"
     assert_full_match(rtl_config, "401")
     assert_full_match(f"{rtl_config} -H 'Authorization: Bearer {token}'", "200")
@@ -809,9 +797,9 @@ def test_unbeholden_lnurl():
     invalid = succeed_json(f"curl -fsS '{address}/invoice?amount=999'")
     assert invalid["status"] == "ERROR", invalid
     command = f"curl -fsS '{address}/invoice?amount=1000'"
-    machine.wait_until_succeeds(command + " | jq -e '.pr | startswith(\"lnbcrt\")'")
-    invoice = succeed_json(command)
-    assert invoice["pr"].startswith("lnbcrt"), invoice
+    invoice = json.loads(machine.wait_until_succeeds(
+        command + " | jq -e 'select(.pr | startswith(\"lnbcrt\"))'"
+    ))
     assert invoice["routes"] == [], invoice
     verify_path = urlparse(invoice["verify"]).path
     verified = succeed_json(f"curl -fsS {url}{shlex.quote(verify_path)}")

@@ -159,7 +159,6 @@ container() {
     makeTmpDir
     export container=$tmpDir/container
     buildTestAttr ".$attr" --out-link "$container"
-    export scriptDir
     "$scriptDir/lib/make-container.sh" "$@"
 }
 

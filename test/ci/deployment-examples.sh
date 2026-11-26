@@ -19,12 +19,18 @@ trap 'rm -rf "$tmpDir"' EXIT
 
 # The examples set the configVersion of the release they pin. Build them with the
 # checkout's latest released version, retaining development warnings.
-configVersion=$(nix eval --raw --file "$repo/version.nix")
-[[ $configVersion =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+configVersion=
+getConfigVersion() {
+    if [[ ! $configVersion ]]; then
+        configVersion=$(nix eval --raw --file "$repo/version.nix")
+        [[ $configVersion =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+    fi
+}
 
 # Copy an example, so that locking doesn't write to the checkout, set its
 # configVersion and lock its bitcoinix input to this checkout
 prepareExample() {
+    getConfigVersion
     cp -r "$repo/examples/$1" "$tmpDir/$1"
     sed -i.orig "s/configVersion = \"[0-9.]*\";/configVersion = \"$configVersion\";/" "$tmpDir/$1/flake.nix"
     grep -q "configVersion = \"$configVersion\";" "$tmpDir/$1/flake.nix"
@@ -55,16 +61,23 @@ deployKrops() {
 
     # Check that the krops sources exclude every symlink in nixpkgs and in the
     # tracked files of bitcoinix (see the TODO-EXTERNAL in examples/krops/sources.nix)
+    excludedFilters=$(
+        nix eval --impure --raw --expr "
+          let
+            sources = import $repo/examples/krops/sources.nix {
+              extraSources = {};
+              krops = (import <nix-bitcoin> {}).krops;
+            };
+            excludes = src: builtins.concatStringsSep \"\n\" (
+              map (f: \"\${src}\t\${f.pattern}\")
+                (builtins.filter (f: f.type == \"exclude\") sources.\${src}.file.filters)
+            );
+          in excludes \"nixpkgs\" + \"\n\" + excludes \"nix-bitcoin\" + \"\n\"
+        "
+    )
     checkSymlinksExcluded() {
         local source=$1 symlinks=$2 excluded missing
-        excluded=$(
-            nix eval --impure --json --expr "
-              (import $repo/examples/krops/sources.nix {
-                extraSources = {};
-                krops = (import <nix-bitcoin> {}).krops;
-              }).$source.file.filters
-            " | nix run --inputs-from "$repo" nixpkgs#jq -- -r '.[] | select(.type == "exclude") | .pattern'
-        )
+        excluded=$(awk -F '\t' -v src="$source" '$1 == src { print $2 }' <<< "$excludedFilters")
         missing=$(comm -23 <(sort <<<"$symlinks") <(sort <<<"$excluded"))
         if [[ $missing ]]; then
             >&2 echo "error: examples/krops/sources.nix doesn't exclude these symlinks of source $source:"

@@ -165,22 +165,51 @@ class Pages(unittest.TestCase):
 
 
 class Site(Tmp):
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls._template_tmp = Path(tempfile.mkdtemp())
+        cls._template_repo = cls._template_tmp / "repo"
+        cls._template_repo.mkdir()
+        git(cls._template_repo, "init", "-q")
+        cls._make_book(cls._template_repo)
+        git(cls._template_repo, "add", "-A")
+        git(cls._template_repo, "commit", "-qm", "0.1.5")
+        git(cls._template_repo, "tag", "-am", "v0.1.5", "v0.1.5")
+        write(cls._template_repo / "docs/introduction.md", "# Introduction\n\nRelease 0.1.6\n")
+        git(cls._template_repo, "commit", "-qam", "0.1.6")
+        git(cls._template_repo, "tag", "-am", "v0.1.6", "v0.1.6")
+        cls._make_book(cls._template_repo, options=True)
+        git(cls._template_repo, "add", "-A")
+        git(cls._template_repo, "commit", "-qm", "0.2.0")
+        git(cls._template_repo, "tag", "-am", "v0.2.0", "v0.2.0")
+        cls._shared_site_020 = None
+
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls._template_tmp)
+        super().tearDownClass()
+
+    def shared_site_020(self):
+        """Build the unmodified 0.2.0 site once and reuse it for read-only assertions."""
+        cls = type(self)
+        if cls._shared_site_020 is None:
+            out = cls._template_tmp / "site-0.2.0"
+            self.site_py("site", "--repo", cls._template_repo, "--latest", "0.2.0",
+                         "--out", out, "--fetch-release", self.fetch_release)
+            cls._shared_site_020 = (
+                out, cls._template_repo, self.verified(), self.nix_builds(),
+            )
+        return cls._shared_site_020
+
+    @staticmethod
+    def _make_book(root, options=False):
+        Tmp.make_book(None, root, options=options)
+
     def setUp(self):
         super().setUp()
         self.repo = self.tmp / "repo"
-        self.repo.mkdir()
-        git(self.repo, "init", "-q")
-        self.make_book(self.repo)
-        git(self.repo, "add", "-A")
-        git(self.repo, "commit", "-qm", "0.1.5")
-        git(self.repo, "tag", "-am", "v0.1.5", "v0.1.5")
-        write(self.repo / "docs/introduction.md", "# Introduction\n\nRelease 0.1.6\n")
-        git(self.repo, "commit", "-qam", "0.1.6")
-        git(self.repo, "tag", "-am", "v0.1.6", "v0.1.6")
-        self.make_book(self.repo, options=True)
-        git(self.repo, "add", "-A")
-        git(self.repo, "commit", "-qm", "0.2.0")
-        git(self.repo, "tag", "-am", "v0.2.0", "v0.2.0")
+        shutil.copytree(self._template_repo, self.repo)
         self.out = self.tmp / "site"
 
     def build_site(self, latest, check=True):
@@ -223,8 +252,7 @@ sys.exit(int(sys.argv[1]))
                                  (self.repo / "docs/introduction.md").read_text())
 
     def test_builds_the_latest_release_at_the_root_and_each_release_under_v(self):
-        self.build_site("0.2.0")
-        out = self.out
+        out, repo, verified, nix_builds = self.shared_site_020()
 
         self.assertIn(f"<title>{docs_site.HOME_TITLE}</title>", (out / "index.html").read_text())
         self.assertIn('id="opt-foo.bar"', (out / "options.html").read_text())
@@ -264,19 +292,18 @@ sys.exit(int(sys.argv[1]))
         self.assertEqual(re.findall(r'href="(/v/[^"]*)"', index), ["/v/0.2.0/", "/v/0.1.6/"])
 
         # Each published release is verified with fetch-release.sh, from the repo itself
-        repo_url = f"file://{self.repo.resolve()}"
-        self.assertEqual(self.verified(), [["0.2.0", repo_url], ["0.1.6", repo_url]])
+        repo_url = f"file://{repo.resolve()}"
+        self.assertEqual(verified, [["0.2.0", repo_url], ["0.1.6", repo_url]])
 
         # Only v0.2.0 has an option list, built from the commit of its tag
-        commit = git(self.repo, "rev-parse", "v0.2.0^{commit}")
-        self.assertEqual(self.nix_builds(), [
-            f"git+file://{self.repo.resolve()}?ref=refs%2Ftags%2Fv0.2.0&rev={commit}"
+        commit = git(repo, "rev-parse", "v0.2.0^{commit}")
+        self.assertEqual(nix_builds, [
+            f"git+file://{repo.resolve()}?ref=refs%2Ftags%2Fv0.2.0&rev={commit}"
             "#legacyPackages.x86_64-linux.docsOptions"
         ])
 
     def test_adds_a_sitemap_and_search_and_link_preview_tags(self):
-        self.build_site("0.2.0")
-        out = self.out
+        out, _, _, _ = self.shared_site_020()
         site = docs_site.SITE_URL
         self.assertEqual(re.findall(r"<loc>([^<]*)</loc>", (out / "sitemap.xml").read_text()), [
             f"{site}/", f"{site}/options.html", f"{site}/upgrading/0.2.0.html",

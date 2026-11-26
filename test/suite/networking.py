@@ -181,19 +181,30 @@ def test_netns_isolation():
     # The netns firewall rules are IPv4 only, so the veth inside a netns must
     # have no IPv6 address. Otherwise it is reachable over link-local IPv6
     # from every other netns on the bridge.
-    for service in enabled_tests.intersection(test_data["netns"]):
-        veth = f"nb-veth-{test_data['netns'][service]['id']}"
-        assert_full_match(f"ip netns exec nb-{service} ip -6 addr show dev {veth}", "")
+    ipv6_pairs = [
+        f"nb-{service}:nb-veth-{test_data['netns'][service]['id']}"
+        for service in sorted(enabled_tests.intersection(test_data["netns"]))
+    ]
+    if ipv6_pairs:
+        assert_full_match(
+            "for pair in " + " ".join(ipv6_pairs) + "; do "
+            "ip netns exec \"${pair%%:*}\" ip -6 addr show dev \"${pair#*:}\"; done",
+            "",
+        )
 
     # The netns scenarios turn MPTCP off on the host, and every service
     # namespace must inherit that, including the ones without a test of their own.
     # Timer-started services like charge-lnd have no namespace yet, so check the
     # namespaces that exist.
-    namespaces = succeed("ip netns list | cut -d' ' -f1").split()
+    namespaces = set(succeed("ip netns list | cut -d' ' -f1").split())
     assert "nb-bitcoind" in namespaces, namespaces
-    for ns in [f"nb-{service}" for service in test_data["netns"]]:
-        if ns in namespaces:
-            assert_full_match(f"ip netns exec {ns} cat /proc/sys/net/mptcp/enabled", "0\n")
+    active_ns = [f"nb-{service}" for service in test_data["netns"] if f"nb-{service}" in namespaces]
+    if active_ns:
+        assert_full_match(
+            "for ns in " + " ".join(active_ns) + "; do "
+            "ip netns exec \"$ns\" cat /proc/sys/net/mptcp/enabled; done",
+            "0\n" * len(active_ns),
+        )
 
     # netns addresses can not be bound to in the main netns.
     # This prevents processes in the main netns from impersonating nix-bitcoin services.
@@ -331,9 +342,6 @@ def test_tor_enforce():
     # A custom unit with the restriction, defined in every scenario (tests.nix)
     custom = "nb-tor-enforce-custom"
 
-    def show(unit, prop):
-        return succeed(f"systemctl show -P {prop} {unit}.service").strip()
-
     # Directories masked with fail-closed (no `-`) entries; each must be present
     # and hidden.
     masks = ["/run/nscd", "/run/systemd/resolve", "/run/dbus"]
@@ -341,11 +349,13 @@ def test_tor_enforce():
     # Check each unit's own properties before setting up the probes, so a unit
     # that lost its deny rule, allow list or masks fails here.
     # `IPAddressDeny=any` shows as below.
+    props = systemctl_show(units, ["IPAddressDeny", "IPAddressAllow", "InaccessiblePaths", "MainPID"])
     restrictions = {}
     for unit in units:
-        deny = show(unit, "IPAddressDeny")
+        unit_props = props[unit]
+        deny = unit_props["IPAddressDeny"]
         assert set(deny.split()) == {"0.0.0.0/0", "::/0"}, f"{unit} IPAddressDeny={deny!r}"
-        allow = show(unit, "IPAddressAllow")
+        allow = unit_props["IPAddressAllow"]
         nets = {
             ipaddress.ip_network(a, strict=False)
             for a in data["allow"] + data["extraAllow"].get(unit, [])
@@ -359,7 +369,7 @@ def test_tor_enforce():
             )
         }
         assert set(allow.split()) == expected_allow, f"{unit} IPAddressAllow={allow!r}"
-        inaccessible = show(unit, "InaccessiblePaths")
+        inaccessible = unit_props["InaccessiblePaths"]
         for m in masks:
             assert m in inaccessible.split(), f"{unit} doesn't mask {m}: {inaccessible!r}"
         restrictions[unit] = (deny, allow, inaccessible)
@@ -383,15 +393,14 @@ def test_tor_enforce():
 
     # A host-side marker in each masked directory shows the mask actually applies.
     marker = ".nb-tor-enforce-marker"
-    for m in masks:
-        succeed(f"touch {m}/{marker}")
-    sockets = {
+    succeed(" ".join(["touch", *(f"{m}/{marker}" for m in masks)]))
+    sockets = [
         "/run/nscd/socket",
         "/run/systemd/resolve/io.systemd.Resolve",
         "/run/dbus/system_bus_socket",
-    }
+    ]
 
-    # 1. Replay each unit's own IP filter and masks in a transient unit, so
+    # 1. Replay each distinct IP filter and mask set in a transient unit, so
     #    stopped and oneshot units (charge-lnd, electrs) are covered too.
     replay_script = (
         f"nc -z -w2 127.0.0.1 {port} || exit 11; "          # localhost allowed
@@ -400,23 +409,30 @@ def test_tor_enforce():
         + "".join(f"! test -e {m}/{marker} || exit 14; " for m in masks)  # masks hide
         + "true"
     )
-    for unit, (deny, allow, inaccessible) in restrictions.items():
-        props = (
+    for deny, allow, inaccessible in dict.fromkeys(restrictions.values()):
+        run_props = (
             # Transient units get the manager's minimal PATH, without nc/getent
             "--setenv=PATH=/run/current-system/sw/bin "
             f"-p {shlex.quote('IPAddressDeny=' + deny)} "
             f"-p {shlex.quote('IPAddressAllow=' + allow)} "
             f"-p {shlex.quote('InaccessiblePaths=' + inaccessible)}"
         )
-        succeed(f"systemd-run --wait --collect {props} sh -c {shlex.quote(replay_script)}")
+        succeed(f"systemd-run --wait --collect {run_props} sh -c {shlex.quote(replay_script)}")
     machine.log(f"tor-enforce: replayed the filter and masks of {units}")
 
     # 2. For units actually running, probe their real cgroup and mount namespace.
-    running = [u for u in units if show(u, "MainPID") != "0"]
+    running = [u for u in units if props[u]["MainPID"] != "0"]
 
     def live_probe():
+        if not running:
+            return
+        live_props = systemctl_show(running, ["ControlGroup", "MainPID"])
+        host_sockets = [
+            sock for sock in sockets if machine.execute(f"test -e {sock}")[0] == 0
+        ]
+        ns_probe = "".join(f"test ! -e {sock} && " for sock in host_sockets) + "getent hosts localhost >/dev/null"
         for unit in running:
-            cgroup = show(unit, "ControlGroup")
+            cgroup = live_props[unit]["ControlGroup"]
             # Join the unit's cgroup (host mount ns: cgroupfs is writable there),
             # which applies its IP filter to the probe.
             probe = (
@@ -425,13 +441,10 @@ def test_tor_enforce():
                 f"! nc -z -w2 {blocked} {port}"
             )
             succeed(f"sh -c {shlex.quote(probe)}")
-            pid = show(unit, "MainPID")
+            pid = live_props[unit]["MainPID"]
             # Inside the unit's mount ns: the resolver sockets are shadowed, and
             # localhost still resolves from /etc/hosts.
-            for sock in sockets:
-                if machine.execute(f"test -e {sock}")[0] == 0:
-                    succeed(f"nsenter -t {pid} -m -- test ! -e {sock}")
-            succeed(f"nsenter -t {pid} -m -- getent hosts localhost >/dev/null")
+            succeed(f"nsenter -t {pid} -m -- sh -c {shlex.quote(ns_probe)}")
 
     live_probe()
     # Restarting the resolver must not re-expose its socket in a running unit.
@@ -440,7 +453,9 @@ def test_tor_enforce():
         machine.wait_for_unit("nscd")
         live_probe()
 
-    succeed(f"systemctl stop {listener}", f"ip addr del {blocked}/32 dev lo")
-    for m in masks:
-        succeed(f"rm -f {m}/{marker}")
+    succeed(
+        f"systemctl stop {listener}",
+        f"ip addr del {blocked}/32 dev lo",
+        " ".join(["rm -f", *(f"{m}/{marker}" for m in masks)]),
+    )
     machine.log(f"tor-enforce: probed running units {running}")

@@ -210,11 +210,12 @@ def run_vulnix(repo, toplevel):
     command = [*NIX, "shell", "--impure", "-f", "test/ci/vulnix.nix", "-c", "vulnix", "--closure",
                "--json", "--kev", "--kev-mirror", KEV_MIRROR,
                "--whitelist", str(repo / ".github/cve-whitelist.toml"), toplevel]
-    errors = repo / "vulnix.err"
     for attempt in range(1, ATTEMPTS + 1):
-        with open(repo / "vulnix-report.json", "wb") as out, open(errors, "wb") as err:
-            rc = subprocess.run(command, cwd=repo, env=scan_env(), stdout=out, stderr=err).returncode
-        stderr = errors.read_bytes().decode("utf-8", "replace")
+        with open(repo / "vulnix-report.json", "wb") as out:
+            result = subprocess.run(command, cwd=repo, env=scan_env(), stdout=out,
+                                    stderr=subprocess.PIPE)
+        rc = result.returncode
+        stderr = result.stderr.decode("utf-8", "replace")
         if rc != 1:
             break
         last = stderr.removesuffix("\n").rsplit("\n", 1)[-1]

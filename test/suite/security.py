@@ -139,21 +139,31 @@ def test_rpc_whitelist():
         "generatetoaddress": "generatetoaddress 1 invalid",
     }
 
-    def is_forbidden(user, method):
-        _, out = machine.execute(
-            f"bitcoin-cli -rpcuser={user} -rpcpassword=$(cat /secrets/bitcoin-rpcpassword-{user})"
-            f" {calls[method]} 2>&1"
-        )
-        if "Could not connect to the server" in out or "Authorization failed" in out:
-            raise Exception(f"RPC call {method} as user {user} failed: {out}")
-        return "server returned HTTP error 403" in out
-
     def assert_rpc_access(user, allowed, denied):
+        methods = allowed + denied
+        sep = "---NB-RPC-SEP---"
+        # Read the user's password once and execute all method probes in one round-trip.
+        lines = [
+            f"pw=$(< /secrets/bitcoin-rpcpassword-{shlex.quote(user)})",
+            *(
+                f"bitcoin-cli -rpcuser={shlex.quote(user)} -rpcpassword=\"$pw\" {calls[m]} 2>&1 || true; "
+                f"printf '\\n{sep}\\n'"
+                for m in methods
+            ),
+        ]
+        out = succeed("\n".join(lines))
+        outputs = out.split(f"\n{sep}\n")[:-1]
+        assert len(outputs) == len(methods), (len(outputs), len(methods), out)
+        results = {}
+        for method, response in zip(methods, outputs):
+            if "Could not connect to the server" in response or "Authorization failed" in response:
+                raise Exception(f"RPC call {method} as user {user} failed: {response}")
+            results[method] = "server returned HTTP error 403" in response
         for method in allowed:
-            if is_forbidden(user, method):
+            if results[method]:
                 raise Exception(f"RPC user {user} should be allowed to call {method}")
         for method in denied:
-            if not is_forbidden(user, method):
+            if not results[method]:
                 raise Exception(f"RPC user {user} should not be allowed to call {method}")
 
     machine.wait_until_succeeds("bitcoin-cli getnetworkinfo")
@@ -735,24 +745,17 @@ def test_rtl_permissions():
         status, output = machine.execute(f"{lncli} --macaroonpath {macaroon} bakemacaroon info:read 2>&1")
         assert status != 0 and "permission denied" in output, (status, output)
 
-        def has_permissions(rpc):
-            # lnd checks the macaroon for the RPC's permissions. The admin macaroon
-            # authenticates the check.
-            body = (f"base64 -w0 {macaroon} | jq -Rs --arg rpc {rpc} "
-                    "'{macaroon: ., fullMethod: $rpc, check_default_perms_from_full_method: true}'")
-            curl = ("curl -sS --max-time 30 --cacert /secrets/lnd-cert "
-                    "-H @<(printf 'Grpc-Metadata-macaroon: %s\\n' "
-                    f"\"$(xxd -ps -c 99999 {lnd['networkDir']}/admin.macaroon)\") --data-binary @- "
-                    f"https://{ip('lnd')}:{lnd['restPort']}/v1/macaroon/checkpermissions")
-            return succeed_json(f"{body} | runuser -u {lnd['user']} -- bash -c {shlex.quote(curl)}")
-
-        for rpc in rpcs:
-            response = has_permissions(rpc)
+        # lnd checks the macaroon for each RPC's permissions in one batched call.
+        # lnd answers an unknown RPC with another error.
+        denied_rpcs = (
+            "/lnrpc.Lightning/BakeMacaroon", "/lnrpc.Lightning/StopDaemon",
+            "/lnrpc.Lightning/DeleteAllPayments", "/signrpc.Signer/SignOutputRaw",
+        )
+        all_rpcs = list(rpcs) + list(denied_rpcs)
+        responses = check_lnd_macaroon_permissions(lnd, macaroon, all_rpcs)
+        for rpc, response in zip(rpcs, responses[:len(rpcs)]):
             assert response.get("valid") is True, (rpc, response)
-        # lnd answers an unknown RPC with another error
-        for rpc in ("/lnrpc.Lightning/BakeMacaroon", "/lnrpc.Lightning/StopDaemon",
-                    "/lnrpc.Lightning/DeleteAllPayments", "/signrpc.Signer/SignOutputRaw"):
-            response = has_permissions(rpc)
+        for rpc, response in zip(denied_rpcs, responses[len(rpcs):]):
             assert response.get("message") == "permission denied", (rpc, response)
         succeed(f"rm {macaroon}")
 
@@ -765,13 +768,28 @@ def test_rtl_permissions():
         # A method that RTL doesn't call
         assert clnrest_status(cln, rune, "createrune") == "401"
 
-        def checkrune(method):
-            return f"lightning-cli -k checkrune rune={shlex.quote(rune)} method={method}"
-
-        for method in RTL_CLN_METHODS:
-            succeed(f"{checkrune(method)} | jq -e .valid")
-        for method in ("createrune", "blacklistrune", "showrunes", "stop"):
-            assert_matches(f"{checkrune(method)} 2>&1 || true", "Not permitted")
+        denied_methods = ("createrune", "blacklistrune", "showrunes", "stop")
+        all_methods = list(RTL_CLN_METHODS) + list(denied_methods)
+        sep = "---NB-CLN-SEP---"
+        # Run all checkrune calls under one clightning session to avoid repeated PAM/jq forks.
+        check_script = (
+            "rune=$(cat); "
+            + "; ".join(
+                f"lightning-cli -k checkrune rune=\"$rune\" method={shlex.quote(m)} 2>&1 || true; "
+                f"printf '\\n{sep}\\n'"
+                for m in all_methods
+            )
+        )
+        out = succeed(
+            f"runuser -u {shlex.quote(cln['user'])} -- bash -c {shlex.quote(check_script)} "
+            f"<<'EOF'\n{rune}\nEOF"
+        )
+        outputs = out.split(f"\n{sep}\n")[:-1]
+        assert len(outputs) == len(all_methods), (len(outputs), len(all_methods), out)
+        for method, response in zip(RTL_CLN_METHODS, outputs[:len(RTL_CLN_METHODS)]):
+            assert json.loads(response).get("valid") is True, (method, response)
+        for method, response in zip(denied_methods, outputs[len(RTL_CLN_METHODS):]):
+            assert_str_matches(response, "Not permitted")
 
     # After login, RTL's dashboard loads these for each backend. A missing lnd
     # permission or clightning method for one of these requests fails it.
@@ -793,13 +811,10 @@ def test_rtl_permissions():
     nodes = {"cln": (1, data["clightning"]), "lnd": (2, data["lnd"])}
     rtl = rtl_url(data["address"], data["port"])
     jar = "/run/rtl-permissions-test-cookies"
-    # The first page sets the session and CSRF cookies
-    succeed(f"curl -fsS -o /dev/null -c {jar} {rtl}/")
-    xsrf = unquote(succeed(f"awk '$6 == \"XSRF-TOKEN\" {{ print $7 }}' {jar}").strip())
-    token = None
+    xsrf, token = rtl_login(rtl, jar)
 
     def api(method, path, body=None):
-        headers = [f"X-XSRF-TOKEN: {xsrf}"] + ([f"Authorization: Bearer {token}"] if token else [])
+        headers = [f"X-XSRF-TOKEN: {xsrf}", f"Authorization: Bearer {token}"]
         args = " ".join(f"-H {shlex.quote(header)}" for header in headers)
         if body is not None:
             args += f" -H 'Content-Type: application/json' --data-binary {shlex.quote(json.dumps(body))}"
@@ -808,13 +823,6 @@ def test_rtl_permissions():
         response, status = output.rsplit("\n", 1)
         return status, response
 
-    password = succeed("cat /secrets/rtl-password").rstrip("\n")
-    status, response = api("POST", "authenticate", {
-        "authenticateWith": "PASSWORD",
-        "authenticationValue": hashlib.sha256(password.encode()).hexdigest(),
-    })
-    assert status == "200", (status, response)
-    token = json.loads(response)["token"]
     for backend, (index, enabled) in nodes.items():
         if not enabled:
             continue
@@ -1001,13 +1009,14 @@ EOF""")
 
     if "onion-addresses" in units:
         machine.wait_for_unit("onion-addresses")
+    unit_info = systemctl_show(list(units), ["MainPID", "Type", "ActiveState"])
     checked = []
     for unit in units:
-        pid = main_pid(unit)
+        info = unit_info[unit]
+        pid = info["MainPID"]
         if pid != "0":
             writable = probe_daemon(unit, pid)
-        elif (succeed(f"systemctl show -P Type {unit}.service").strip() == "oneshot"
-              and succeed(f"systemctl show -P ActiveState {unit}.service").strip() == "active"):
+        elif info["Type"] == "oneshot" and info["ActiveState"] == "active":
             writable = probe_oneshot(unit)
         else:
             continue

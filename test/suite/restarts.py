@@ -37,9 +37,10 @@ def test_restart_bitcoind():
     # explicitly so that only the steps below rely on `wantedBy`.
     succeed("systemctl start bitcoind")
     wait_for_bitcoind()
-    for unit in dependents:
-        succeed(f"systemctl start {unit}")
-        machine.wait_for_unit(unit)
+    if dependents:
+        succeed(f"systemctl start {' '.join(dependents)}")
+        for unit in dependents:
+            machine.wait_for_unit(unit)
 
     # A dependent can end up `failed` instead of `inactive` when it hits its
     # stop timeout (clightning with clboss has TimeoutStopSec=500ms here).
@@ -195,6 +196,19 @@ def test_clnrest_admin_rune():
         assert succeed(f"cat {rtl_file}") == rtl_rune, f"RTL's rune in {rtl_file} changed"
 
 
+@contextmanager
+def pause_lnd_timers():
+    """Pause timers that `require` lnd so ticks don't restart lnd mid-test."""
+    timers = ["charge-lnd.timer"] if "charge-lnd" in enabled_tests else []
+    if timers:
+        succeed(f"systemctl stop {' '.join(timers)}")
+    try:
+        yield
+    finally:
+        if timers:
+            succeed(f"systemctl start {' '.join(timers)}")
+
+
 # Impure: restarts lnd on a new data dir, then on the original one
 @test("lnd-wallet-init")
 def test_lnd_wallet_init():
@@ -209,8 +223,6 @@ def test_lnd_wallet_init():
     # Run the preStart script directly: a failed lnd unit would fail later checks
     # that lnd never failed
     pre_start = f"runuser -u {user} -- {data['preStart']}"
-    # charge-lnd `requires` lnd, so a timer tick would start lnd during the test
-    timers = ["charge-lnd.timer"] if "charge-lnd" in enabled_tests else []
 
     def start_lnd():
         succeed("systemctl start lnd")
@@ -218,56 +230,56 @@ def test_lnd_wallet_init():
 
     # lnd might still be restarting after the preceding tests
     start_lnd()
-    succeed(*[f"systemctl stop {unit}" for unit in timers + ["lnd"]])
-    succeed(
-        f"mv {data_dir} {data_dir}.orig",
-        f"install -d -o {user} -g {data['group']} -m 770 {data_dir}",
-    )
+    with pause_lnd_timers():
+        succeed("systemctl stop lnd")
+        succeed(
+            f"mv {data_dir} {data_dir}.orig",
+            f"install -d -o {user} -g {data['group']} -m 770 {data_dir}",
+        )
 
-    # A wallet.db that is a symlink to a missing file fails before a seed is
-    # created, with or without a seed, and nothing is replaced
-    wallet = f"{network_dir}/wallet.db"
-    succeed(f"runuser -u {user} -- sh -c 'umask 077 && mkdir -p {network_dir} && ln -s missing {wallet}'")
-    state = f"ls -A {network_dir}; stat -c '%N %s' {wallet} {seed} 2>&1 || true"
-    for make_seed in ["true", f"runuser -u {user} -- sh -c 'echo seed-words > {seed}'"]:
-        succeed(make_seed)
-        before = succeed(state)
+        # A wallet.db that is a symlink to a missing file fails before a seed is
+        # created, with or without a seed, and nothing is replaced
+        wallet = f"{network_dir}/wallet.db"
+        succeed(f"runuser -u {user} -- sh -c 'umask 077 && mkdir -p {network_dir} && ln -s missing {wallet}'")
+        state = f"ls -A {network_dir}; stat -c '%N %s' {wallet} {seed} 2>&1 || true"
+        for make_seed in ["true", f"runuser -u {user} -- sh -c 'echo seed-words > {seed}'"]:
+            succeed(make_seed)
+            before = succeed(state)
+            status, out = machine.execute(f"{pre_start} 2>&1")
+            assert status != 0 and "wallet.db' isn't a regular file" in out, out
+            assert succeed(state) == before
+        succeed(f"rm {wallet} {seed}")
+
+        # An empty seed, left by a failed `lndinit gen-seed` of an earlier version
+        succeed(f"runuser -u {user} -- install -m 400 /dev/null {seed}")
         status, out = machine.execute(f"{pre_start} 2>&1")
-        assert status != 0 and "wallet.db' isn't a regular file" in out, out
-        assert succeed(state) == before
-    succeed(f"rm {wallet} {seed}")
+        assert status != 0 and "lnd-seed-mnemonic' is empty" in out, out
+        succeed(f"[[ ! -s {seed} ]]")
 
-    # An empty seed, left by a failed `lndinit gen-seed` of an earlier version
-    succeed(f"runuser -u {user} -- install -m 400 /dev/null {seed}")
-    status, out = machine.execute(f"{pre_start} 2>&1")
-    assert status != 0 and "lnd-seed-mnemonic' is empty" in out, out
-    succeed(f"[[ ! -s {seed} ]]")
+        # Without the seed file, a new seed is created. Then lndinit creates
+        # wallet.db in a temp dir and fails on the empty password. No wallet.db
+        # and no temp dir may be left.
+        succeed(
+            f"rm {seed}",
+            f"cp {password} /root/lnd-wallet-password.orig",
+            f"truncate -s 0 {password}",
+        )
+        machine.fail(pre_start)
+        succeed(f"[[ -s {seed} && ! -e {network_dir}/wallet.db ]]", no_wallet_tmp)
+        assert_file_metadata(seed, owner=user, mode="400", file_type="regular file")
+        seed_hash = succeed(f"sha256sum {seed}")
 
-    # Without the seed file, a new seed is created. Then lndinit creates
-    # wallet.db in a temp dir and fails on the empty password. No wallet.db
-    # and no temp dir may be left.
-    succeed(
-        f"rm {seed}",
-        f"cp {password} /root/lnd-wallet-password.orig",
-        f"truncate -s 0 {password}",
-    )
-    machine.fail(pre_start)
-    succeed(f"[[ -s {seed} && ! -e {network_dir}/wallet.db ]]", no_wallet_tmp)
-    assert_file_metadata(seed, owner=user, mode="400", file_type="regular file")
-    seed_hash = succeed(f"sha256sum {seed}")
+        # The next start keeps the seed and creates the wallet
+        succeed(
+            f"cat /root/lnd-wallet-password.orig > {password}",
+            "rm /root/lnd-wallet-password.orig",
+        )
+        start_lnd()
+        assert succeed(f"sha256sum {seed}") == seed_hash
+        succeed(f"[[ -s {network_dir}/wallet.db ]]", no_wallet_tmp)
 
-    # The next start keeps the seed and creates the wallet
-    succeed(
-        f"cat /root/lnd-wallet-password.orig > {password}",
-        "rm /root/lnd-wallet-password.orig",
-    )
-    start_lnd()
-    assert succeed(f"sha256sum {seed}") == seed_hash
-    succeed(f"[[ -s {network_dir}/wallet.db ]]", no_wallet_tmp)
-
-    succeed("systemctl stop lnd", f"rm -rf {data_dir}", f"mv {data_dir}.orig {data_dir}")
-    start_lnd()
-    succeed(*[f"systemctl start {unit}" for unit in timers])
+        succeed("systemctl stop lnd", f"rm -rf {data_dir}", f"mv {data_dir}.orig {data_dir}")
+        start_lnd()
 
 
 # Impure: stops, starts and terminates lnd and clightning
@@ -293,91 +305,85 @@ def test_rtl_stops_with_backend():
         backend_ready = int(show(backend, "ActiveEnterTimestampMonotonic"))
         assert rtl_start >= backend_ready, f"RTL started before {backend} was ready"
 
-    # charge-lnd `requires` lnd, so a timer tick would start lnd, and RTL with it
-    timers = ["charge-lnd.timer"] if "charge-lnd" in enabled_tests else []
-    for unit in timers:
-        succeed(f"systemctl stop {unit}")
-    # The preceding tests may have left units down
-    succeed(f"systemctl start {' '.join(backends)} rtl")
-    if "lnd" in backends:
-        wait_for_lnd_server()
+    with pause_lnd_timers():
+        # The preceding tests may have left units down
+        succeed(f"systemctl start {' '.join(backends)} rtl")
+        if "lnd" in backends:
+            wait_for_lnd_server()
 
-    for backend in backends:
-        with machine.nested(f"backend: {backend}"):
-            # 1. An explicit stop stops RTL first, and RTL stays down.
-            succeed(f"systemctl stop {backend}")
-            assert show("rtl", "ActiveState") == "inactive", f"RTL runs without {backend}"
-            # Longer than RestartSec, so a restart of RTL would show here
-            machine.sleep(restart_sec + 5)
-            assert re.fullmatch(stopped, show(backend, "ActiveState")), f"{backend} came back"
-            assert show("rtl", "ActiveState") == "inactive", f"RTL came back without {backend}"
+        for backend in backends:
+            with machine.nested(f"backend: {backend}"):
+                # 1. An explicit stop stops RTL first, and RTL stays down.
+                succeed(f"systemctl stop {backend}")
+                assert show("rtl", "ActiveState") == "inactive", f"RTL runs without {backend}"
+                # Longer than RestartSec, so a restart of RTL would show here
+                machine.sleep(restart_sec + 5)
+                assert re.fullmatch(stopped, show(backend, "ActiveState")), f"{backend} came back"
+                assert show("rtl", "ActiveState") == "inactive", f"RTL came back without {backend}"
 
-            # 2. Starting the backend starts RTL, after the backend is ready.
-            succeed(f"systemctl start {backend}")
-            assert_rtl_started_after(backend)
-
-            # 3. When the backend exits by itself, with no stop job, RTL stops
-            # with it. lnd exits cleanly on SIGTERM, so the later
-            # `assert_no_failure` checks of lnd still pass. clightning's exit
-            # can fail, see below. No later test checks clightning for failures.
-            backend_before = show(backend, "InvocationID")
-            rtl_before = show("rtl", "InvocationID")
-            if backend == "lnd":
-                wait_for_lnd_server()
-            succeed(f"systemctl kill -s TERM {backend}")
-            if backend == "lnd":
-                # `Restart = "always"` brings lnd back, and lnd starts RTL once it's ready
-                machine.wait_until_succeeds(
-                    f"[[ $(systemctl show -P InvocationID {backend}) != '{backend_before}' ]]"
-                )
-            else:
-                # clightning only restarts on failure. With clboss, a torified
-                # `dig` ignores SIGTERM, so the exit can hit the stop timeout and
-                # fail. Then clightning goes from `failed` to `activating` in one
-                # step and restarts after RestartSec, so polling `ActiveState`
-                # alone can miss the stop. Wait for either outcome.
-                machine.wait_until_succeeds(
-                    f"[[ $(systemctl show -P InvocationID {backend}) != '{backend_before}' ]] || "
-                    f"[[ $(systemctl show -P ActiveState {backend}) =~ ^({stopped})$ ]]"
-                )
-                # Also fine during or after clightning's own restart
+                # 2. Starting the backend starts RTL, after the backend is ready.
                 succeed(f"systemctl start {backend}")
-            assert_rtl_started_after(backend)
-            assert show("rtl", "InvocationID") != rtl_before, "RTL was not restarted"
-            if backend == "lnd":
-                # Nothing that RTL adds may start lnd before its RestartSec.
-                # `wantedBy = [ "lnd.service" ]` on RTL did, because lnd sends
-                # STOPPING=1 as it shuts down.
-                restart_delay = (int(show(backend, "ExecMainStartTimestampMonotonic"))
-                                 - int(show(backend, "InactiveEnterTimestampMonotonic")))
-                assert restart_delay >= (restart_sec - 1) * 1_000_000, \
-                    f"lnd restarted {restart_delay / 1_000_000:.1f} s after it exited"
-            # RTL must stop when the backend exits, not after a restart delay.
-            # Half of RestartSec leaves time for RTL's own stop.
-            delay = (int(show("rtl", "InactiveEnterTimestampMonotonic"))
-                     - int(show(backend, "InactiveEnterTimestampMonotonic")))
-            assert delay < restart_sec * 1_000_000 / 2, f"RTL kept running without {backend}"
+                assert_rtl_started_after(backend)
 
-    if len(backends) == 2:
-        # 4. While one backend is stopped, the other's start doesn't start it or
-        # RTL: the hook doesn't pull in RTL's backends, and systemd refuses to
-        # start RTL while a backend that it's bound to is down.
-        since = succeed("date +%s").strip()
-        succeed("systemctl stop clightning")
-        wait_for_lnd_server()
-        succeed("systemctl restart lnd")
-        # lnd's start queued a start of RTL, which systemd refused
-        machine.wait_until_succeeds(
-            f"journalctl -u rtl --since @{since} --grep"
-            " 'Bound to unit clightning.service, but unit isn'"
-        )
-        assert re.fullmatch(stopped, show("clightning", "ActiveState")), "lnd's start started clightning"
-        assert show("rtl", "ActiveState") == "inactive", "RTL runs without clightning"
-        succeed("systemctl start clightning")
-        assert_rtl_started_after("clightning")
+                # 3. When the backend exits by itself, with no stop job, RTL stops
+                # with it. lnd exits cleanly on SIGTERM, so the later
+                # `assert_no_failure` checks of lnd still pass. clightning's exit
+                # can fail, see below. No later test checks clightning for failures.
+                backend_before = show(backend, "InvocationID")
+                rtl_before = show("rtl", "InvocationID")
+                if backend == "lnd":
+                    wait_for_lnd_server()
+                succeed(f"systemctl kill -s TERM {backend}")
+                if backend == "lnd":
+                    # `Restart = "always"` brings lnd back, and lnd starts RTL once it's ready
+                    machine.wait_until_succeeds(
+                        f"[[ $(systemctl show -P InvocationID {backend}) != '{backend_before}' ]]"
+                    )
+                else:
+                    # clightning only restarts on failure. With clboss, a torified
+                    # `dig` ignores SIGTERM, so the exit can hit the stop timeout and
+                    # fail. Then clightning goes from `failed` to `activating` in one
+                    # step and restarts after RestartSec, so polling `ActiveState`
+                    # alone can miss the stop. Wait for either outcome.
+                    machine.wait_until_succeeds(
+                        f"[[ $(systemctl show -P InvocationID {backend}) != '{backend_before}' ]] || "
+                        f"[[ $(systemctl show -P ActiveState {backend}) =~ ^({stopped})$ ]]"
+                    )
+                    # Also fine during or after clightning's own restart
+                    succeed(f"systemctl start {backend}")
+                assert_rtl_started_after(backend)
+                assert show("rtl", "InvocationID") != rtl_before, "RTL was not restarted"
+                if backend == "lnd":
+                    # Nothing that RTL adds may start lnd before its RestartSec.
+                    # `wantedBy = [ "lnd.service" ]` on RTL did, because lnd sends
+                    # STOPPING=1 as it shuts down.
+                    restart_delay = (int(show(backend, "ExecMainStartTimestampMonotonic"))
+                                     - int(show(backend, "InactiveEnterTimestampMonotonic")))
+                    assert restart_delay >= (restart_sec - 1) * 1_000_000, \
+                        f"lnd restarted {restart_delay / 1_000_000:.1f} s after it exited"
+                # RTL must stop when the backend exits, not after a restart delay.
+                # Half of RestartSec leaves time for RTL's own stop.
+                delay = (int(show("rtl", "InactiveEnterTimestampMonotonic"))
+                         - int(show(backend, "InactiveEnterTimestampMonotonic")))
+                assert delay < restart_sec * 1_000_000 / 2, f"RTL kept running without {backend}"
 
-    for unit in timers:
-        succeed(f"systemctl start {unit}")
+        if len(backends) == 2:
+            # 4. While one backend is stopped, the other's start doesn't start it or
+            # RTL: the hook doesn't pull in RTL's backends, and systemd refuses to
+            # start RTL while a backend that it's bound to is down.
+            since = succeed("date +%s").strip()
+            succeed("systemctl stop clightning")
+            wait_for_lnd_server()
+            succeed("systemctl restart lnd")
+            # lnd's start queued a start of RTL, which systemd refused
+            machine.wait_until_succeeds(
+                f"journalctl -u rtl --since @{since} --grep"
+                " 'Bound to unit clightning.service, but unit isn'"
+            )
+            assert re.fullmatch(stopped, show("clightning", "ActiveState")), "lnd's start started clightning"
+            assert show("rtl", "ActiveState") == "inactive", "RTL runs without clightning"
+            succeed("systemctl start clightning")
+            assert_rtl_started_after("clightning")
 
 
 # Impure: restarts lnd. Runs after `regtest`, so lnd is synced.
@@ -391,19 +397,15 @@ def test_lnd_restart_on_clean_exit():
     # tick during this test would start lnd itself and hide a missing
     # `Restart=`. RTL is bound to lnd and stops with it. Only lnd's own start
     # starts RTL again, so RTL never starts lnd here.
-    timers = ["charge-lnd.timer"] if "charge-lnd" in enabled_tests else []
-    for unit in timers:
-        succeed(f"systemctl stop {unit}")
-    assert_running("lnd")
-    before = succeed("systemctl show -P InvocationID lnd").strip()
-    succeed("runuser -u operator -- lncli stop")
-    # Right after `lncli stop`, lnd may still be active (shutting down).
-    # Poll for a new invocation instead of polling `is-active`.
-    machine.wait_until_succeeds(f"[[ $(systemctl show -P InvocationID lnd) != '{before}' ]]")
-    machine.wait_for_unit("lnd")
-    machine.wait_until_succeeds("runuser -u operator -- lncli getinfo")
-    for unit in timers:
-        succeed(f"systemctl start {unit}")
+    with pause_lnd_timers():
+        assert_running("lnd")
+        before = succeed("systemctl show -P InvocationID lnd").strip()
+        succeed("runuser -u operator -- lncli stop")
+        # Right after `lncli stop`, lnd may still be active (shutting down).
+        # Poll for a new invocation instead of polling `is-active`.
+        machine.wait_until_succeeds(f"[[ $(systemctl show -P InvocationID lnd) != '{before}' ]]")
+        machine.wait_for_unit("lnd")
+        machine.wait_until_succeeds("runuser -u operator -- lncli getinfo")
 
 
 # Impure: restarts lnd and deletes the root key of a configured macaroon
@@ -506,8 +508,6 @@ def test_lnd_macaroon_revocation():
 
     # The restart after deleting root keys must not undo a stop that came
     # first. A stop also removes the macaroons.
-    # charge-lnd `requires` lnd, so pause its timer.
-    timers = ["charge-lnd.timer"] if "charge-lnd" in enabled_tests else []
     script = succeed(
         "systemctl show lnd -p ExecStartPost --value"
         " | grep -oE '/nix/store/[^ ]+-lnd-create-macaroons' | head -1"
@@ -515,24 +515,25 @@ def test_lnd_macaroon_revocation():
     restart_lnd = succeed(
         f"grep -oE '/nix/store/[^ ]+-lnd-restart-after-macaroon-cleanup' {script} | head -1"
     ).strip()
-    succeed(*[f"systemctl stop {unit}" for unit in timers], "systemctl stop lnd", "! test -e /run/lnd")
-    succeed(restart_lnd)
-    assert_full_match("systemctl show -P ActiveState lnd", "inactive\n")
-    # A stop of lnd waits while a unit that runs after lnd stops. If the
-    # restart can't run then, it stops lnd and fails.
-    succeed(
-        "systemctl start lnd",
-        "systemd-run --unit=lnd-test-slow-stop --remain-after-exit"
-        " -p After=lnd.service -p Requires=lnd.service"
-        " -p 'ExecStop=/run/current-system/sw/bin/sleep 5' /run/current-system/sw/bin/true",
-        "systemctl stop --no-block lnd",
-    )
-    machine.wait_until_succeeds("systemctl list-jobs --no-legend lnd.service | grep -w stop")
-    status, output = machine.execute(f"{restart_lnd} 2>&1")
-    assert status != 0, output
-    # If lnd was already stopping, the script exits without waiting for it
-    machine.wait_until_succeeds("[[ $(systemctl show -P ActiveState lnd) == inactive ]]")
-    succeed("systemctl start lnd", *[f"systemctl start {unit}" for unit in timers])
+    with pause_lnd_timers():
+        succeed("systemctl stop lnd", "! test -e /run/lnd")
+        succeed(restart_lnd)
+        assert_full_match("systemctl show -P ActiveState lnd", "inactive\n")
+        # A stop of lnd waits while a unit that runs after lnd stops. If the
+        # restart can't run then, it stops lnd and fails.
+        succeed(
+            "systemctl start lnd",
+            "systemd-run --unit=lnd-test-slow-stop --remain-after-exit"
+            " -p After=lnd.service -p Requires=lnd.service"
+            " -p 'ExecStop=/run/current-system/sw/bin/sleep 5' /run/current-system/sw/bin/true",
+            "systemctl stop --no-block lnd",
+        )
+        machine.wait_until_succeeds("systemctl list-jobs --no-legend lnd.service | grep -w stop")
+        status, output = machine.execute(f"{restart_lnd} 2>&1")
+        assert status != 0, output
+        # If lnd was already stopping, the script exits without waiting for it
+        machine.wait_until_succeeds("[[ $(systemctl show -P ActiveState lnd) == inactive ]]")
+        succeed("systemctl start lnd")
     machine.wait_until_succeeds(f"{lncli} getinfo")
 
 
