@@ -204,14 +204,15 @@ let
     wallets=$(${cli} listwallets)
     mapfile -d "" names < <(${jq} --raw-output0 '.[]' <<< "$wallets")
     status=0
-    index='{}'
+    entries=()
     for name in "''${names[@]}"; do
       # The hash keeps the file name short for any wallet name
-      file=wallet-$(printf '%s' "$name" | sha256sum | cut -d ' ' -f 1).dat
+      read -r hash _ < <(printf '%s' "$name" | sha256sum)
+      file=wallet-$hash.dat
       # A failed copy leaves no file
       if ${cli} -rpcwallet="$name" backupwallet "$dir/$file.tmp"; then
         mv -T "$dir/$file.tmp" "$dir/$file"
-        index=$(${jq} --arg file "$file" --arg name "$name" '.[$file] = $name' <<< "$index")
+        entries+=("$file" "$name")
       else
         echo "Error: Can't copy bitcoind wallet '$name'" >&2
         rm -f "$dir/$file.tmp"
@@ -219,7 +220,8 @@ let
       fi
     done
     # Lets a restore find the copy of each wallet
-    printf '%s\n' "$index" > "$dir/wallet-names.json.tmp"
+    ${jq} -n 'reduce range(0; $ARGS.positional | length; 2) as $i ({}; .[$ARGS.positional[$i]] = $ARGS.positional[$i + 1])' \
+      --args "''${entries[@]}" > "$dir/wallet-names.json.tmp"
     mv -T "$dir/wallet-names.json.tmp" "$dir/wallet-names.json"
     exit $status
   '';

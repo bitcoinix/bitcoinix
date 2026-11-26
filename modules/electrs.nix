@@ -90,8 +90,9 @@ in {
       preStart = ''
         # electrs.toml holds the public RPC password, so create it with mode 600
         # instead of relying on the data directory mode alone.
+        rpcpass=$(< '${secretsDir}/bitcoin-rpcpassword-public')
         install -T -m 600 \
-          <(echo "auth = \"${bitcoind.rpc.users.public.name}:$(cat ${secretsDir}/bitcoin-rpcpassword-public)\"") \
+          <(printf 'auth = "%s:%s"\n' '${bitcoind.rpc.users.public.name}' "$rpcpass") \
           electrs.toml
         '';
       serviceConfig = nbLib.defaultHardening // {

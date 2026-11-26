@@ -391,7 +391,7 @@ let
     # output on stdin, and $2 in their default ACLs. All other users and groups
     # keep their effective rights. Leaves alone the entries of other groups.
     grantGroup() {
-      ${pkgs.gawk}/bin/awk -v access="$1" -v defaults="$2" -v gid="$(id -g)" \
+      ${pkgs.gawk}/bin/awk -v access="$1" -v defaults="$2" -v gid="$gid" \
         -f ${./bitcoind/grant-group.awk} |
         ${pkgs.acl}/bin/setfacl -P --restore=/dev/stdin
     }
@@ -413,6 +413,7 @@ let
     setUpGroupRead() (
       set -o pipefail
       umask 077
+      gid=$(id -g)
       failed=""
       cd '${cfg.dataDir}' || exit
       ${getfacl} . | grantGroup --x "" || failed=1
@@ -607,23 +608,24 @@ in {
         extraRpcauth = concatMapStrings (name: let
           user = cfg.rpc.users.${name};
         in optionalString user.passwordHMACFromFile ''
-            echo "rpcauth=${user.name}:$(cat ${secretsDir}/bitcoin-HMAC-${name})"
-          ''
-        ) (builtins.attrNames cfg.rpc.users);
+          hmac=$(< '${secretsDir}/bitcoin-HMAC-${name}')
+          extraRpcauth+="rpcauth=${user.name}:$hmac"$'\n'
+        '') (builtins.attrNames cfg.rpc.users);
       in ''
         ${optionalString (cfg.getPublicAddressCmd != "")
           (nbLib.readPublicAddress "bitcoind" cfg.getPublicAddressCmd)}
+        extraRpcauth=""
+        ${extraRpcauth}
         cfg=$(
           cat ${configFile}
-          ${extraRpcauth}
-          echo
+          printf '%s\n' "$extraRpcauth"
           ${optionalString (cfg.getPublicAddressCmd != "") ''
             echo "externalip=$publicAddress"
           ''}
         )
         # Always replace the file. Older versions let the operator write the data
         # dir, so the file can belong to the operator.
-        install -T -o '${cfg.user}' -g '${cfg.group}' -m 640 <(echo "$cfg") '${cfg.dataDir}/bitcoin.conf'
+        install -T -m 640 <(printf '%s\n' "$cfg") '${cfg.dataDir}/bitcoin.conf'
       '';
 
       serviceConfig = nbLib.defaultHardening // {

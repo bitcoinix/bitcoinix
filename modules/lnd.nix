@@ -101,7 +101,7 @@ let
       default = pkgs.writers.writeBashBin "lncli"
         # Switch user because lnd makes datadir contents readable by user only
         ''
-          ${runAsUser} ${cfg.user} ${cfg.package}/bin/lncli \
+          exec ${runAsUser} ${cfg.user} ${cfg.package}/bin/lncli \
             --rpcserver ${escapeShellArg cfg.rpcEndpoint} \
             --tlscertpath '${cfg.certPath}' \
             --macaroonpath '${networkDir}/admin.macaroon' "$@"
@@ -274,14 +274,15 @@ in {
       preStart = ''
         ${optionalString (cfg.getPublicAddressCmd != "")
           (nbLib.readPublicAddress "lnd" cfg.getPublicAddressCmd)}
+        rpcpass=$(< '${secretsDir}/bitcoin-rpcpassword-public')
         conf=$(
           cat ${configFile}
-          echo "bitcoind.rpcpass=$(cat ${secretsDir}/bitcoin-rpcpassword-public)"
+          printf 'bitcoind.rpcpass=%s\n' "$rpcpass"
           ${optionalString (cfg.getPublicAddressCmd != "") ''
             echo "externalip=$publicAddress${onionPortSuffix}"
           ''}
         )
-        install -T -m 600 <(echo "$conf") '${cfg.dataDir}/lnd.conf'
+        install -T -m 600 <(printf '%s\n' "$conf") '${cfg.dataDir}/lnd.conf'
 
         wallet='${networkDir}/wallet.db'
         if [[ -e $wallet || -L $wallet ]]; then

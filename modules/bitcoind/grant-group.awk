@@ -51,10 +51,12 @@ function grant(type, want,   mask, gained, i) {
   if ((type "mask:") in entry) {
     mask = entry[type "mask:"]
     gained = without(want, perms[mask])
-    for (i = 1; i <= n; i++)
-      if (tag[i] ~ ("^" type "(user|group):."))
-        perms[i] = without(perms[i], gained)
-    perms[mask] = union(perms[mask], want)
+    if (gained != "---") {
+      for (i = 1; i <= n; i++)
+        if (tag[i] ~ ("^" type "(user|group):."))
+          perms[i] = without(perms[i], gained)
+      perms[mask] = union(perms[mask], want)
+    }
   }
   perms[entry[type "group:"]] = union(perms[entry[type "group:"]], want)
 }

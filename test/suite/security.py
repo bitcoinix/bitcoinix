@@ -497,7 +497,10 @@ def test_rtl_credentials():
         machine.wait_until_succeeds(current_run_log_has_string("rtl", "Server is up and running"))
 
     if lnd := data["lnd"]:
-        script = get_script("rtl-copy-macaroon")
+        # Runs unprivileged as the rtl user (no `+` prefix in ExecStartPre).
+        copy_bin = get_script("rtl-copy-macaroon")
+        assert f"+{copy_bin}" not in exec_start_pre, exec_start_pre
+        script = f"{as_rtl} {copy_bin}"
         macaroon = "/run/lnd/rtl.macaroon"
         macaroons_dir = f"{data_dir}/macaroons"
         dest = f"{macaroons_dir}/admin.macaroon"

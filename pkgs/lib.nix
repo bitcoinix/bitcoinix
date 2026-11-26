@@ -128,6 +128,15 @@ let self = {
     ${src}
   '';
 
+  # Read stdin and replace `$1` atomically with mode 0600 (cleaning up on failure).
+  writeAtomic = self.script "write-atomic" ''
+    umask 077
+    tmp=$(mktemp "$1.XXXXXX")
+    trap 'rm -f "$tmp"' EXIT
+    cat > "$tmp"
+    mv -fT "$tmp" "$1"
+  '';
+
   # A program that runs its arguments as `user` when root starts it, and as the
   # caller otherwise. CLI wrappers use it to access a service's files with the
   # rights of the service user, which owns the dirs that hold them.

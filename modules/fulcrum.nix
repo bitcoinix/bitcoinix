@@ -98,9 +98,9 @@ in {
           || !config.services.electrs.enable
           || config.services.electrs.port != cfg.port;
         message = ''
-          Fulcrum and Electrs can't both bind to TCP RPC port ${cfg.port}.
+          Fulcrum and Electrs can't both bind to TCP RPC port ${toString cfg.port}.
           Change `services.electrs.port` or `services.fulcrum.port`
-          to a port other than ${cfg.port}.
+          to a port other than ${toString cfg.port}.
         '';
       }
     ];
@@ -121,11 +121,12 @@ in {
       preStart = ''
         # fulcrum.conf holds the public RPC password, so create it with mode 600
         # instead of relying on the data directory mode alone.
-        install -m 600 /dev/null '${cfg.dataDir}/fulcrum.conf'
-        {
+        rpcpass=$(< '${secretsDir}/bitcoin-rpcpassword-public')
+        conf=$(
           cat ${configFile}
-          echo "rpcpassword = $(cat ${secretsDir}/bitcoin-rpcpassword-public)"
-        } > '${cfg.dataDir}/fulcrum.conf'
+          printf 'rpcpassword = %s\n' "$rpcpass"
+        )
+        install -T -m 600 <(printf '%s\n' "$conf") '${cfg.dataDir}/fulcrum.conf'
       '';
       serviceConfig = nbLib.defaultHardening // {
         ExecStart = "${config.nix-bitcoin.pkgs.fulcrum}/bin/Fulcrum '${cfg.dataDir}/fulcrum.conf'";

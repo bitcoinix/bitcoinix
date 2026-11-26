@@ -184,15 +184,15 @@ let
   # rune, not its ID, because on a new or restored database the ID can belong
   # to another rune.
   recordedRuneFile = "${cln.dataDir}/unbeholden-lnurl-rune";
-  recordedRuneId = pkgs.writeText "unbeholden-lnurl-rune-id.jq" ''
+  recordedRuneId = builtins.toFile "unbeholden-lnurl-rune-id.jq" ''
     .runes[] | select(.rune == $ENV.recorded and (.blacklisted | not)) | .unique_id
   '';
+  clnCli = "${cln.package}/bin/lightning-cli --lightning-dir='${cln.dataDir}'";
   revokeRecordedRune = ''
     if [[ -e ${recordedRuneFile} ]]; then
-      cli=${cln.cli}/bin/lightning-cli
-      id=$($cli showrunes | recorded=$(<${recordedRuneFile}) ${pkgs.jq}/bin/jq -r -f ${recordedRuneId})
+      id=$(${clnCli} showrunes | recorded=$(<${recordedRuneFile}) ${pkgs.jq}/bin/jq -r -f ${recordedRuneId})
       if [[ $id =~ ^[0-9]+$ ]]; then
-        $cli blacklistrune "$id" "$id" > /dev/null
+        ${clnCli} blacklistrune "$id" "$id" > /dev/null
       fi
       rm ${recordedRuneFile}
     fi
@@ -200,7 +200,7 @@ let
 
   # Keep the recorded rune while the service has it and its restrictions match.
   # Otherwise revoke it, so that no rune with old permissions remains valid.
-  runeAction = pkgs.writeText "unbeholden-lnurl-rune-action.jq" ''
+  runeAction = builtins.toFile "unbeholden-lnurl-rune-action.jq" ''
     [.runes[] | select(.rune == $ENV.recorded)][0] as $rune
     | if $rune == null or $rune.blacklisted then "create"
       elif $ENV.rune == $ENV.recorded and
@@ -216,7 +216,7 @@ let
       ${runuser} -u ${cln.user} -- "$@"
     }
     cli() {
-      asCln ${cln.cli}/bin/lightning-cli "$@"
+      asCln ${clnCli} "$@"
     }
     asUser() {
       ${runuser} -u ${cfg.user} -- "$@"
@@ -238,11 +238,8 @@ let
     fi
     if [[ $action != keep ]]; then
       rune=$(cli createrune restrictions="$restrictions" | $jq -er .rune)
-      asCln tee ${recordedRuneFile}.tmp <<< "$rune" > /dev/null
-      asCln mv -T ${recordedRuneFile}.tmp ${recordedRuneFile}
-      tmp=$(asUser mktemp ${runeFile}.XXXXXX)
-      asUser tee "$tmp" <<< "$rune" > /dev/null
-      asUser mv -T "$tmp" ${runeFile}
+      asCln ${nbLib.writeAtomic} '${recordedRuneFile}' <<< "$rune"
+      asUser ${nbLib.writeAtomic} '${runeFile}' <<< "$rune"
     fi
 
     cert=$(cli listconfigs clnrest-certs | ${clnrest.serverCertPathFromConfigs})

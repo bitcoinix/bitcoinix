@@ -142,7 +142,7 @@ let
       };
       database.engine = "sqlite";
       signatory.enabled = false;
-      payment_backend = (cfg.settings.payment_backend or {}) // {
+      payment_backend = {
         backend = if isLnd then "lnd" else "cln";
         unit = "sat";
       };
@@ -225,8 +225,8 @@ in {
         # interpreted as a missing marker. Tmpfiles creates these for new mints.
         for dir in /var/lib/nixos ${stateDir}; do
           if [[ ! -d $dir || -L $dir || ! -r $dir || ! -x $dir || -w $dir ]] ||
-             ! guardMode=$(stat -c %a "$dir") ||
-             ! guardOwner=$(stat -c %u "$dir") ||
+             ! statOut=$(stat -c '%a %u' "$dir") ||
+             ! read -r guardMode guardOwner <<< "$statOut" ||
              [[ $guardOwner != 0 ]] || (( (8#$guardMode & 8#022) != 0 )); then
             echo "Unsafe initialization guard directory $dir; refusing to start the mint. Restore a real, root-owned directory with mode 0755 and its original initialization marker." >&2
             exit 1
@@ -241,7 +241,7 @@ in {
         ''}
         ${optionalString cfg.onchain.enable ''
           # CDK's file references preserve newlines; Core's RPC password doesn't.
-          password=$(cat ${secretsDir}/bitcoin-rpcpassword-public)
+          password=$(< '${secretsDir}/bitcoin-rpcpassword-public')
           printf '%s' "$password" > /run/cdk-mintd/bitcoin-rpcpassword
         ''}
         # CDK >= 0.18 reads its configuration from the database. Remember which
