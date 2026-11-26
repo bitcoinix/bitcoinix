@@ -10,4 +10,4 @@ finish; explicit stops of the mint or its backends during shutdown or staging
 take precedence over the backup's pending restart.
 A persistent initialization guard prevents recreating a lost database with the
 old signing seed; restoration requires the spent-proof state as well as the seed.
-See [Run a Cashu mint](../../cdk-mintd.md) for setup and recovery.
+See [Run a Cashu mint](../../services/cdk-mint.md) for setup and recovery.

@@ -29,7 +29,7 @@
   - [BTCPay Server](service/btcpayserver.md)
   - [Unbeholden LNURL](service/unbeholden-lnurl.md)
   - [Unbeholden Wallet](service/unbeholden-wallet.md)
-  - [Cashu mint](cdk-mintd.md)
+  - [Cashu mint](services/cdk-mint.md)
   - [ZEUS](service/zeus.md)
   - [Trezor](service/trezor.md)
   - [LND](service/lnd.md)

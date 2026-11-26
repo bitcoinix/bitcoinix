@@ -194,7 +194,7 @@
   # accessible via Tor.
   # nix-bitcoin.onionServices.btcpayserver.enable = true;
 
-  # Cashu mint (see https://docs.bitcoinix.net/cdk-mintd.html)
+  # Cashu mint (see https://docs.bitcoinix.net/services/cdk-mint.html)
   # services.cdk-mintd = {
   #   enable = true;
   #   backend = "lnd"; # or "clightning"

@@ -42,7 +42,7 @@ systemctl show bitcoind
 - [BTCPay Server](service/btcpayserver.md): sign in and choose a Lightning backend.
 - [Unbeholden LNURL](service/unbeholden-lnurl.md): receive payments with Lightning Addresses.
 - [Unbeholden Wallet](service/unbeholden-wallet.md): connect the watch-only browser wallet.
-- [Cashu mint](cdk-mintd.md): issue ecash backed by Lightning or optional on-chain payments.
+- [Cashu mint](services/cdk-mint.md): issue ecash backed by Lightning or optional on-chain payments.
 - [ZEUS](service/zeus.md): connect to LND or Core Lightning over Tor or WireGuard.
 - [Trezor](service/trezor.md): initialize and use a hardware wallet with HWI.
 

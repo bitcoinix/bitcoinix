@@ -37,7 +37,7 @@ The Tor preset restricts the mint to local connections; it needs no external
 payment API or chain server.
 
 Check the service with `journalctl -u cdk-mintd` and query its HTTP `/v1/info`
-endpoint. See [the options](options.md) for listen addresses, paths and settings.
+endpoint. See [the options](../options.md) for listen addresses, paths and settings.
 Logs go to the journal by default, without accumulating daily files in `dataDir`.
 CDK 0.18.3 does not advertise the public URL through `info.url`.
 
@@ -65,7 +65,7 @@ start is an error, rather than a reason to silently create a replacement.
 
 With `nix-bitcoin.generateSecrets`, the module generates `cdk-mintd-seed` in
 `nix-bitcoin.secretsDir` and, when needed, `cdk-mintd-bdk-mnemonic`. Otherwise
-provide these through your [secrets setup](configuration.md). You can point
+provide these through your [secrets setup](../configuration.md). You can point
 `seedFile` and `onchain.mnemonicFile` at other absolute paths readable by the
 service user. Use string paths, not Nix path literals that copy files to the store.
 The signing seed is raw text, not hex-decoded; preserve every byte, including its
