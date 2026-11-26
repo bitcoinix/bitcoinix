@@ -694,6 +694,9 @@ let
       };
     };
 
+    # The service-name shortcut needs the same regtest invoice/payment fixture.
+    cdk-mintd = scenarios.cdk-mintd-lnd;
+
     cdk-mintd-lnd = { config, ... }: {
       imports = [ scenarios.regtestBase ];
       nix-bitcoin.nodeinfo.enable = true;
@@ -788,17 +791,18 @@ let
             while [[ -e $STATE_DIRECTORY/pause-state-check ]]; do sleep 0.1; done
             exit "$status"
           fi
-          if [[ $1 == try-restart ]]; then
+          if [[ $1 == try-restart || $1 == stop ]]; then
             # Hold a rejected transaction while the driver checks that existing
             # start/reload jobs survive. The next attempt uses real systemd.
             status=0
-            if [[ -e $STATE_DIRECTORY/reject-restart ]]; then
+            if [[ $1 == try-restart && -e $STATE_DIRECTORY/reject-restart ]]; then
               status=1
             else
               ${config.systemd.package}/bin/systemctl "$@" || status=$?
             fi
-            echo "$status" > "$STATE_DIRECTORY/restart-status.next"
-            mv -T "$STATE_DIRECTORY/restart-status.next" "$STATE_DIRECTORY/restart-status"
+            statusFile="$STATE_DIRECTORY/''${1#try-}-status"
+            echo "$status" > "$statusFile.next"
+            mv -T "$statusFile.next" "$statusFile"
             exit "$status"
           fi
           exec ${config.systemd.package}/bin/systemctl "$@"

@@ -336,10 +336,17 @@ in {
             case $state in
               active|activating|reloading)
                 # Submit both halves together so cancellation cannot lose the
-                # restart. Never replace conflicting jobs with an unconditional
-                # stop: they may include a start or reload that must survive.
+                # restart. Never replace conflicting jobs: they may include a
+                # start or reload that must survive.
                 # A completed stop remains stopped; pending stops take priority.
-                systemctl try-restart --no-block --job-mode=fail cdk-mintd.service || true
+                # try-restart silently succeeds without a job for masked units.
+                if [[ $(systemctl show -P LoadState cdk-mintd.service) == masked ]] ||
+                   ! systemctl try-restart --no-block --job-mode=fail cdk-mintd.service; then
+                  # A running but masked mint cannot restart, but can be stopped
+                  # and copied. Have systemd atomically reject conflicting jobs,
+                  # including starts/reloads arriving after the failed restart.
+                  systemctl stop --no-block --job-mode=fail cdk-mintd.service || true
+                fi
                 ;;
               deactivating) ;; # Wait for an existing stop, without restarting it.
               # Starts queued behind this snapshot remain systemd jobs.

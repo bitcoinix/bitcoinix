@@ -562,9 +562,48 @@ def test_cdk_mintd_backup_shutdown():
         if backend == "lnd":
             wait_for_lnd_server()
 
+    ready()
+    # A running mint can become masked or reach its start limit. Neither should
+    # make a consistent snapshot wait for the backup's full start timeout.
+    for blocked in ["masked", "start-limit"]:
+        if blocked == "masked":
+            succeed("mkdir -p /run/systemd/system.control",
+                    "ln -s /dev/null /run/systemd/system.control/cdk-mintd.service",
+                    "systemctl daemon-reload")
+            assert_full_match("systemctl show -P LoadState cdk-mintd", "masked\n")
+        else:
+            succeed("mkdir -p /run/systemd/system/cdk-mintd.service.d",
+                    "printf '[Unit]\\nStartLimitIntervalSec=1h\\nStartLimitBurst=1\\n'"
+                    " > /run/systemd/system/cdk-mintd.service.d/start-limit.conf",
+                    "systemctl daemon-reload", "systemctl reset-failed cdk-mintd",
+                    "systemctl restart cdk-mintd")
+            ready()
+        assert_full_match("systemctl show -P ActiveState cdk-mintd", "active\n")
+        succeed(f"touch {pause_copy}", "systemctl start --no-block cdk-mintd-backup")
+        try:
+            machine.wait_until_succeeds(f"test -d {stage}/.next", timeout=15)
+        except Exception:
+            print(succeed("journalctl -u cdk-mintd-backup --no-pager",
+                          "systemctl list-jobs --no-legend",
+                          "systemctl show -p ActiveState -p SubState -p Job cdk-mintd"))
+            raise
+        assert_full_match("systemctl show -P MainPID cdk-mintd", "0\n")
+        succeed(f"rm {pause_copy}", "timeout 15 systemctl start cdk-mintd-backup")
+        assert_full_match("systemctl show -P Result cdk-mintd-backup", "success\n")
+        succeed(f"test -s {stage}/current/data.tar")
+        if blocked == "masked":
+            assert_full_match("systemctl show -P ActiveState cdk-mintd", "inactive\n")
+            assert_full_match("systemctl show -P LoadState cdk-mintd", "masked\n")
+            succeed("rm /run/systemd/system.control/cdk-mintd.service")
+        else:
+            machine.wait_until_succeeds("test $(systemctl show -P Result cdk-mintd) = start-limit-hit", timeout=15)
+            succeed("rm /run/systemd/system/cdk-mintd.service.d/start-limit.conf")
+        succeed("systemctl daemon-reload", "systemctl reset-failed cdk-mintd",
+                "systemctl start cdk-mintd")
+        ready()
+
     # Hold the mint in deactivating while it still has a live daemon. No archive
     # may begin here, and the restart must survive termination of the backup.
-    ready()
     machine.succeed(
         "mkdir -p /run/systemd/system/cdk-mintd.service.d\n"
         "cat > /run/systemd/system/cdk-mintd.service.d/slow-stop.conf <<'EOF'\n"
@@ -641,9 +680,10 @@ def test_cdk_mintd_backup_shutdown():
         machine.wait_until_succeeds(f"test -e {stage}/state-checked")
         succeed(f"systemctl {action} --no-block cdk-mintd")
         job = succeed(f"systemctl list-jobs --no-legend cdk-mintd.service | grep -w {action}").split()[0]
-        succeed(f"rm -f {stage}/restart-status", f"rm {stage}/pause-state-check")
-        machine.wait_until_succeeds(f"test -s {stage}/restart-status")
+        succeed(f"rm -f {stage}/restart-status {stage}/stop-status", f"rm {stage}/pause-state-check")
+        machine.wait_until_succeeds(f"test -s {stage}/stop-status")
         assert_full_match(f"cat {stage}/restart-status", "1\n")
+        assert int(succeed(f"cat {stage}/stop-status")) != 0
         assert succeed(f"systemctl list-jobs --no-legend cdk-mintd.service | grep -w {action}").split()[0] == job
         succeed(f"rm {stage}/reject-restart {stage}/state-checked")
         machine.wait_until_succeeds(f"test -d {stage}/.next")
@@ -717,6 +757,6 @@ def test_cdk_mintd_backup_shutdown():
         succeed(f"rm {stage}/state-checked", "systemctl reset-failed cdk-mintd cdk-mintd-backup",
                 f"systemctl start bitcoind {backend} cdk-mintd")
         ready()
-    succeed(f"rm {stage}/restart-status",
+    succeed(f"rm {stage}/restart-status {stage}/stop-status",
             "rm /run/systemd/system/cdk-mintd.service.d/slow-stop.conf /run/systemd/system/cdk-shutdown-blocker.service",
             "systemctl daemon-reload")

@@ -153,6 +153,11 @@ and SAM port. Both scenarios run in CI and in `./run-tests.sh buildable`.
 # When no scenario is specified, scenario `default` is used.
 ./run-tests.sh build
 ```
+
+`-s cdk-mintd` selects the `cdk-mintd-lnd` regtest fixture, including its
+Lightning peer and payment tests. Use `cdk-mintd-cln` or `cdk-mintd-onchain`
+for the other mint configurations.
+
 #### Debugging
 ```bash
 # Start a shell inside a test VM. No tests are executed.

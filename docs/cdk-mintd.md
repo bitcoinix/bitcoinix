@@ -113,6 +113,9 @@ until the backup finishes. A stop requested during copying cancels that pending
 start; stops of the mint or its backends during shutdown also take precedence.
 A backup waits for an in-progress stop and retries restart transactions after
 state changes or job conflicts, without cancelling queued starts or reloads.
+Restart restrictions still apply: a masked or start-rate-limited mint can be
+stopped and backed up, but stays down until the restriction is cleared and a
+new start is requested.
 Cleanup does not restart the mint afterwards. An intentionally stopped
 mint stays stopped unless a new start is requested.
 Payments are unavailable during staging; uploading does not wait for mint startup.
