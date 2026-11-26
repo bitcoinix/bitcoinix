@@ -1,5 +1,8 @@
 // Bookmarks from the former single-page service, release and upgrade guides.
 (() => {
+    const section = window.location.pathname.match(/\/(services|upgrading|release-notes)\.html$/)?.[1];
+    if (!section) return;
+
     const legacy = {
         "services": {
             "nodeinfo": "nodeinfo.html",
@@ -132,9 +135,6 @@
     };
 
     function redirectLegacyLink() {
-        const section = window.location.pathname.match(/\/(services|upgrading|release-notes)\.html$/)?.[1];
-        if (!section) return;
-
         const anchor = window.location.hash.slice(1);
         if (Object.hasOwn(legacy[section], anchor)) {
             const directory = section === "services" ? "service" : section;

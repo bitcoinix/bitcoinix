@@ -141,8 +141,10 @@ def build_book(src, dest, flake, system, title=None):
     Trees without the markers in options.md (releases before 0.2.0) have no option list.
     """
     page = src / OPTIONS_PAGE
-    if page.is_file() and OPTIONS_BEGIN in page.read_text():
-        page.write_text(insert_options(page.read_text(), build_options(flake, system)))
+    if page.is_file():
+        text = page.read_text()
+        if OPTIONS_BEGIN in text:
+            page.write_text(insert_options(text, build_options(flake, system)))
     env = os.environ | {"MDBOOK_BOOK__TITLE": title} if title else None
     subprocess.run(["mdbook", "build", "--dest-dir", dest, src], check=True, env=env,
                    stdout=sys.stderr)
@@ -242,6 +244,10 @@ DESCRIPTION = re.compile(r'<meta name="description" content="([^"]*)">')
 REDIRECT = re.compile(r'<meta http-equiv="refresh"', re.I)
 
 
+class _FirstParagraphFound(Exception):
+    pass
+
+
 class FirstParagraph(HTMLParser):
     """The text of the first paragraph in the main content of an mdBook page, outside of
     block quotes such as the note on pages inherited from nix-bitcoin."""
@@ -268,6 +274,7 @@ class FirstParagraph(HTMLParser):
         elif tag == "p" and self.parts is not None:
             self.text = " ".join("".join(self.parts).split())
             self.parts = None
+            raise _FirstParagraphFound
 
     def handle_data(self, data):
         if self.parts is not None:
@@ -278,7 +285,10 @@ def page_description(page, fallback):
     """A description of a page for search results and link previews: the start of its
     first paragraph."""
     parser = FirstParagraph()
-    parser.feed(page)
+    try:
+        parser.feed(page)
+    except _FirstParagraphFound:
+        pass
     text = parser.text or fallback
     if len(text) > DESCRIPTION_LENGTH:
         text = text[:DESCRIPTION_LENGTH - 1].rsplit(" ", 1)[0].rstrip(" ,.:;") + "…"
@@ -291,9 +301,11 @@ def chapter_names(pages, book_title):
     has no title. Redirect pages have no chapter name."""
     names = {}
     for path, page in pages.items():
-        if REDIRECT.search(page):
+        head_end = page.find("</head>")
+        head = page[:head_end] if head_end != -1 else page
+        if REDIRECT.search(head):
             continue
-        match = TITLE.search(page)
+        match = TITLE.search(head)
         if match:
             title = html.unescape(match[1])
             names[path] = "" if title == book_title else title.removesuffix(f" - {book_title}")
@@ -318,18 +330,25 @@ def add_site_tags(book, base, book_title, site_title, archived, image=None):
     paths = sorted(book.rglob("*.html"))
     pages = {path.relative_to(book).as_posix(): path.read_text() for path in paths}
     names = chapter_names(pages, book_title)
-    home = {path for path, page in pages.items() if page == pages.get("index.html")}
-    description = DESCRIPTION.search(pages.get("index.html", ""))
+    index_page = pages.get("index.html")
+    home = {path for path, page in pages.items() if page == index_page}
+    index_head = index_page[:index_page.find("</head>")] if index_page and "</head>" in index_page else (index_page or "")
+    description = DESCRIPTION.search(index_head)
     fallback = html.unescape(description[1]) if description else ""
     urls = {}
     for path, page in pages.items():
+        head_end = page.find("</head>")
+        if head_end == -1:
+            raise Error(f"{path}: page has no </head>")
+        head = page[:head_end]
+        tail = page[head_end:]
         tags = ""
+        has_noindex = NOINDEX in head
         # mdBook already excludes its print and toc pages
-        if archived and NOINDEX not in page:
+        if archived and not has_noindex:
             tags += NOINDEX + "\n"
-        redirect = REDIRECT.search(page)
         name = names.get(path)
-        if path not in GENERATED_PAGES and NOINDEX not in page and not redirect:
+        if path not in GENERATED_PAGES and not has_noindex and name is not None:
             # A nested chapter, e.g. `Version 0.2.0` under `Upgrading` and `Release notes`
             parent = posixpath.dirname(path)
             if parent and f"{parent}.html" in names:
@@ -339,7 +358,7 @@ def add_site_tags(book, base, book_title, site_title, archived, image=None):
             else:
                 title = f"{name} - {site_title}"
             url = page_url(base, "index.html" if path in home else path)
-            text = page_description(page, fallback)
+            text = page_description(tail, fallback)
             if not archived:
                 tags += f'<link rel="canonical" href="{html.escape(url)}">\n'
                 urls[url] = path in home
@@ -352,20 +371,17 @@ def add_site_tags(book, base, book_title, site_title, archived, image=None):
                          '<meta property="og:image:alt" content="The bitcoinix logo">\n')
             tags += '<meta name="twitter:card" content="summary">\n'
             meta = f'<meta name="description" content="{html.escape(text)}">'
-            if DESCRIPTION.search(page):
-                page = DESCRIPTION.sub(lambda _: meta, page, count=1)
+            if DESCRIPTION.search(head):
+                head = DESCRIPTION.sub(lambda _: meta, head, count=1)
             else:
                 tags = meta + "\n" + tags
         else:
             title = f"{name} - {site_title}" if name else site_title
         if name is not None:
-            page = TITLE.sub(lambda _: f"<title>{html.escape(title, quote=False)}</title>", page,
+            head = TITLE.sub(lambda _: f"<title>{html.escape(title, quote=False)}</title>", head,
                              count=1)
         tags += '<script src="/versions.js" defer></script>\n'
-        try:
-            (book / path).write_text(add_to_head(page, tags))
-        except Error as error:
-            raise Error(f"{path}: {error}") from None
+        (book / path).write_text(head + tags + tail)
     # The home page first
     return sorted(urls, key=lambda url: not urls[url])
 
@@ -430,18 +446,18 @@ def build_site(repo, latest, out, system, fetch_release):
                        title=titles[release.name])
             social_image = src / SOCIAL_IMAGE
             if release.name == latest and social_image.is_file() and not social_image.is_symlink():
-                image = tmp / SOCIAL_IMAGE_PATH
-                shutil.copyfile(social_image, image)
+                image = social_image
         if any((books[latest] / name).exists() for name in SITE_PATHS):
             raise Error(f"The documentation of v{latest} contains a path that the site uses")
         image_url = f"{SITE_URL}/{SOCIAL_IMAGE_PATH}" if image else None
         shutil.copytree(books[latest], site)
         urls = add_site_tags(site, SITE_URL, titles[latest], SITE_NAME, archived=False,
                              image=image_url)
+        (site / "v").mkdir()
         for name, book in books.items():
             add_site_tags(book, f"{SITE_URL}/v/{name}", titles[name], titles[name],
                           archived=True, image=image_url)
-            shutil.copytree(book, site / "v" / name)
+            shutil.move(book, site / "v" / name)
         if image:
             shutil.copyfile(image, site / SOCIAL_IMAGE_PATH)
         (site / "sitemap.xml").write_text(sitemap(urls))

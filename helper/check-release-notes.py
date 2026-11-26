@@ -22,6 +22,10 @@ DRAFT_LINK = re.compile(rf"(?:^|/)(?:upgrading|release-notes)/(?P<version>{VERSI
 INDEXES = ("docs/SUMMARY.md", "docs/upgrading.md", "docs/release-notes.md")
 GUIDES = {"release-notes": "Release notes", "upgrading": "Upgrading to config version"}
 CONFIG_VERSION = re.compile(r'\bnix-bitcoin\.configVersion\s*=\s*"([^"]+)"\s*;')
+STALE_CONFIG_VERSION = re.compile(
+    r'\bkeep\s+(?:nix-bitcoin\.)?configVersion\s*(?:=\s*"|at the latest finalized release)', re.I
+)
+PLAIN_VERSION_NIX = re.compile(rf'(?:#[^\n]*\n|\s)*"({VERSION})"(?:#[^\n]*|\s)*')
 
 
 def version(value):
@@ -42,10 +46,17 @@ def paths(revision, *directories):
     return {os.fsdecode(path) for path in data.split(b"\0") if path}
 
 
+@cache
+def version_from_blob(blob):
+    expr = git("cat-file", "blob", blob).decode()
+    if match := PLAIN_VERSION_NIX.fullmatch(expr):
+        return version(match[1])
+    return version(subprocess.check_output(["nix", "eval", "--raw", "--expr", expr], text=True))
+
+
 def version_at(revision):
-    if "version.nix" in paths(revision, "version.nix"):
-        expr = git("show", f"{revision}:version.nix").decode()
-        return version(subprocess.check_output(["nix", "eval", "--raw", "--expr", expr], text=True))
+    if blob := tree_blobs(revision, ["version.nix"]).get("version.nix"):
+        return version_from_blob(blob)
     return ()  # Sort before every version if the repository predates version.nix.
 
 
@@ -124,22 +135,28 @@ class Document(HTMLParser):
         headings = [block for block in self.blocks if block.tag == "h4"]
         end = self.blocks[-1].start if skip_footer else len(self.text)
         stops = [block.start for block in headings[1:]] + [end]
-        return [(heading.text, self.entry_lines(heading.end, stop)) for heading, stop in zip(headings, stops)]
+        pre_blocks = [block for block in self.blocks if block.tag == "pre"]
+        pre_index = 0
+        result = []
+        for heading, stop in zip(headings, stops):
+            while pre_index < len(pre_blocks) and pre_blocks[pre_index].start < heading.end:
+                pre_index += 1
+            lines = []
 
-    def entry_lines(self, start, end):
-        lines = []
+            def append(text, *, code=False):
+                lines.extend(NoteLine(line if code else line.strip(), code)
+                             for line in text.splitlines() if code or line.strip())
 
-        def append(text, *, code=False):
-            lines.extend(NoteLine(line if code else line.strip(), code)
-                         for line in text.splitlines() if code or line.strip())
-
-        for block in self.blocks:
-            if block.tag == "pre" and start <= block.start < end:
-                append("".join(self.text[start:block.start]))
+            pos = heading.end
+            while pre_index < len(pre_blocks) and pre_blocks[pre_index].start < stop:
+                block = pre_blocks[pre_index]
+                append("".join(self.text[pos:block.start]))
                 append(block.text, code=True)
-                start = block.end
-        append("".join(self.text[start:end]))
-        return lines
+                pos = block.end
+                pre_index += 1
+            append("".join(self.text[pos:stop]))
+            result.append((heading.text, lines))
+        return result
 
     def has_tbd(self):
         return any(block.tag == "p" and block.text.startswith("TBD.") for block in self.blocks)
@@ -176,10 +193,19 @@ def local_chapter(link, page):
     return posixpath.normpath(posixpath.join(posixpath.dirname(page), unquote(url.path)))
 
 
-def check_navigation(index, page, upcoming):
-    doc = markdown(Path(index).read_bytes())
-    entries = [block for block in doc.blocks if block.tag == "li"
-               and any(local_chapter(link, index) == page for link in block.links)]
+def index_entries(index, doc):
+    entries = defaultdict(list)
+    for block in doc.blocks:
+        if block.tag != "li":
+            continue
+        for target in {local_chapter(link, index) for link in block.links}:
+            if target is not None:
+                entries[target].append(block)
+    return entries
+
+
+def check_navigation(index, entries_by_page, page, upcoming):
+    entries = entries_by_page.get(page, ())
     if not entries:
         yield f"{index}: add a link to {page}."
     elif index != "docs/SUMMARY.md":
@@ -207,19 +233,21 @@ def check_page(page, guide, number, upcoming):
             assignment = f'nix-bitcoin.configVersion = "{number}";'
             if not doc.ends_with_config_version(number):
                 yield f"{page}: end with an instruction to set `{assignment}` after migrating."
-            stale = re.compile(r'\bkeep\s+(?:nix-bitcoin\.)?configVersion\s*(?:=\s*"|at the latest finalized release)', re.I)
-            if any(stale.search(block.text) for block in doc.blocks if block.tag in ("p", "li")):
+            if any(STALE_CONFIG_VERSION.search(block.text) for block in doc.blocks if block.tag in ("p", "li")):
                 yield f"{page}: remove the development instruction to keep the old configVersion."
 
 
-def check_tree(documents, finalized, number):
+def check_tree(documents, finalized, number, has_readme):
+    navigation = {}
     for index in INDEXES:
         if index not in documents:
             yield f"Missing release navigation: {index}."
             continue
-        for link in markdown(Path(index).read_bytes()).links:
+        doc = markdown(Path(index).read_bytes())
+        for link in doc.links:
             if linked_draft(link):
                 yield f"{index}: link to the version page instead of the individual draft {link}."
+        navigation[index] = index_entries(index, doc)
 
     # Require both guides for the release being signed and for each open milestone.
     # Older releases predate the split and some have only an upgrade page.
@@ -252,11 +280,11 @@ def check_tree(documents, finalized, number):
             hint = f" Run helper/open-release-notes.py {page_version}." if upcoming else ""
             yield f"Missing version page {page}.{hint}"
         for index in ("docs/SUMMARY.md", f"docs/{guide}.md"):
-            if index in documents:
-                yield from check_navigation(index, page, upcoming)
+            if index in navigation:
+                yield from check_navigation(index, navigation[index], page, upcoming)
 
     # The repository README links directly to drafts while a milestone is open.
-    if Path("README.md").is_file() and "README.md" in paths(None, "README.md"):
+    if has_readme:
         for link in markdown(Path("README.md").read_bytes()).links:
             draft = linked_draft(link)
             if draft and version(draft["version"]) <= finalized:
@@ -448,9 +476,9 @@ def check_published_links(documents, finalized):
 def release_preparation(finalized):
     # Follow master across merge commits. A later edit or a comment-only change to
     # version.nix must not hide the drafts that existed when the version advanced.
-    commits = git("log", "--first-parent", "--format=%H", "HEAD", "--", "version.nix")
-    for commit in commits.decode().splitlines():
-        parents = git("rev-list", "--parents", "-n1", commit).decode().split()[1:]
+    commits = git("log", "--first-parent", "--format=%H %P", "HEAD", "--", "version.nix")
+    for line in commits.decode().splitlines():
+        commit, *parents = line.split()
         if not parents:
             if git("rev-parse", "--is-shallow-repository").strip() == b"true":
                 sys.exit("Missing release-preparation history. Run git fetch --unshallow and retry.")
@@ -463,8 +491,10 @@ def release_preparation(finalized):
 
 def check(number, base):
     finalized = version(number)
-    documents = {path for path in paths(None, "docs") if Path(path).is_file()}
-    tree_errors = list(check_tree(documents, finalized, number))
+    tracked = paths(None, "docs", "README.md")
+    documents = {path for path in tracked if path.startswith("docs/") and Path(path).is_file()}
+    has_readme = "README.md" in tracked and Path("README.md").is_file()
+    tree_errors = list(check_tree(documents, finalized, number, has_readme))
     yield from tree_errors
     prepared, parent, previous = release_preparation(finalized)
     # GitHub sends an all-zero "before" SHA on the first push of a branch.
