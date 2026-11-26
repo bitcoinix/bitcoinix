@@ -124,8 +124,7 @@ let
   # Kept outside dataDir, owned by root and included in the node's backups.
   stateDir = "/var/lib/nixos/cdk-mintd";
   dataPath = toString (/. + cfg.dataDir);
-  bracketIPv6 = addr: if hasInfix ":" addr && !hasPrefix "[" addr then "[${addr}]" else addr;
-  connectAddress = addr: bracketIPv6 (nbLib.address (removeSuffix "]" (removePrefix "[" addr)));
+  connectAddress = addr: nbLib.bracketIPv6 (nbLib.address (removeSuffix "]" (removePrefix "[" addr)));
   configState = pkgs.writeText "cdk-mintd-config-state.json" (builtins.toJSON {
     config = configFile;
     allowNewWallet = cfg.onchain.enable && cfg.onchain.allowNewWallet;
@@ -137,7 +136,7 @@ let
       info = removeAttrs (cfg.settings.info or {}) [ "mnemonic" ];
     }) ({
       info = {
-        listen_host = bracketIPv6 cfg.address;
+        listen_host = nbLib.bracketIPv6 cfg.address;
         listen_port = cfg.port;
         seed = "file:${cfg.seedFile}";
       };
@@ -203,8 +202,7 @@ in {
       enable = true;
       macaroons.cdk-mintd = {
         inherit (cfg) user;
-        permissions = concatMapStringsSep ","
-          (method: builtins.toJSON { entity = "uri"; action = method; }) lndMethods;
+        permissions = nbLib.uriPermissions lndMethods;
       };
     };
     services.clightning.enable = mkIf (!isLnd) true;

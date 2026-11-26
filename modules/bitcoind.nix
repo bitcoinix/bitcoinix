@@ -367,9 +367,6 @@ let
   # members read it.
   rpcCookieDir = "/run/bitcoind";
 
-  # Keep the mount path one systemd argument and escape literal % specifiers.
-  unitPath = path: ''"${replaceStrings [ "\\" "\"" "%" ] [ "\\\\" "\\\"" "%%" ] path}"'';
-
   # Lets the bitcoind group read the blocks dir, see `dataDirReadableByGroup`.
   # Bitcoin Core sets umask 077, so it creates files with mode 0600. Below a
   # dir with a default ACL, the ACL takes the place of the umask, so the group
@@ -650,7 +647,7 @@ in {
     # groups that an ACL names, so it can't change an ACL that names others.
     systemd.services.bitcoind-group-read = mkIf cfg.dataDirReadableByGroup {
       # Covers a mount at blocks/index, at blocks and at each dir above them
-      unitConfig.RequiresMountsFor = [ (unitPath "${cfg.networkDir}/blocks/index") ];
+      unitConfig.RequiresMountsFor = [ (nbLib.unitPath "${cfg.networkDir}/blocks/index") ];
       # bitcoind's start limit covers this unit too
       startLimitIntervalSec = 0;
       serviceConfig = nbLib.defaultHardening // {

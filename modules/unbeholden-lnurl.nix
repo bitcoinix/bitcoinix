@@ -149,9 +149,7 @@ let
     else if isList value then map removeNulls value
     else value;
   configFile = yaml.generate "unbeholden-lnurl.yaml" (removeNulls cfg.settings // {
-    listen = let
-      bare = removePrefix "[" (removeSuffix "]" cfg.address);
-    in "${if hasInfix ":" bare then "[${bare}]" else bare}:${toString cfg.port}";
+    listen = "${nbLib.bracketIPv6 cfg.address}:${toString cfg.port}";
     state_dir = cfg.dataDir;
   } // (if isLnd then {
     lnd = {
@@ -265,8 +263,7 @@ in {
       enable = true;
       macaroons.unbeholden-lnurl = {
         inherit (cfg) user;
-        permissions = concatMapStringsSep ","
-          (method: builtins.toJSON { entity = "uri"; action = method; }) lndMethods;
+        permissions = nbLib.uriPermissions lndMethods;
       };
     };
     services.clightning = mkIf (!isLnd) {

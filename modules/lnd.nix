@@ -29,9 +29,7 @@ let
       internal = true;
       readOnly = true;
       # Use the address in the TLS certificate, including wildcard addresses.
-      default = let
-        host = if hasInfix ":" rpcHost then "[${rpcHost}]" else rpcHost;
-      in "${host}:${toString cfg.rpcPort}";
+      default = "${nbLib.bracketIPv6 rpcHost}:${toString cfg.rpcPort}";
     };
     restAddress = mkOption {
       type = types.str;

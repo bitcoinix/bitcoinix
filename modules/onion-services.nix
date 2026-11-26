@@ -4,7 +4,7 @@
 #
 # See it in use at ./presets/enable-tor.nix
 
-{ config, lib, pkgs, ... }:
+{ config, lib, ... }:
 
 with lib;
 let

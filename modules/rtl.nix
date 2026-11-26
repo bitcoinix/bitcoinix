@@ -136,8 +136,6 @@ let
   ] ++ map (rpc: "/walletrpc.WalletKit/${rpc}") [
     "BumpFee" "LabelTransaction" "LeaseOutput" "ListUnspent" "ReleaseOutput"
   ];
-  uriPermissions = concatMapStringsSep ",\n"
-    (rpc: builtins.toJSON { entity = "uri"; action = rpc; });
 
   # RTL's clightning rune allows only the methods in RTL's `backend/controllers/cln`.
   # clnrest checks `listclnrest-notifications` for RTL's websocket connection.
@@ -355,8 +353,8 @@ in {
       enable = true;
       macaroons.rtl = {
         inherit (cfg) user;
-        permissions = uriPermissions lndRpcs;
-        optionalPermissions = uriPermissions optionalLndRpcs;
+        permissions = nbLib.uriPermissions lndRpcs;
+        optionalPermissions = nbLib.uriPermissions optionalLndRpcs;
       };
     };
     services.clightning = mkIf cfg.nodes.clightning.enable {
