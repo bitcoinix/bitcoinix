@@ -55,8 +55,11 @@ Bitcoin Core node must be unpruned. CDK 0.18.3 supports mainnet, signet and regt
 here, but not testnet4. Deposits require six confirmations by default; configure
 `services.cdk-mintd.settings.bdk.num_confs` to change this.
 
-When adding on-chain support **after the mint has already started**, also set
-`services.cdk-mintd.onchain.allowNewWallet = true;` for the first deployment.
+When adding on-chain support **after the mint has already started**, first back
+up its data directory, as upstream recommends: run `systemctl start duplicity`
+with [automated backups](#automated-backups), or copy `dataDir` while the mint
+is stopped. Also set `services.cdk-mintd.onchain.allowNewWallet = true;` for the
+first deployment.
 After the wallet starts successfully, set it back to `false`. New mints create
 their first BDK wallet without this flag. A missing wallet database on a later
 start is an error, rather than a reason to silently create a replacement.
@@ -87,7 +90,11 @@ deployment that enables the service**, even if `/secrets` is already restored.
 This needs no mint account; the protected deployment creates the user and group
 needed to restore the data. Only when deliberately replacing a mint, use a
 **new signing seed**, an empty data directory and temporary `allowNewMint = true`.
-Never use this option to recover a mint with outstanding ecash.
+Never use this option to recover a mint with outstanding ecash. With
+`nix-bitcoin.generateSecrets` and the default `seedFile`, move the old
+`cdk-mintd-seed` out of `secretsDir` and run `systemctl restart setup-secrets`
+to generate a new one. Otherwise create it the same way, with
+`openssl rand -hex 32`.
 
 Configure metadata and fees through `settings`; direct
 changes through CDK's management tools can be replaced by a later Nix deployment.
@@ -141,6 +148,21 @@ can still be too old: payments and spent proofs recorded after `created-at` are
 missing. Do not reopen a mint from an outdated snapshot without reconciling that
 missing state and its liabilities.
 
+The recovery masks below only stop systemd units. The onion service and a
+reverse proxy forward directly to the mint's address, so wallets can reach the
+mint as soon as it starts. Block them with a deployment before step 1, or in the
+first deployment on a new host:
+
+```nix
+nix-bitcoin.onionServices.cdk-mintd.enable = false;
+```
+
+Also remove the mint from your reverse proxy. Tor keeps running for other
+services. Keep `/var/lib/tor/onion/cdk-mintd`: its key defines the onion
+address, and re-enabling the onion service reuses it. On a new host, restore
+that directory from the backup's `var/lib/tor` before re-enabling the onion
+service, or the mint gets a new address.
+
 1. Open a root shell (`sudo -s`). **On a new host, perform this step before the
    first deployment that enables `services.cdk-mintd`.** On an existing host,
    pause scheduled backups with
@@ -171,13 +193,24 @@ missing state and its liabilities.
    available. It is outside the `current` snapshot. Keep its parent directory
    owned by `root:root` with mode `0755`, and the marker owned by `root:root`
    with mode `0600`. Preserve an existing marker.
-2. Restore `var/lib/cdk-mintd-backup/current` from duplicity to a temporary,
-   root-only directory. With `--path-to-restore var/lib/cdk-mintd-backup/current`,
-   files such as `data.tar` are directly inside the target directory, without a
-   `current/` subdirectory. Retain the original mint data and secrets until
-   recovery has been verified. Check `manifest.json` against your Nix
-   configuration. Create an **empty** data directory owned by the configured
-   mint user and group, mode `0700`.
+2. Restore the snapshot to a temporary, root-only directory. Use your
+   `services.backups.destination` (default `file:///var/lib/localBackups`) and
+   the restored `backup-encryption-env` secret:
+
+   ```bash
+   install -d -m 0700 /root/cdk-restore
+   (
+     set -a
+     . /secrets/backup-encryption-env
+     duplicity restore --path-to-restore var/lib/cdk-mintd-backup/current \
+       file:///var/lib/localBackups /root/cdk-restore/snapshot
+   )
+   ```
+
+   Files such as `data.tar` are then directly inside `/root/cdk-restore/snapshot`.
+   Retain the original mint data and secrets until recovery has been verified.
+   Check `manifest.json` against your Nix configuration. Create an **empty**
+   data directory owned by the configured mint user and group, mode `0700`.
 3. Extract `data.tar` **as the mint user**, never as root, so archived symlinks
    cannot redirect privileged writes. From the root shell, for the default user,
    group and directory:
@@ -187,7 +220,7 @@ missing state and its liabilities.
      umask 077
      setpriv --reuid=cdk-mintd --regid=cdk-mintd --init-groups -- \
        tar --no-same-owner --no-same-permissions -xf - -C /var/lib/cdk-mintd \
-       < /path/to/restored/data.tar
+       < /root/cdk-restore/snapshot/data.tar
    )
    ```
 
@@ -215,7 +248,7 @@ missing state and its liabilities.
    and `cdk-mintd-backup.service` masks from the same directory, run
    `systemctl daemon-reload`, run `systemctl reset-failed duplicity.timer` and
    `systemctl start duplicity.timer` if scheduled backups are configured, and
-   reopen public access.
+   re-enable the onion service and the proxy route with another deployment.
 
 Restore the BDK wallet database together with its mnemonic. For last-resort
 mnemonic-only recovery, follow CDK's

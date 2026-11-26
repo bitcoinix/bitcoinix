@@ -79,9 +79,10 @@ let
       example = { mint_info.name = "My mint"; info.input_fee_ppk = 100; };
       description = ''
         Additional CDK TOML settings, such as mint metadata, payment limits and
-        fees. See the upstream cdk-mintd example.config.toml for the packaged
-        version. Never put secret values here: this document is public in the
-        Nix store. The module manages the listener, signing seed, SQLite
+        fees. See the upstream
+        [example.config.toml](https://github.com/cashubtc/cdk/blob/v0.18.3/crates/cdk-mintd/example.config.toml)
+        for the packaged version. Never put secret values here: this document
+        is public in the Nix store. The module manages the listener, signing seed, SQLite
         database, backend selection and backend connection settings. Those
         values take precedence over this option. Remote signing is disabled.
         Nix configuration changes replace the stored CDK configuration before
