@@ -14,6 +14,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 DOCS_TOOLS = Path(sys.argv.pop(1)).resolve()
 _spec = importlib.util.spec_from_file_location("docs_build", DOCS_TOOLS / "build.py")
@@ -98,8 +99,11 @@ EOF
         return [line.split() for line in self.fetch_log.read_text().splitlines()]
 
     def site_py(self, *args, check=True):
-        return subprocess.run([sys.executable, DOCS_TOOLS / "build.py", *args], env=self.env,
-                              check=check, text=True, capture_output=True)
+        try:
+            return subprocess.run([sys.executable, DOCS_TOOLS / "build.py", *args], env=self.env,
+                                  check=check, text=True, capture_output=True)
+        except subprocess.CalledProcessError as error:
+            self.fail(f"{error}\nstdout:\n{error.stdout}\nstderr:\n{error.stderr}")
 
     def make_book(self, root, options=False):
         write(root / "book.toml", '[book]\ntitle = "bitcoinix"\nsrc = "docs"\n'
@@ -185,6 +189,38 @@ class Site(Tmp):
 
     def html_files(self, root):
         return sorted(p for p in root.rglob("*.html") if p.parent != root / "v")
+
+    def test_extracts_archives_with_trailing_padding(self):
+        # Run real git, then append valid tar padding exceeding even a 64 KiB
+        # kernel page. The writer cannot finish until the reader drains the pipe.
+        producer = """
+import signal
+import subprocess
+import sys
+signal.signal(signal.SIGPIPE, signal.SIG_DFL)
+signal.alarm(30)
+subprocess.run(sys.argv[2:], check=True)
+sys.stdout.buffer.write(b'\\0' * (1024 * 1024))
+sys.stdout.buffer.flush()
+sys.exit(int(sys.argv[1]))
+"""
+        popen = subprocess.Popen
+        for exit_code in (0, 7):
+            with self.subTest(exit_code=exit_code):
+                def padded_archive(args, **kwargs):
+                    return popen([sys.executable, "-c", producer, str(exit_code), *args],
+                                 pipesize=4096, **kwargs)
+
+                dest = self.tmp / f"extracted-{exit_code}"
+                with mock.patch.object(subprocess, "Popen", side_effect=padded_archive):
+                    if exit_code:
+                        # A complete archive must not hide a failing producer.
+                        with self.assertRaisesRegex(docs_site.Error, "git archive failed"):
+                            docs_site.extract_commit(self.repo, "v0.2.0", dest)
+                    else:
+                        docs_site.extract_commit(self.repo, "v0.2.0", dest)
+                self.assertEqual((dest / "docs/introduction.md").read_text(),
+                                 (self.repo / "docs/introduction.md").read_text())
 
     def test_builds_the_latest_release_at_the_root_and_each_release_under_v(self):
         self.build_site("0.2.0")
