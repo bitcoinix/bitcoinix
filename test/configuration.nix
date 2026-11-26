@@ -1152,6 +1152,43 @@ let
       expr = failedAssertions prunedElectrs;
       expected = [ "electrs does not support bitcoind pruning." ];
     };
+    # The explorer's listener keeps a wildcard address, while its connections
+    # to rbitcoin's wildcard listeners go to loopback
+    testRbitcoinSpaceListenAddress = let
+      env = address: (evaluate {
+        services.rbitcoin-space = { enable = true; inherit address; };
+        services.rbitcoin = {
+          rpc.address = address;
+          electrum.address = address;
+          esplora.address = address;
+        };
+      }).systemd.services.rbitcoin-space.environment;
+      addresses = address: with env address; {
+        inherit LISTEN_ADDR MAINNET_RPC_HOST MAINNET_ELECTRUM_ADDR MAINNET_ESPLORA_URL;
+      };
+    in {
+      expr = map addresses [ "0.0.0.0" "::" "10.0.0.2" ];
+      expected = [
+        {
+          LISTEN_ADDR = "0.0.0.0:60847";
+          MAINNET_RPC_HOST = "127.0.0.1";
+          MAINNET_ELECTRUM_ADDR = "127.0.0.1:50001";
+          MAINNET_ESPLORA_URL = "http://127.0.0.1:3002";
+        }
+        {
+          LISTEN_ADDR = "[::]:60847";
+          MAINNET_RPC_HOST = "::1";
+          MAINNET_ELECTRUM_ADDR = "[::1]:50001";
+          MAINNET_ESPLORA_URL = "http://[::1]:3002";
+        }
+        {
+          LISTEN_ADDR = "10.0.0.2:60847";
+          MAINNET_RPC_HOST = "10.0.0.2";
+          MAINNET_ELECTRUM_ADDR = "10.0.0.2:50001";
+          MAINNET_ESPLORA_URL = "http://10.0.0.2:3002";
+        }
+      ];
+    };
     testLightningRejectsPortCollision = {
       expr = map (lib.hasInfix "LND and clightning can't both bind")
         (failedAssertions conflictingLightning);
@@ -1436,6 +1473,18 @@ let
         }
       ];
       expected = [ [ true ] [ true ] [ true ] ];
+    };
+    # Every entry the modules define, enabled or not, has its own id
+    testNetnsIdsAreUnique = {
+      expr = builtins.filter (lib.hasInfix "must have unique ids") (failedAssertions netns);
+      expected = [];
+    };
+    testNetnsRejectsSharedIds = {
+      expr = builtins.filter (lib.hasInfix "must have unique ids") (failedAssertions (evaluate {
+        imports = [ netnsBitcoind ];
+        nix-bitcoin.netns-isolation.services.electrs.id = lib.mkForce 12;
+      }));
+      expected = [ "`nix-bitcoin.netns-isolation.services` entries must have unique ids. Shared ids: 12 (bitcoind, electrs). Give each entry its own `id`." ];
     };
     testNetnsRejectsDeclaredForwarding = {
       expr = map netnsRejectsForwarding [

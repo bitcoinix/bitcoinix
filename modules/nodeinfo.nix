@@ -210,6 +210,8 @@ in {
       };
       electrs = mkInfo "";
       fulcrum = mkInfo "";
+      rbitcoin = mkInfo "";
+      rbitcoin-space = mkInfo "";
       btcpayserver = mkInfo "";
       rtl = mkInfo "";
       mempool = mkInfo "";

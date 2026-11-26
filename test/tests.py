@@ -12,6 +12,8 @@ TEST_PHASES = (
         "rpc-whitelist",
         "electrs",
         "fulcrum",
+        "rbitcoin",
+        "rbitcoin-space",
         "stop-electrs",
         "clightning",
         "lnd",
@@ -53,6 +55,8 @@ TEST_PHASES = (
         "regtest",
         "lnd-restart-on-clean-exit",
         "lnd-macaroon-revocation",
+        "rbitcoin-mempool",
+        "rbitcoin-space-follows-node",
         "trustedcoin",
     )),
     ("secrets", (

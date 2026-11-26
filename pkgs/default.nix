@@ -16,6 +16,8 @@ let self = {
     mempool-frontend
     mempool-rust-gbt
     mempool-nginx-conf;
+  rbitcoin = pkgs.callPackage ./rbitcoin { };
+  rbitcoin-space = pkgs.callPackage ./rbitcoin-space { };
   unbeholden-wallet = pkgs.callPackage ./unbeholden-wallet {};
   unbeholden-lnurl = pkgs.callPackage ./unbeholden-lnurl { };
 

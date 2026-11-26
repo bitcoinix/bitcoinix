@@ -312,6 +312,146 @@ def test_fulcrum():
     machine.wait_until_succeeds(current_run_log_has_string("fulcrum", "started ok"))
 
 
+@test("rbitcoin")
+def test_rbitcoin():
+    assert_running("rbitcoin")
+    # The operator reaches the node through the unix socket
+    machine.wait_until_succeeds("runuser -u operator -- rbitcoin-cli getblockcount")
+
+    if not test_data["rbitcoin"]["rpc"]:
+        return
+    cookie = "/run/rbitcoin-rpc/rpc.cookie"
+    # Published once rbitcoin holds its RPC port
+    machine.wait_until_succeeds(f"test -e {cookie}")
+    assert_full_match(f"stat -c '%a %U %G' /run/rbitcoin-rpc {cookie}",
+                      "750 root rbitcoinrpc\n640 root rbitcoinrpc\n")
+    # rbitcoin's own copy and root's copy are private
+    assert_full_match("stat -c '%a %U' /run/rbitcoin /run/rbitcoin/rpc.cookie /run/rbitcoin-rpc.pending",
+                      "700 rbitcoin\n600 rbitcoin\n600 root\n")
+    succeed(f"cmp /run/rbitcoin/rpc.cookie {cookie}")
+    # The cookie is built in a root-only temp dir that is removed afterwards
+    assert_full_match("find /run -maxdepth 1 -name 'rbitcoin-cookie.*' | wc -l", "0\n")
+    # Only group `rbitcoinrpc` can read the cookie
+    machine.fail(f"runuser -u operator -- cat {cookie}")
+    # The cookie authenticates Bitcoin Core style HTTP Basic RPC, other credentials don't
+    rpc = (
+        """curl -s -o /dev/null -w '%{http_code}' --data-binary """
+        """'{"jsonrpc":"1.0","id":0,"method":"getblockcount","params":[]}' """
+        f"http://{ip('rbitcoin')}:18453/"
+    )
+    assert_full_match(f"{rpc} --user \"$(cat {cookie})\"", "200")
+    assert_full_match(f"{rpc} --user __cookie__:wrong", "401")
+
+    # Without netns-isolation, any local user can listen on rbitcoin's RPC
+    # address until rbitcoin binds it (after catch-up). The cookie must not be
+    # published while someone else holds the port, or clients would send it
+    # to that listener.
+    if "netns-isolation" in enabled_tests:
+        return
+    owned_by = test_data["rbitcoin"]["rpcPortOwnedBy"]
+    if "rbitcoin-mempool" in enabled_tests:
+        # mempool has found the cookie and runs, so it will poll the squatter
+        machine.wait_until_succeeds(
+            "readlink /proc/$(systemctl show -P MainPID mempool)/exe | grep -q node"
+        )
+    succeed("systemctl stop rbitcoin")
+    succeed(f"test ! -e {cookie}")
+    squat_start = succeed("date +%s").strip()
+    # The squatter records every request and answers 401, like rbitcoin
+    # with a wrong cookie. Its process is named `pid=1,`: `ss -p` prints
+    # process names unescaped, so a check that parsed them would take the
+    # port for pid 1's.
+    requests = "/tmp/rbitcoin-rpc-squatter.log"
+    squatter = "/tmp/pid=1,"
+    succeed(
+        f"install -o nobody -m 600 /dev/null {requests}",
+        "printf '%s\\n' '#!/bin/sh' "
+        f"'timeout 1 cat >> {requests}' "
+        "'printf \"HTTP/1.1 401 Unauthorized\\r\\nContent-Length: 0\\r\\n\\r\\n\"'"
+        " > /tmp/rbitcoin-rpc-squatter && chmod 755 /tmp/rbitcoin-rpc-squatter",
+        f"install -m 755 \"$(readlink -f \"$(command -v socat)\")\" '{squatter}'",
+        # The squatter script needs `timeout` and `cat`, which aren't on the
+        # default PATH of a transient unit
+        "systemd-run --uid=nobody --unit=rbitcoin-rpc-squatter"
+        " --setenv=PATH=/run/current-system/sw/bin"
+        f" '{squatter}' TCP-LISTEN:18453,bind=127.0.0.1,reuseaddr,fork EXEC:/tmp/rbitcoin-rpc-squatter",
+    )
+    wait_for_open_port("127.0.0.1", 18453)
+    squatter_pid = succeed("systemctl show -P MainPID rbitcoin-rpc-squatter").strip()
+    succeed("ss -Hltnp 'sport = :18453' | grep -qF 'pid=1,'")
+    machine.fail(f"{owned_by} 1")
+    # The check does recognize the actual owner
+    succeed(f"{owned_by} {squatter_pid}")
+    succeed("systemctl start rbitcoin")
+    # rbitcoin opens the RPC port after catch-up, fails to bind it and exits
+    machine.wait_until_succeeds(log_has_string("rbitcoin", "rpc bind 127.0.0.1:18453"))
+    succeed(f"test ! -e {cookie}")
+    # The cookie of an instance that started while the port was squatted
+    squatted_cookie = succeed("cat /run/rbitcoin-rpc.pending")
+    if "rbitcoin-mempool" in enabled_tests:
+        # mempool kept calling RPC meanwhile. It reads the cookie file for every
+        # call, so it found none and sent nothing.
+        machine.wait_until_succeeds(
+            f"journalctl -u mempool --since=@{squat_start} --grep 'ENOENT.*{cookie}'"
+        )
+    succeed("systemctl stop rbitcoin-rpc-squatter")
+    # rbitcoin restarts on failure, binds the port and its cookie is published
+    machine.wait_until_succeeds(f"test -e {cookie}")
+    assert_full_match(f"{rpc} --user \"$(cat {cookie})\"", "200")
+    # Neither cookie reached the squatter (clients send it base64-encoded, as
+    # Basic auth)
+    for credential in [squatted_cookie, succeed(f"cat {cookie}")]:
+        encoded = base64.b64encode(credential.encode()).decode()
+        succeed(f"! grep -qF {encoded} {requests}")
+
+    # A crash removes the published cookie, and the next instance's is
+    # published once it holds the port
+    succeed("systemctl kill -s KILL rbitcoin")
+    machine.wait_until_succeeds(f"test ! -e {cookie}")
+    machine.wait_until_succeeds(f"test -e {cookie}")
+    succeed(f"cmp /run/rbitcoin-rpc.pending {cookie}")
+    assert_full_match(f"{rpc} --user \"$(cat {cookie})\"", "200")
+
+def rbitcoin_space_wait_ready():
+    # `ready` needs an accepted RPC call and a connected Electrum client.
+    # The RPC check repeats every 30 s, so a refused cookie shows within that time.
+    machine.wait_until_succeeds(
+        f"[[ $(curl -sS http://{ip('rbitcoin-space')}:60847/readyz | jq -r .networks.regtest.rpc) == ok ]]"
+    )
+    machine.wait_until_succeeds(
+        f"curl -fsS -o /dev/null http://{ip('rbitcoin-space')}:60847/readyz"
+    )
+
+
+@test("rbitcoin-space")
+def test_rbitcoin_space():
+    assert_running("rbitcoin-space")
+    rbitcoin_space_wait_ready()
+    # Both are probed after Electrum connects, so they can trail `ready`
+    readyz = f"curl -sS http://{ip('rbitcoin-space')}:60847/readyz | jq -r .networks.regtest"
+    machine.wait_until_succeeds(f"[[ $({readyz}.address_index) == on ]]")
+    machine.wait_until_succeeds(f"[[ $({readyz}.store) == ok ]]")
+
+    base = f"http://{ip('rbitcoin-space')}:60847"
+    # The frontend, from the package's web directory
+    succeed(f"curl -fsS {base}/ | grep -qi '<!doctype html>'")
+    # The Esplora-compatible API, answered through rbitcoin's Esplora server
+    node_height = succeed("runuser -u operator -- rbitcoin-cli getblockcount").strip()
+    machine.wait_until_succeeds(
+        f"[[ $(curl -fsS {base}/regtest/api/blocks/tip/height) == {node_height} ]]"
+    )
+
+    # The RPC password comes from rbitcoin's cookie at runtime: it is in the
+    # environment, but neither on the command line nor in the unit
+    pid = succeed("systemctl show -p MainPID --value rbitcoin-space").strip()
+    password = succeed("cut -d: -f2 /run/rbitcoin/rpc.cookie").strip()
+    machine.fail(f"grep -qF {password} /proc/{pid}/cmdline")
+    machine.fail(f"systemctl cat rbitcoin-space | grep -qF {password}")
+    succeed(f"tr '\\0' '\\n' < /proc/{pid}/environ | grep -qxF REGTEST_RPC_PASSWORD={password}")
+    # Owner-only, like every process's environment
+    machine.fail(f"runuser -u operator -- cat /proc/{pid}/environ")
+
+
 @test("clightning")
 def test_clightning():
     assert_running("clightning")
