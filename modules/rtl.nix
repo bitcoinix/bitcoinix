@@ -170,7 +170,7 @@ let
   # `rtl-rune` left behind. Blacklisting an ID revokes every rune with this ID.
   # clightning gives each new rune its own ID, but it counts them in its database.
   # So after a start on a new database, a new rune can get the ID of an older rune
-  # that clightning doesn't list, see `docs/services.md`.
+  # that clightning doesn't list, see `docs/service/rtl.md`.
   runeAction = pkgs.writeText "rtl-rune-action.jq" ''
     def restrictions: [.restrictions[] | [.alternatives[] | .fieldname + .condition + .value]];
     [.runes[] | select(.blacklisted | not)] as $valid

@@ -18,11 +18,11 @@ nix-bitcoin node to bitcoinix.
 
 * Bitcoin Core, with Core Lightning or LND
 * Electrum servers (electrs, Fulcrum), the mempool explorer, BTCPay Server and the RTL web interface
-* [Unbeholden Wallet](services.md#connect-to-unbeholden-wallet), a watch-only browser wallet for
+* [Unbeholden Wallet](service/unbeholden-wallet.md), a watch-only browser wallet for
   air-gapped signers
-* Mobile wallet connections, e.g. ZEUS via [Tor](services.md#use-zeus-mobile-lightning-wallet-via-tor)
-  or [WireGuard](services.md#use-zeus-mobile-lightning-wallet-via-wireguard)
-* Helpers: [nodeinfo](services.md#nodeinfo), [backups](services.md#backups), and a non-root
+* Mobile wallet connections, e.g. ZEUS via [Tor](service/zeus.md#connect-via-tor)
+  or [WireGuard](service/zeus.md#connect-via-wireguard)
+* Helpers: [nodeinfo](service/nodeinfo.md), [backups](service/backups.md), and a non-root
   `operator` user for the client tools
 
 The [README](https://github.com/bitcoinix/bitcoinix#features) lists all services and plugins, the

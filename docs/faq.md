@@ -48,7 +48,7 @@ password, and the `operator` user has none by default. Set one as root with `pas
 Set `nix-bitcoin.nodeinfo.enable = true;` (the `secure-node.nix` preset does) and run
 `nodeinfo` as root or as the operator user. It lists the enabled services with their local
 and onion addresses. The operator can also read the onion addresses of all active onion
-services in `/var/lib/onion-addresses/<operator name>/`. See [nodeinfo](services.md#nodeinfo).
+services in `/var/lib/onion-addresses/<operator name>/`. See [nodeinfo](service/nodeinfo.md).
 
 ## How do I run a command in a service's network namespace?
 

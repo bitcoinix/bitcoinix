@@ -315,7 +315,7 @@ and services without `tor.enforce` can reach your LAN. With it enabled:
   matter when netns-isolation and the firewall run `pkgs.iptables-legacy`, whose rules live
   outside the nftables ruleset. Setting it as `networking.firewall.package` does both, but
   the default kernel lacks the legacy xtables it needs (see
-  [WireGuard firewall compatibility](services.md#wireguard-firewall-compatibility)).
+  [WireGuard firewall compatibility](service/zeus.md#wireguard-firewall-compatibility)).
 
 # Migrate existing services to bitcoinix
 

@@ -21,7 +21,7 @@ the NixOS base, and the services that bitcoinix no longer supports.
   keys, which you verify yourself. Don't follow a branch, as with nix-bitcoin's `release`
   branch: pin a verified tag.
 - Back up your node, above all the [secrets dir](configuration.md#secrets-dir) set by
-  `nix-bitcoin.secretsDir` and your Lightning [backups](services.md#backups). The secrets
+  `nix-bitcoin.secretsDir` and your Lightning [backups](service/backups.md). The secrets
   dir defaults to `/var/src/secrets` with krops and to `/etc/nix-bitcoin-secrets`
   otherwise. With krops, also back up the `secrets/` directory in your deployment
   directory, from which krops copies the secrets to the node.

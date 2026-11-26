@@ -40,7 +40,7 @@ let
           Neither backend limits a hot wallet in BTCPay Server. Switching away from
           `clightning` stops Core Lightning unless `services.clightning.enable` is set,
           and then lnd needs another port than Core Lightning.
-          See docs/services.md.
+          See docs/service/btcpayserver.md, "Lightning backend".
         '';
       };
       rootpath = mkOption {

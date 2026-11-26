@@ -1,6 +1,66 @@
-// Bookmarks from the single-page release and upgrade guides through v0.1.6.
+// Bookmarks from the former single-page service, release and upgrade guides.
 (() => {
     const legacy = {
+        "services": {
+            "nodeinfo": "nodeinfo.html",
+            "troubleshoot-onion-addresses": "nodeinfo.html#troubleshoot-onion-addresses",
+            "connect-to-bitcoinix-node-through-the-ssh-onion-service": "sshd.html",
+            "keep-the-nodes-ip-address-private": "sshd.html#keep-the-nodes-ip-address-private",
+            "backups": "backups.html",
+            "lightning-channel-databases": "backups.html#lightning-channel-databases",
+            "bitcoind-wallets": "backups.html#bitcoind-wallets",
+            "connect-to-electrs": "electrs.html",
+            "requirements-android": "electrs.html#requirements-android",
+            "android-requirements": "electrs.html#android-requirements",
+            "requirements-desktop": "electrs.html#requirements-desktop",
+            "desktop-requirements": "electrs.html#desktop-requirements",
+            "connect-your-wallet": "electrs.html#connect-your-wallet",
+            "connect-to-rtl": "rtl.html",
+            "backend-maintenance": "rtl.html#backend-maintenance",
+            "backend-credentials": "rtl.html#backend-credentials",
+            "backend-certificates": "rtl.html#backend-certificates",
+            "reset-two-factor-authentication": "rtl.html#reset-two-factor-authentication",
+            "connect-to-btcpay-server": "btcpayserver.html",
+            "check-the-admin-accounts": "btcpayserver.html#check-the-admin-accounts",
+            "btcpay-server": "btcpayserver.html",
+            "lightning-backend": "btcpayserver.html#lightning-backend",
+            "receive-payments-with-unbeholden-lnurl": "unbeholden-lnurl.html",
+            "connect-to-unbeholden-wallet": "unbeholden-wallet.html",
+            "access-from-another-device": "unbeholden-wallet.html#access-from-another-device",
+            "use-zeus-mobile-lightning-wallet-via-tor": "zeus.html#connect-via-tor",
+            "for-lnd": "zeus.html#for-lnd",
+            "for-core-lightning": "zeus.html#for-core-lightning",
+            "for-lnd-1": "zeus.html#for-lnd-1",
+            "for-core-lightning-1": "zeus.html#for-core-lightning-1",
+            "additional-lndconnect-features": "zeus.html#additional-lndconnect-features",
+            "connecting-without-tor-or-wireguard": "zeus.html#connecting-without-tor-or-wireguard",
+            "for-lnd-2": "zeus.html#for-lnd-2",
+            "for-core-lightning-2": "zeus.html#for-core-lightning-2",
+            "use-zeus-mobile-lightning-wallet-via-wireguard": "zeus.html#connect-via-wireguard",
+            "wireguard-requirements": "zeus.html#wireguard-requirements",
+            "set-up-wireguard-and-zeus": "zeus.html#set-up-wireguard-and-zeus",
+            "for-lnd-3": "zeus.html#for-lnd-3",
+            "for-core-lightning-3": "zeus.html#for-core-lightning-3",
+            "wireguard-firewall-compatibility": "zeus.html#wireguard-firewall-compatibility",
+            "initialize-a-trezor-for-bitcoin-cores-hardware-wallet-interface": "trezor.html",
+            "initialize-a-trezor-for-the-bitcoin-hardware-wallet-interface-hwi": "trezor.html",
+            "lnd": "lnd.html",
+            "custom-macaroons": "lnd.html#custom-macaroons",
+            "root-keys-and-configuration-changes": "lnd.html#root-keys-and-configuration-changes",
+            "restart-services-after-macaroon-changes": "lnd.html#restart-services-after-macaroon-changes",
+            "revoke-a-macaroon": "lnd.html#revoke-a-macaroon",
+            "revoke-all-macaroons": "lnd.html#revoke-all-macaroons",
+            "clightning": "clightning.html",
+            "core-lightning": "clightning.html",
+            "plugins": "clightning.html#plugins",
+            "currency-rates": "clightning.html#currency-rates",
+            "trustedcoin": "clightning.html#trustedcoin",
+            "clightning-database-replication": "clightning.html#clightning-database-replication",
+            "core-lightning-database-replication": "clightning.html#core-lightning-database-replication",
+            "remote-target-via-sshfs": "clightning.html#remote-target-via-sshfs",
+            "local-directory-target": "clightning.html#local-directory-target",
+            "custom-remote-destination": "clightning.html#custom-remote-destination",
+        },
         "upgrading": {
             "upgrading-to-config-version-016": "0.1.6.html",
             "operator-access-to-lightning-onion-addresses": "0.1.6.html#operator-access-to-lightning-onion-addresses",
@@ -71,16 +131,17 @@
         },
     };
 
-    function redirectLegacyNote() {
-        const section = window.location.pathname.match(/\/(upgrading|release-notes)\.html$/)?.[1];
+    function redirectLegacyLink() {
+        const section = window.location.pathname.match(/\/(services|upgrading|release-notes)\.html$/)?.[1];
         if (!section) return;
 
         const anchor = window.location.hash.slice(1);
         if (Object.hasOwn(legacy[section], anchor)) {
-            window.location.replace(section + "/" + legacy[section][anchor]);
+            const directory = section === "services" ? "service" : section;
+            window.location.replace(directory + "/" + legacy[section][anchor]);
         }
     }
 
-    redirectLegacyNote();
-    window.addEventListener("hashchange", redirectLegacyNote);
+    redirectLegacyLink();
+    window.addEventListener("hashchange", redirectLegacyLink);
 })();

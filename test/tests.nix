@@ -614,7 +614,7 @@ let
       '';
     };
 
-    # The WireGuard preset with iptables-legacy next to nftables, as docs/services.md
+    # The WireGuard preset with iptables-legacy next to nftables, as docs/service/zeus.md
     # describes. The default kernel lacks legacy xtables, so use one that has them.
     wireguardIptablesLegacy = { config, pkgs, ... }: {
       imports = [ ../modules/presets/wireguard.nix ];
