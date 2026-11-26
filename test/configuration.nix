@@ -1437,6 +1437,18 @@ let
       ];
       expected = [ [ true ] [ true ] [ true ] ];
     };
+    # Every entry the modules define, enabled or not, has its own id
+    testNetnsIdsAreUnique = {
+      expr = builtins.filter (lib.hasInfix "must have unique ids") (failedAssertions netns);
+      expected = [];
+    };
+    testNetnsRejectsSharedIds = {
+      expr = builtins.filter (lib.hasInfix "must have unique ids") (failedAssertions (evaluate {
+        imports = [ netnsBitcoind ];
+        nix-bitcoin.netns-isolation.services.electrs.id = lib.mkForce 12;
+      }));
+      expected = [ "`nix-bitcoin.netns-isolation.services` entries must have unique ids. Shared ids: 12 (bitcoind, electrs). Give each entry its own `id`." ];
+    };
     testNetnsRejectsDeclaredForwarding = {
       expr = map netnsRejectsForwarding [
         {}

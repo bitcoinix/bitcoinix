@@ -26,6 +26,7 @@ in {
     # btcpayserver = defaultEnableTorProxy;
     mempool = defaultEnableTorProxy;
     unbeholden-lnurl = defaultEnableTorProxy;
+    rbitcoin = defaultEnableTorProxy;
 
     # These services don't make outgoing connections but we restrict them to
     # Tor just to be safe.
