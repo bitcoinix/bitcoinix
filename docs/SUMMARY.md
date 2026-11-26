@@ -30,6 +30,7 @@
   - [Unbeholden LNURL](service/unbeholden-lnurl.md)
   - [Unbeholden Wallet](service/unbeholden-wallet.md)
   - [Cashu mint](services/cdk-mint.md)
+  - [Orchard](services/orchard.md)
   - [ZEUS](service/zeus.md)
   - [Trezor](service/trezor.md)
   - [LND](service/lnd.md)

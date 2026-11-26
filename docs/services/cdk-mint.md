@@ -41,6 +41,11 @@ endpoint. See [the options](../options.md) for listen addresses, paths and setti
 Logs go to the journal by default, without accumulating daily files in `dataDir`.
 CDK 0.18.3 does not advertise the public URL through `info.url`.
 
+## Web management
+
+Enable `services.orchard.enable = true;` for the [Orchard dashboard](orchard.md),
+including mint analytics and authenticated management RPC.
+
 ## Optional on-chain payments
 
 Lightning-only operation is the default. To also accept and send on-chain payments:

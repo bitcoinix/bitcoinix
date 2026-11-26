@@ -1,0 +1,372 @@
+Support read-only application assets and a separate writable data directory.
+
+ASSETS_DIR selects the directory containing dist/client/browser and proto,
+while DATABASE_DIR holds runtime configuration and backup/restore files as
+well as the database and encryption key. Resolve the HTML template when the
+middleware is initialized so settings loaded from .env are honored.
+
+Use Node's built-in .env loader in the startup script, avoiding a runtime
+dependency on the development-only dotenv package. Allow the tested Node.js
+24.22.2 release alongside the existing Node.js 22 range.
+
+diff --git a/.env.example b/.env.example
+--- a/.env.example
++++ b/.env.example
+@@ -12,7 +12,10 @@
+ # BASE_PATH=api
+ # THROTTLE_TTL=60000
+ # THROTTLE_LIMIT=20
++# Writable directory for the database, encryption key, runtime config, and temporary files
+ # DATABASE_DIR=data
++# Read-only application directory containing dist/client/browser and proto (defaults to the working directory)
++# ASSETS_DIR=/path/to/orchard
+ 
+ # --------------------------------------------
+ # Orchard Configs (optional)
+diff --git a/package-lock.json b/package-lock.json
+--- a/package-lock.json
++++ b/package-lock.json
+@@ -105,7 +105,7 @@
+         "typescript-eslint": "^8.69.0"
+       },
+       "engines": {
+-        "node": ">=22.23.4 <23"
++        "node": ">=22.23.4 <23 || >=24.22.2 <25"
+       }
+     },
+     "node_modules/@algolia/abtesting": {
+diff --git a/package.json b/package.json
+--- a/package.json
++++ b/package.json
+@@ -7,7 +7,7 @@
+   "license": "MIT",
+   "type": "module",
+   "engines": {
+-    "node": ">=22.23.4 <23"
++    "node": ">=22.23.4 <23 || >=24.22.2 <25"
+   },
+   "imports": {
+     "#server/*": {
+diff --git a/scripts/generate-runtime-config.mjs b/scripts/generate-runtime-config.mjs
+--- a/scripts/generate-runtime-config.mjs
++++ b/scripts/generate-runtime-config.mjs
+@@ -1,7 +1,10 @@
+ /* Core Dependencies */
+ import fs from 'node:fs/promises';
+-import {config} from 'dotenv';
+-config({ path: '.env', override: false, quiet: true });
++try {
++	process.loadEnvFile('.env');
++} catch (error) {
++	if (error.code !== 'ENOENT') throw error;
++}
+ 
+ const mode = {
+ 	production: process.env['NODE_ENV'] === 'production',
+@@ -52,7 +55,9 @@
+ };
+ 
+ if (process.env.NODE_ENV === 'production') {
+-	const output_path = `${process.cwd()}/dist/client/browser/config.json`;
++	const data_dir = process.env.DATABASE_DIR || 'data';
++	await fs.mkdir(`${data_dir}/tmp`, {recursive: true});
++	const output_path = `${data_dir}/config.json`;
+ 	await fs.writeFile(output_path, JSON.stringify(runtime_config, null, 2));
+ } else {
+ 	const output_path = `${process.cwd()}/public/config.json`;
+diff --git a/src/server/main.ts b/src/server/main.ts
+--- a/src/server/main.ts
++++ b/src/server/main.ts
+@@ -3,6 +3,7 @@
+ import {ConfigService} from '@nestjs/config';
+ import {Logger, ConsoleLogger, type LogLevel, type INestApplication} from '@nestjs/common';
+ import {existsSync} from 'node:fs';
++import {resolve} from 'node:path';
+ import compression from 'compression';
+ /* Vendor Dependencies */
+ import * as express from 'express';
+@@ -37,7 +38,13 @@
+ 	validation(app, configService, logger);
+ 	const is_production = configService.get<boolean>('mode.production') ?? false;
+ 	app.use(securityHeaders(is_production));
+-	if (is_production) app.use(indexHtml());
++	if (is_production) {
++		app.getHttpAdapter().get('/config.json', (_req, res) => {
++			res.setHeader('Cache-Control', 'no-store');
++			res.sendFile(resolve(process.env.DATABASE_DIR || 'data', 'config.json'));
++		});
++		app.use(indexHtml());
++	}
+ 	app.getHttpAdapter().getInstance().disable('x-powered-by');
+ 	const compression_enabled = configService.get<boolean>('server.compression');
+ 	if (compression_enabled) app.use(compression());
+diff --git a/src/server/modules/cashu/cdk/cdk.service.spec.ts b/src/server/modules/cashu/cdk/cdk.service.spec.ts
+--- a/src/server/modules/cashu/cdk/cdk.service.spec.ts
++++ b/src/server/modules/cashu/cdk/cdk.service.spec.ts
+@@ -44,6 +44,23 @@
+ 
+ 	it('should be defined', () => {
+ 		expect(cdkService).toBeDefined();
++	});
++
++	it('loads protocol definitions from ASSETS_DIR', () => {
++		const env = jest.replaceProperty(process, 'env', {...process.env, ASSETS_DIR: '/installed/orchard'});
++		try {
++			configService.get.mockImplementation((key: string) => {
++				if (key === 'cashu.rpc_host') return 'localhost';
++				if (key === 'cashu.rpc_port') return 3333;
++				return undefined;
++			});
++			proto_loader.loadSync.mockReturnValue({});
++			grpc.loadPackageDefinition.mockReturnValue({cdk_mint_management_v1: {CdkMint: jest.fn()}});
++			cdkService.initializeGrpcClient();
++			expect(proto_loader.loadSync).toHaveBeenCalledWith('/installed/orchard/proto/cdk/cdk-mint-rpc.proto', expect.any(Object));
++		} finally {
++			env.restore();
++		}
+ 	});
+ 
+ 	it('returns undefined client when credentials missing', () => {
+diff --git a/src/server/modules/cashu/cdk/cdk.service.ts b/src/server/modules/cashu/cdk/cdk.service.ts
+--- a/src/server/modules/cashu/cdk/cdk.service.ts
++++ b/src/server/modules/cashu/cdk/cdk.service.ts
+@@ -65,7 +65,7 @@
+ 		}
+ 
+ 		try {
+-			const proto_path = path.join(process.cwd(), 'proto/cdk/cdk-mint-rpc.proto');
++			const proto_path = path.join(process.env.ASSETS_DIR || process.cwd(), 'proto/cdk/cdk-mint-rpc.proto');
+ 			const package_definition = protoLoader.loadSync(proto_path, {
+ 				keepCase: true,
+ 				longs: String,
+diff --git a/src/server/modules/cashu/mintdb/cashumintdb.service.spec.ts b/src/server/modules/cashu/mintdb/cashumintdb.service.spec.ts
+--- a/src/server/modules/cashu/mintdb/cashumintdb.service.spec.ts
++++ b/src/server/modules/cashu/mintdb/cashumintdb.service.spec.ts
+@@ -10,6 +10,7 @@
+ import {OrchardErrorCode} from '#server/modules/error/error.types';
+ import {MintDatabaseType} from './cashumintdb.enums.js';
+ import {promises as fs_promises} from 'fs';
++import {resolve} from 'path';
+ 
+ // Core modules bypass the ESM mock registry, and better-sqlite3 is consumed as a default
+ // export, so each module is replaced explicitly. fs.promises is deliberately left real —
+@@ -178,8 +179,15 @@
+ 		}
+ 	});
+ 
+-	describe('backups and restores', () => {
++	describe.each([undefined, '/custom data'])('backups and restores (DATABASE_DIR=%s)', (database_dir) => {
+ 		beforeEach(() => {
++			jest.restoreAllMocks();
++			jest.replaceProperty(process, 'env', {...process.env});
++			if (database_dir) process.env.DATABASE_DIR = database_dir;
++			else delete process.env.DATABASE_DIR;
++		});
++
++		afterEach(() => {
+ 			jest.restoreAllMocks();
+ 		});
+ 
+@@ -204,7 +212,8 @@
+ 			const read_file = jest.spyOn(fs_promises, 'readFile').mockResolvedValue(Buffer.from('ok'));
+ 			const unlink = jest.spyOn(fs_promises, 'unlink').mockResolvedValue(undefined as any);
+ 			const buf = await (cashuMintDatabaseService as any).createBackupSqlite({database: db_instance});
+-			expect(read_file).toHaveBeenCalled();
++			expect(db_instance.backup).toHaveBeenCalledWith(resolve(database_dir || 'data', 'tmp/sqlite-backup.db'));
++			expect(read_file).toHaveBeenCalledWith(resolve(database_dir || 'data', 'tmp/sqlite-backup.db'));
+ 			expect(unlink).toHaveBeenCalled();
+ 			expect(buf.equals(Buffer.from('ok'))).toBe(true);
+ 		});
+@@ -236,7 +245,13 @@
+ 			const buf = await (cashuMintDatabaseService as any).createBackupPostgres();
+ 			expect(spawn_mock).toHaveBeenCalledWith(
+ 				'pg_dump',
+-				expect.arrayContaining(['--host=localhost', '--port=5432', '--username=user', '--dbname=db']),
++				expect.arrayContaining([
++					'--host=localhost',
++					'--port=5432',
++					'--username=user',
++					'--dbname=db',
++					`--file=${resolve(database_dir || 'data', 'tmp/postgres-backup.sql')}`,
++				]),
+ 				expect.objectContaining({env: expect.objectContaining({PGPASSWORD: 'pass'})}),
+ 			);
+ 			expect(unlink).toHaveBeenCalled();
+@@ -270,7 +285,7 @@
+ 			jest.spyOn(fs_promises, 'unlink').mockResolvedValue(undefined as any);
+ 			const copy_file = jest.spyOn(fs_promises, 'copyFile').mockResolvedValue(undefined as any);
+ 			await (cashuMintDatabaseService as any).restoreBackupSqlite(Buffer.from('data').toString('base64'));
+-			expect(copy_file).toHaveBeenCalled();
++			expect(copy_file).toHaveBeenCalledWith(resolve(database_dir || 'data', 'tmp/sqlite-restore.db'), '/tmp/sqlite.db');
+ 		});
+ 
+ 		it('restoreBackup sqlite: invalid file rejects with MintDatabaseRestoreInvalidError', async () => {
+@@ -330,7 +345,13 @@
+ 			await (cashuMintDatabaseService as any).restoreBackupPostgres(Buffer.from('sql').toString('base64'));
+ 			expect(spawn_mock).toHaveBeenCalledWith(
+ 				'psql',
+-				expect.arrayContaining(['--host=h', '--port=5432', '--username=u', '--dbname=d']),
++				expect.arrayContaining([
++					'--host=h',
++					'--port=5432',
++					'--username=u',
++					'--dbname=d',
++					`--file=${resolve(database_dir || 'data', 'tmp/postgres-restore.sql')}`,
++				]),
+ 				expect.objectContaining({env: expect.objectContaining({PGPASSWORD: 'p'})}),
+ 			);
+ 			expect(unlink).toHaveBeenCalled();
+diff --git a/src/server/modules/cashu/mintdb/cashumintdb.service.ts b/src/server/modules/cashu/mintdb/cashumintdb.service.ts
+--- a/src/server/modules/cashu/mintdb/cashumintdb.service.ts
++++ b/src/server/modules/cashu/mintdb/cashumintdb.service.ts
+@@ -247,7 +247,7 @@
+ 	}
+ 
+ 	private async createBackupSqlite(client: CashuMintDatabase): Promise<Buffer> {
+-		const backup_path = path.resolve('data/tmp/sqlite-backup.db');
++		const backup_path = path.resolve(process.env.DATABASE_DIR || 'data', 'tmp/sqlite-backup.db');
+ 		try {
+ 			await client.database.backup(backup_path);
+ 			const file_buffer = await fs.readFile(backup_path);
+@@ -265,7 +265,7 @@
+ 	private async restoreBackupSqlite(filebase64: string): Promise<void> {
+ 		return new Promise(async (resolve, reject) => {
+ 			const database_buffer: Buffer = Buffer.from(filebase64, 'base64');
+-			const restore_path = path.resolve('data/tmp/sqlite-restore.db');
++			const restore_path = path.resolve(process.env.DATABASE_DIR || 'data', 'tmp/sqlite-restore.db');
+ 
+ 			try {
+ 				await fs.writeFile(restore_path, database_buffer);
+@@ -302,7 +302,7 @@
+ 	}
+ 
+ 	private async createBackupPostgres(): Promise<Buffer> {
+-		const backup_path = path.resolve('data/tmp/postgres-backup.sql');
++		const backup_path = path.resolve(process.env.DATABASE_DIR || 'data', 'tmp/postgres-backup.sql');
+ 		try {
+ 			const connection_string = this.configService.get('cashu.database');
+ 			const {host, port, username, password, db_name} = this.parsePostgresConnection(connection_string);
+@@ -344,7 +344,7 @@
+ 	}
+ 
+ 	private async restoreBackupPostgres(filebase64: string): Promise<void> {
+-		const restore_path = path.resolve('data/tmp/postgres-restore.sql');
++		const restore_path = path.resolve(process.env.DATABASE_DIR || 'data', 'tmp/postgres-restore.sql');
+ 		try {
+ 			const database_buffer: Buffer = Buffer.from(filebase64, 'base64');
+ 			await fs.writeFile(restore_path, database_buffer);
+diff --git a/src/server/modules/cashu/nutshell/nutshell.service.ts b/src/server/modules/cashu/nutshell/nutshell.service.ts
+--- a/src/server/modules/cashu/nutshell/nutshell.service.ts
++++ b/src/server/modules/cashu/nutshell/nutshell.service.ts
+@@ -65,7 +65,7 @@
+ 		}
+ 
+ 		try {
+-			const proto_path = path.join(process.cwd(), 'proto/nutshell/management.proto');
++			const proto_path = path.join(process.env.ASSETS_DIR || process.cwd(), 'proto/nutshell/management.proto');
+ 			const package_definition = protoLoader.loadSync(proto_path, {
+ 				keepCase: true,
+ 				longs: String,
+diff --git a/src/server/modules/lightning/cln/cln.service.ts b/src/server/modules/lightning/cln/cln.service.ts
+--- a/src/server/modules/lightning/cln/cln.service.ts
++++ b/src/server/modules/lightning/cln/cln.service.ts
+@@ -94,8 +94,8 @@
+ 
+ 	public initializeLightningClient(): grpc.Client {
+ 		if (this.lightning_client) return this.lightning_client;
+-		const node_proto_path = path.join(process.cwd(), 'proto/cln/node.proto');
+-		const primitives_proto_path = path.join(process.cwd(), 'proto/cln/primitives.proto');
++		const node_proto_path = path.join(process.env.ASSETS_DIR || process.cwd(), 'proto/cln/node.proto');
++		const primitives_proto_path = path.join(process.env.ASSETS_DIR || process.cwd(), 'proto/cln/primitives.proto');
+ 		return (this.lightning_client = this.initializeGrpcClient([node_proto_path, primitives_proto_path], 'cln', 'Node'));
+ 	}
+ 
+diff --git a/src/server/modules/lightning/lnd/lnd.service.ts b/src/server/modules/lightning/lnd/lnd.service.ts
+--- a/src/server/modules/lightning/lnd/lnd.service.ts
++++ b/src/server/modules/lightning/lnd/lnd.service.ts
+@@ -87,13 +87,13 @@
+ 	}
+ 
+ 	public initializeLightningClient(): grpc.Client {
+-		const lightning_proto_path = path.join(process.cwd(), 'proto/lnd/lightning.proto');
++		const lightning_proto_path = path.join(process.env.ASSETS_DIR || process.cwd(), 'proto/lnd/lightning.proto');
+ 		return this.initializeGrpcClient([lightning_proto_path], 'lnrpc', 'Lightning');
+ 	}
+ 
+ 	public initializeWalletKitClient(): grpc.Client {
+-		const lightning_proto_path = path.join(process.cwd(), 'proto/lnd/lightning.proto');
+-		const walletkit_proto_path = path.join(process.cwd(), 'proto/lnd/walletkit.proto');
++		const lightning_proto_path = path.join(process.env.ASSETS_DIR || process.cwd(), 'proto/lnd/lightning.proto');
++		const walletkit_proto_path = path.join(process.env.ASSETS_DIR || process.cwd(), 'proto/lnd/walletkit.proto');
+ 		return this.initializeGrpcClient([lightning_proto_path, walletkit_proto_path], 'walletrpc', 'WalletKit');
+ 	}
+ 
+diff --git a/src/server/modules/middleware/index-html.middleware.spec.ts b/src/server/modules/middleware/index-html.middleware.spec.ts
+--- a/src/server/modules/middleware/index-html.middleware.spec.ts
++++ b/src/server/modules/middleware/index-html.middleware.spec.ts
+@@ -24,6 +24,17 @@
+ 		};
+ 		next = jest.fn();
+ 		mockedReadFileSync.mockReset();
++	});
++
++	it('should read assets configured after the module was imported', () => {
++		const env = jest.replaceProperty(process, 'env', {...process.env, ASSETS_DIR: '/installed/orchard'});
++		try {
++			mockedReadFileSync.mockReturnValue('<html></html>');
++			indexHtml();
++			expect(mockedReadFileSync).toHaveBeenCalledWith('/installed/orchard/dist/client/browser/index.html', 'utf8');
++		} finally {
++			env.restore();
++		}
+ 	});
+ 
+ 	it('should replace every CSP_NONCE placeholder with the per-request nonce', () => {
+diff --git a/src/server/modules/middleware/index-html.middleware.ts b/src/server/modules/middleware/index-html.middleware.ts
+--- a/src/server/modules/middleware/index-html.middleware.ts
++++ b/src/server/modules/middleware/index-html.middleware.ts
+@@ -4,8 +4,6 @@
+ import type {Request, Response, NextFunction} from 'express';
+ /* Local Dependencies */
+ import {CSP_NONCE_KEY, CSP_NONCE_PLACEHOLDER} from './middleware.constants.js';
+-
+-const CLIENT_INDEX_PATH = join(process.cwd(), 'dist', 'client', 'browser', 'index.html');
+ 
+ /**
+  * Caches the client index.html template once at startup and serves a per-request copy
+@@ -15,9 +13,10 @@
+  * Returns a no-op middleware if the client bundle isn't present (e.g. server-only runs).
+  */
+ export function indexHtml() {
++	const client_index_path = join(process.env.ASSETS_DIR || process.cwd(), 'dist', 'client', 'browser', 'index.html');
+ 	let template: string;
+ 	try {
+-		template = readFileSync(CLIENT_INDEX_PATH, 'utf8');
++		template = readFileSync(client_index_path, 'utf8');
+ 	} catch {
+ 		// Client bundle not built — fall through to serve-static / 404
+ 		return (_req: Request, _res: Response, next: NextFunction) => next();
+diff --git a/src/server/modules/tapass/tapd/tapd.service.ts b/src/server/modules/tapass/tapd/tapd.service.ts
+--- a/src/server/modules/tapass/tapd/tapd.service.ts
++++ b/src/server/modules/tapass/tapd/tapd.service.ts
+@@ -85,7 +85,7 @@
+ 	}
+ 
+ 	public initializeTaprootAssetsClient(): grpc.Client {
+-		const taproot_assets_proto_path = path.join(process.cwd(), 'proto/tapd/taprootassets.proto');
++		const taproot_assets_proto_path = path.join(process.env.ASSETS_DIR || process.cwd(), 'proto/tapd/taprootassets.proto');
+ 		return this.initializeGrpcClient([taproot_assets_proto_path], 'taprpc', 'TaprootAssets');
+ 	}
+ }
+diff --git a/src/server/modules/webserver/webserver.module.ts b/src/server/modules/webserver/webserver.module.ts
+--- a/src/server/modules/webserver/webserver.module.ts
++++ b/src/server/modules/webserver/webserver.module.ts
+@@ -10,7 +10,7 @@
+ 			inject: [ConfigService],
+ 			useFactory: (configService: ConfigService) => [
+ 				{
+-					rootPath: path.join(process.cwd(), 'dist', 'client', 'browser'),
++					rootPath: path.join(process.env.ASSETS_DIR || process.cwd(), 'dist', 'client', 'browser'),
+ 					exclude: [`/${configService.get('server.path')}`],
+ 				},
+ 			],

@@ -46,6 +46,7 @@ let
         (mkIfTest "unbeholden-wallet" [ websocat ])
         # Check that initialization guards reject ACL write access.
         (mkIfTest "cdk-mintd" [ acl ])
+        (mkIfTest "orchard" [ grpcurl ])
       ]);
 
       tests.bitcoind = cfg.bitcoind.enable;
@@ -166,7 +167,7 @@ let
           ++ optional cfg.unbeholden-wallet.enable "unbeholden-wallet"
           ++ optional (cfg.btcpayserver.enable && cfg.nbxplorer.tor.enforce) "nbxplorer"
           ++ filter (service: cfg.${service}.enable && cfg.${service}.tor.enforce) [
-            "bitcoind" "btcpayserver" "clightning" "electrs" "fulcrum" "lnd" "mempool" "rtl" "unbeholden-lnurl" "cdk-mintd"
+            "bitcoind" "btcpayserver" "clightning" "electrs" "fulcrum" "lnd" "mempool" "rtl" "unbeholden-lnurl" "cdk-mintd" "orchard"
           ];
         # The complete allow list of each restricted unit
         allow = [ "127.0.0.1/32" "::1/128" ]
@@ -229,6 +230,17 @@ let
       services.mempool = {
         electrumServer = "fulcrum";
         settings.MEMPOOL.POOLS_JSON_URL = mkIf config.test.noConnections "disable-pool-fetching";
+      };
+
+      tests.orchard = cfg.orchard.enable;
+      test.data.orchard = optionalAttrs cfg.orchard.enable {
+        inherit (cfg.orchard) port user group dataDir setupKeyFile mintRpcPort;
+        rpcAddress = cfg.cdk-mintd.settings.mint_management_rpc.address;
+        proto = "${cfg.orchard.package}/lib/cashu-orchard/proto/cdk/cdk-mint-rpc.proto";
+        inherit (cfg.cdk-mintd) seedFile;
+        mintDataDir = cfg.cdk-mintd.dataDir;
+        mintPort = cfg.cdk-mintd.port;
+        secretsDir = config.nix-bitcoin.secretsDir;
       };
 
       tests.cdk-mintd = cfg.cdk-mintd.enable;
@@ -394,6 +406,7 @@ let
           clightning = cfg.clightning.package;
           lnd = cfg.lnd.package;
           cdk-mintd = cfg.cdk-mintd.package;
+          orchard = cfg.orchard.package;
           btcpayserver = cfg.btcpayserver.package;
           mempool = cfg.mempool.package;
         });
@@ -713,6 +726,20 @@ let
         enable = true;
         settings.mint_info.name = "Bitcoinix test mint";
       };
+    };
+
+    orchard = {
+      imports = [ scenarios.cdk-mintd-lnd ];
+      services.orchard.enable = true;
+      # Keep this scenario focused on Orchard; the CDK scenarios cover payments
+      # and recovery. Orchard tests exercise both RPC and database access.
+      tests.cdk-mintd = mkForce false;
+      tests.cdk-mintd-lightning = mkForce false;
+    };
+
+    orchard-netns = {
+      imports = with scenarios; [ orchard netnsBase ];
+      services.cdk-mintd.backend = "clightning";
     };
 
     cdk-mintd-cln = {

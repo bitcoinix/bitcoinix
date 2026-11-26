@@ -45,6 +45,7 @@ let
     clightning = config.services.clightning.package;
     lnd = config.services.lnd.package;
     cdk-mintd = config.services.cdk-mintd.package;
+    orchard = config.services.orchard.package;
     btcpayserver = config.services.btcpayserver.package;
     mempool = config.services.mempool.package;
   };
@@ -210,6 +211,7 @@ in {
         systemdServiceName = "clightning";
       };
       cdk-mintd = mkInfo "";
+      orchard = mkInfo "";
       electrs = mkInfo "";
       fulcrum = mkInfo "";
       btcpayserver = mkInfo "";

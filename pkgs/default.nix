@@ -18,6 +18,7 @@ let self = {
     mempool-nginx-conf;
   unbeholden-wallet = pkgs.callPackage ./unbeholden-wallet {};
   unbeholden-lnurl = pkgs.callPackage ./unbeholden-lnurl { };
+  cashu-orchard = pkgs.callPackage ./cashu-orchard { };
 
   inherit (self.pyPkgs.nbPython3PackagesWithUnlockedEcdsa) hwi;
 

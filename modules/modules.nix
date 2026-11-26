@@ -16,6 +16,7 @@
     ./lnd.nix
     ./lnd-macaroons.nix
     ./cdk-mintd.nix
+    ./orchard.nix
     ./unbeholden-lnurl.nix
     ./charge-lnd.nix
     ./lndconnect.nix # Requires onion-addresses.nix

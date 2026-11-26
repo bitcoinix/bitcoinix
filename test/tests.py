@@ -31,6 +31,7 @@ TEST_PHASES = (
         "unbeholden-wallet",
         "unbeholden-lnurl",
         "cdk-mintd",
+        "orchard",
         "nodeinfo",
         "secure-node",
         "onion-addresses",

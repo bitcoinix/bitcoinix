@@ -31,6 +31,7 @@ in {
     # Tor just to be safe.
     #
     cdk-mintd = defaultEnforceTor;
+    orchard = defaultEnforceTor;
     electrs = defaultEnforceTor;
     fulcrum = defaultEnforceTor;
     nbxplorer = defaultEnforceTor;
