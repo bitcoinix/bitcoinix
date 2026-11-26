@@ -5,15 +5,11 @@
   makeWrapper,
   nodejs_24,
   nodejs-slim_24,
-  postgresql,
-  nix-update-script,
 }:
 
 buildNpmPackage (finalAttrs: {
   pname = "cashu-orchard";
   version = "1.12.1";
-
-  __structuredAttrs = true;
 
   src = fetchFromGitHub {
     owner = "cashubtc";
@@ -22,7 +18,7 @@ buildNpmPackage (finalAttrs: {
     hash = "sha256-3J9ES25zmAe9huxqPtLUff2Xvor+RV51PaaQ2NXc2Ak=";
   };
 
-  npmDepsHash = "sha256-lBG7DcgywD5xMWTW+eWRgxxegoKiNW+ryrg6Z5KcD0I=";
+  npmDepsHash = "sha256-lGkXLifA1yYH24AhrA/1QeN6pj818jSyUPXr7ZxXVmc=";
   nodejs = nodejs_24;
 
   patches = [ ./runtime-config.patch ];
@@ -62,17 +58,16 @@ buildNpmPackage (finalAttrs: {
     install -Dm644 LICENSE $out/share/licenses/cashu-orchard/LICENSE
 
     makeWrapper ${lib.getExe nodejs-slim_24} $out/bin/cashu-orchard \
+      --chdir "$out/lib/cashu-orchard" \
       --set NODE_ENV production \
-      --set ASSETS_DIR "$out/lib/cashu-orchard" \
       --set npm_package_version ${finalAttrs.version} \
-      --prefix PATH : ${lib.makeBinPath [ postgresql ]} \
       --run "${lib.getExe nodejs-slim_24} $out/lib/cashu-orchard/scripts/generate-runtime-config.mjs" \
       --add-flags "$out/lib/cashu-orchard/dist/main.js"
 
     runHook postInstall
   '';
 
-  outputChecks.out.disallowedRequisites = [
+  disallowedRequisites = [
     nodejs_24
     nodejs-slim_24.src
     nodejs-slim_24.npm
@@ -80,8 +75,6 @@ buildNpmPackage (finalAttrs: {
     nodejs-slim_24.python
     finalAttrs.npmDeps
   ];
-
-  passthru.updateScript = nix-update-script { };
 
   meta = {
     description = "Web application for Cashu mint management";
