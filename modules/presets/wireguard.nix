@@ -5,7 +5,7 @@
 # Add helper binaries `nix-bitcoin-wg-connect` and optionally `lndconnect-wg`,
 # `lnconnect-clnrest-wg`.
 
-# See ../../docs/services.md ("Use Zeus (mobile lightning wallet) via WireGuard")
+# See ../../docs/service/zeus.md ("Connect via WireGuard")
 # for usage instructions.
 
 # This is a rather opinionated implementation that lacks the flexibility offered by

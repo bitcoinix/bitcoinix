@@ -16,8 +16,8 @@ let
         still backs up all other files and then fails.
 
         The backup leaves out the Lightning channel databases, because restoring a
-        copy of them can lose all funds in their channels. See the Backups section
-        in docs/services.md.
+        copy of them can lose all funds in their channels. See
+        docs/service/backups.md.
 
         With {option}`nix-bitcoin.generateSecrets`, the backups are encrypted with
         the generated password `backup-encryption-password` in

@@ -10,7 +10,7 @@
   message = ''
     Enabling `lndconnect` or `lnconnect` without `onion` no longer sets the REST
     listen address to 0.0.0.0, so the lnd/clnrest REST APIs now listen on localhost only.
-    To connect over your LAN or VPN, set the address yourself. See docs/services.md,
+    To connect over your LAN or VPN, set the address yourself. See docs/service/zeus.md,
     "Connecting without Tor or WireGuard".
   '';
 }

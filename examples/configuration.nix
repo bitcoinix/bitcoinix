@@ -60,7 +60,7 @@
   # This binary creates QR codes or URLs for connecting applications to Core Lightning
   # via the REST onion service.
   # You can also connect via WireGuard instead of Tor.
-  # See ../docs/services.md for details.
+  # See ../docs/service/zeus.md for details.
   #
   # services.clightning.plugins.clnrest = {
   #   enable = true;
@@ -88,7 +88,7 @@
   # This binary generates QR codes or URLs for connecting applications to LND via the
   # REST onion service.
   # You can also connect via WireGuard instead of Tor.
-  # See ../docs/services.md for details.
+  # See ../docs/service/zeus.md for details.
   #
   # services.lnd.lndconnect = {
   #   enable = true;
@@ -167,7 +167,7 @@
   #
   # bitcoinix creates the admin account `admin@localhost` before BTCPay Server
   # first opens its port. Its password is in `$secretsDir/btcpayserver-admin-password`.
-  # See `../docs/services.md` for how to connect.
+  # See `../docs/service/btcpayserver.md` for how to connect.
   #
   # Privacy Warning: BTCPay Server currently looks up price rates without
   # proxying them through Tor. This means an outside observer can correlate
@@ -175,7 +175,7 @@
   #
   # Enable this option to connect BTCPay Server to Core Lightning.
   # BTCPay Server then has full control of the node, including its funds.
-  # See "BTCPay Server" in ../docs/services.md.
+  # See "Lightning backend" in ../docs/service/btcpayserver.md.
   # services.btcpayserver.lightningBackend = "clightning";
   #
   # Enable this option to connect BTCPay Server to LND.
@@ -203,7 +203,7 @@
   # services.hardware-wallets.ledger = true;
   #
   # Trezor can be initialized with the trezorctl command in bitcoinix. More information in
-  # `../docs/services.md`.
+  # `../docs/service/trezor.md`.
   # services.hardware-wallets.trezor = true;
 
   ### charge-lnd

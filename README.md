@@ -113,7 +113,7 @@ NixOS modules ([src](modules/modules.nix))
 * Application services
   * [Bitcoin Core](https://github.com/bitcoin/bitcoin) (`services.bitcoind`)
   * [Core Lightning (CLN)](https://github.com/ElementsProject/lightning) with support for announcing an onion service
-    (`services.clightning`) and [database replication](docs/services.md#core-lightning-database-replication).\
+    (`services.clightning`) and [database replication](docs/service/clightning.md#core-lightning-database-replication).\
     Available plugins:
     * [CLBOSS](https://github.com/ksedgwic/clboss): automated Core Lightning node manager
     * [clnrest](https://docs.corelightning.org/docs/rest): REST API and WebSocket notifications for Core Lightning
@@ -121,13 +121,13 @@ NixOS modules ([src](modules/modules.nix))
     * [feeadjuster](https://github.com/lightningd/plugins/tree/master/feeadjuster): automatically adjusts channel fees to keep channels balanced
     * [monitor](https://github.com/lightningd/plugins/tree/master/monitor): helps you analyze the health of your peers and channels
     * [rebalance](https://github.com/lightningd/plugins/tree/master/rebalance): keeps your channels balanced
-    * [trustedcoin](https://github.com/nbd-wtf/trustedcoin) ([experimental](docs/services.md#trustedcoin)): replaces bitcoind with trusted public explorers
+    * [trustedcoin](https://github.com/nbd-wtf/trustedcoin) ([experimental](docs/service/clightning.md#trustedcoin)): replaces bitcoind with trusted public explorers
     * [zmq](https://github.com/lightningd/plugins/tree/master/cl-zmq): publishes notifications via ZeroMQ to configured endpoints
   * [LND](https://github.com/lightningnetwork/lnd) with support for announcing an onion service and [static channel backups](https://github.com/lightningnetwork/lnd/blob/master/docs/recovery.md)
     * [charge-lnd](https://github.com/accumulator/charge-lnd): policy-based channel fee manager
   * [lndconnect](https://github.com/LN-Zap/lndconnect): connect your wallet to LND or
-    Core Lightning [via WireGuard](./docs/services.md#use-zeus-mobile-lightning-wallet-via-wireguard) or
-    [Tor](./docs/services.md#use-zeus-mobile-lightning-wallet-via-tor)
+    Core Lightning [via WireGuard](./docs/service/zeus.md#connect-via-wireguard) or
+    [Tor](./docs/service/zeus.md#connect-via-tor)
   * [Ride The Lightning (RTL)](https://github.com/Ride-The-Lightning/RTL): web interface for LND and Core Lightning
   * [mempool](https://github.com/mempool/mempool): Bitcoin visualizer, explorer, and API service
   * [Unbeholden LNURL](https://github.com/unbeholdendev/unbeholden-lnurl): Lightning Addresses, vouchers, notifications and Nostr zaps for LND or Core Lightning
