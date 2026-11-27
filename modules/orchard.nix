@@ -80,6 +80,8 @@ let
   # Membership disappears when Orchard is disabled. Only these three files,
   # never the mint's seed, BDK wallet or backend credentials, receive a read ACL.
   databaseGroup = "orchard-mint";
+  mintDirectoryAcl = "user::rwx,group::---,group:${databaseGroup}:--x,mask::--x,other::---";
+  databaseAcl = "user::rw-,group::---,group:${databaseGroup}:r--,mask::r--,other::---";
   openssl = "${pkgs.openssl}/bin/openssl";
   # Reapply ACLs on every Orchard start: the mint may have recreated its WAL.
   # Fail only Orchard if the filesystem doesn't support ACLs. No directory
@@ -87,9 +89,9 @@ let
   grantDatabaseAccess = nbLib.script "orchard-database-access-as-mint" ''
     for _attempt in $(seq 1 600); do
       if [[ -f ${escapeShellArg "${database}-wal"} && -f ${escapeShellArg "${database}-shm"} ]]; then
-        # Explicit masks keep old named ACL entries from regaining write access.
-        ${pkgs.acl}/bin/setfacl -P -m g:${databaseGroup}:--x,m::--x ${escapeShellArg mint.dataDir}
-        ${pkgs.acl}/bin/setfacl -P -m g:${databaseGroup}:r--,m::r-- \
+        # Replace access ACLs so old masked entries cannot regain even reads.
+        ${pkgs.acl}/bin/setfacl -P --set ${escapeShellArg mintDirectoryAcl} ${escapeShellArg mint.dataDir}
+        ${pkgs.acl}/bin/setfacl -P --set ${escapeShellArg databaseAcl} \
           ${escapeShellArg database} ${escapeShellArg "${database}-wal"} ${escapeShellArg "${database}-shm"}
         exit 0
       fi
@@ -137,9 +139,9 @@ in {
 
     systemd.tmpfiles.rules = [
       "d '${cfg.dataDir}' 0700 ${cfg.user} ${cfg.group} - -"
-      # Install traversal access and its bounded mask. The mint's `d` rule uses
-      # a creation-only mode so it never temporarily masks this access away.
-      "a+ '${mint.dataDir}' - - - - group:${databaseGroup}:--x,mask::--x"
+      # Replace rather than merge, just like the startup grant. The mint's `d`
+      # rule preserves this ACL until tmpfiles reapplies it without a gap.
+      "a '${mint.dataDir}' - - - - ${mintDirectoryAcl}"
     ];
 
     # Ephemeral local-only mTLS credentials for the CDK management RPC.

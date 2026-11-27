@@ -50,14 +50,16 @@ created. Restarting Orchard invalidates login sessions.
 Orchard runs as a separate user. It can read the mint SQLite database and its
 WAL files, but cannot write them or read the mint seed, BDK wallet or Lightning
 credentials. The mint data filesystem must support POSIX ACLs.
-Explicit ACL masks prevent pre-existing named user or group entries from
-regaining write access when Orchard starts.
+The module replaces access ACLs on the mint directory and DB/WAL/SHM files,
+granting access only to the file owner and the restricted Orchard group.
+Custom access ACL entries on these paths are overwritten, so old masked entries
+cannot regain read or write access.
 Orchard reapplies its read access at each start; an ACL failure stops only
 Orchard, leaving the mint running. While Orchard is enabled, tmpfiles sets the
-mint directory's mode to `0700` only when creating it, preserving its ACL mask
-throughout later runs. Tmpfiles no longer repairs manually changed owner/other
-permission bits on that directory. Without Orchard, normal `0700` enforcement
-applies on every run.
+mint directory's mode to `0700` only when creating it, preserving access until
+it reapplies the same managed directory ACL. That ACL also restores the owner's
+permissions and removes access for other users. Without Orchard, normal `0700`
+enforcement applies on every run.
 Without network namespace isolation, a systemd socket reserves the HTTP port
 even while Orchard is stopped and proxies connections to its private Unix socket.
 
