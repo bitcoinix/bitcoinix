@@ -5,6 +5,8 @@ application directory can stay read-only, and use Node's built-in .env
 loader in the startup script so production builds do not need the
 development-only dotenv package.
 
+Allow SERVER_SOCKET to select a Unix socket for the systemd HTTP proxy.
+
 diff --git a/scripts/generate-runtime-config.mjs b/scripts/generate-runtime-config.mjs
 --- a/scripts/generate-runtime-config.mjs
 +++ b/scripts/generate-runtime-config.mjs
@@ -58,6 +60,22 @@ diff --git a/src/server/main.ts b/src/server/main.ts
  	app.getHttpAdapter().getInstance().disable('x-powered-by');
  	const compression_enabled = configService.get<boolean>('server.compression');
  	if (compression_enabled) app.use(compression());
+@@ -49,11 +56,13 @@
+ 	const host = configService.get<string>('server.host');
+ 	const version = configService.get<string>('mode.version');
+ 	app.setGlobalPrefix(path);
+-	await app.listen(port, host);
++	const socket = process.env.SERVER_SOCKET;
++	if (socket) await app.listen(socket);
++	else await app.listen(port, host);
+ 	const dev_auth_bypass = configService.get<boolean>('mode.dev_auth_bypass');
+ 	if (dev_auth_bypass) logger.warn('DEV_AUTH_BYPASS is enabled — all unauthenticated requests get admin access');
+ 	logger.log(`Application version ${version}`);
+-	logger.log(`Application is running on: ${host}:${port}`);
++	logger.log(`Application is running on: ${socket || `${host}:${port}`}`);
+ }
+ 
+ function validation(app: INestApplication, configService: ConfigService, logger: Logger): void {
 diff --git a/src/server/modules/cashu/mintdb/cashumintdb.service.ts b/src/server/modules/cashu/mintdb/cashumintdb.service.ts
 --- a/src/server/modules/cashu/mintdb/cashumintdb.service.ts
 +++ b/src/server/modules/cashu/mintdb/cashumintdb.service.ts

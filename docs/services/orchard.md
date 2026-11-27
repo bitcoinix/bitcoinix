@@ -32,11 +32,11 @@ Use `nodeinfo` to find the onion address and open it in Tor Browser. The onion
 service exposes port 80. For a public domain, put an HTTPS reverse proxy in front
 of Orchard; the module does not open firewall ports.
 
-Retrieve the setup key on the node (adjust `/secrets` if using another
-`nix-bitcoin.secretsDir`):
+Retrieve the setup key on the node (adjust the path if you changed
+`nix-bitcoin.secretsDir` or `services.orchard.setupKeyFile`):
 
 ```bash
-sudo cat /secrets/orchard-setup-key
+sudo cat /etc/nix-bitcoin-secrets/orchard-setup-key
 ```
 
 Use this key to create the first administrator account, choosing your own username
@@ -49,7 +49,13 @@ created. Restarting Orchard invalidates login sessions.
 
 Orchard runs as a separate user. It can read the mint SQLite database and its
 WAL files, but cannot write them or read the mint seed, BDK wallet or Lightning
-credentials. Management operations use CDK's gRPC API with mutual TLS. The RPC
+credentials. The mint data filesystem must support POSIX ACLs.
+Orchard reapplies its read access at each start; an ACL
+failure stops only Orchard, leaving the mint running. Without network namespace
+isolation, a systemd socket reserves the HTTP port even while Orchard is stopped
+and proxies connections to its private Unix socket.
+
+Management operations use CDK's gRPC API with mutual TLS. The RPC
 listener stays on loopback, or the mint's private namespace address, independently
 of the public mint HTTP listener. Its default port is 8086; change
 `services.orchard.mintRpcPort` if needed.

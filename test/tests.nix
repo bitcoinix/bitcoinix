@@ -46,7 +46,7 @@ let
         (mkIfTest "unbeholden-wallet" [ websocat ])
         # Check that initialization guards reject ACL write access.
         (mkIfTest "cdk-mintd" [ acl ])
-        (mkIfTest "orchard" [ grpcurl ])
+        (mkIfTest "orchard" [ grpcurl acl ])
       ]);
 
       tests.bitcoind = cfg.bitcoind.enable;

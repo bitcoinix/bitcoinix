@@ -66,6 +66,8 @@ let
   nbLib = config.nix-bitcoin.lib;
   secretsDir = config.nix-bitcoin.secretsDir;
   netns = config.nix-bitcoin.netns-isolation;
+  useProxy = !netns.enable;
+  socketPath = "/run/orchard/orchard.sock";
   rpcAddress = if netns.enable then netns.netns.cdk-mintd.address else "127.0.0.1";
   rpcTlsDir = "/run/orchard-rpc-tls";
   mintHost = let
@@ -79,8 +81,9 @@ let
   # never the mint's seed, BDK wallet or backend credentials, receive a read ACL.
   databaseGroup = "orchard-mint";
   openssl = "${pkgs.openssl}/bin/openssl";
-  # The daemon keeps the WAL open. Reapply file ACLs after every restart,
-  # including backup snapshots. No directory default ACL is installed.
+  # Reapply ACLs on every Orchard start: the mint may have recreated its WAL,
+  # or tmpfiles may have reset the directory's ACL mask. Fail only Orchard if
+  # the filesystem doesn't support ACLs. No directory default ACL is installed.
   grantDatabaseAccess = nbLib.script "orchard-database-access-as-mint" ''
     for _attempt in $(seq 1 600); do
       if [[ -f ${escapeShellArg "${database}-wal"} && -f ${escapeShellArg "${database}-shm"} ]]; then
@@ -95,6 +98,11 @@ let
     exit 1
   '';
 in {
+  imports = [ (import ./web-interface-proxy.nix {
+    name = "orchard";
+    inherit socketPath;
+    inherit (cfg) user;
+  }) ];
   inherit options;
 
   config = mkIf cfg.enable {
@@ -183,8 +191,6 @@ in {
       requires = [ "orchard-rpc-tls.service" ];
       after = [ "cdk-mintd.service" "orchard-rpc-tls.service" "nix-bitcoin-secrets.target" ];
       environment = {
-        SERVER_HOST = cfg.address;
-        SERVER_PORT = toString cfg.port;
         DATABASE_DIR = cfg.dataDir;
         MINT_TYPE = "cdk";
         MINT_API = "http://${mintHost}:${toString mint.port}";
@@ -195,7 +201,12 @@ in {
         MINT_RPC_KEY = "${rpcTlsDir}/client/client.key";
         MINT_RPC_CERT = "${rpcTlsDir}/client/client.pem";
         MINT_RPC_CA = "${rpcTlsDir}/client/ca.pem";
-      };
+      } // (if useProxy then {
+        SERVER_SOCKET = socketPath;
+      } else {
+        SERVER_HOST = cfg.address;
+        SERVER_PORT = toString cfg.port;
+      });
       script = ''
         SETUP_KEY=$(cat ${escapeShellArg cfg.setupKeyFile})
         export SETUP_KEY
@@ -203,6 +214,14 @@ in {
         exec ${lib.getExe cfg.package}
       '';
       serviceConfig = nbLib.defaultHardening // nbLib.nodejs // {
+        ExecStartPre = [
+          # Leave PrivateUsers with `+` so the ACL can name Orchard's group,
+          # then drop to the mint user before accessing mint-owned paths.
+          (nbLib.rootScript "orchard-database-access" ''
+            exec ${pkgs.util-linux}/bin/setpriv --reuid=${escapeShellArg mint.user} \
+              --regid=${escapeShellArg mint.group} --clear-groups -- ${grantDatabaseAccess}
+          '')
+        ];
         SyslogIdentifier = "orchard";
         User = cfg.user;
         Group = cfg.group;
@@ -211,6 +230,10 @@ in {
         ReadWritePaths = [ cfg.dataDir ];
         Restart = "on-failure";
         RestartSec = "10s";
+      } // optionalAttrs useProxy {
+        # Only Orchard's user can reach the socket. systemd removes it on stop.
+        RuntimeDirectory = "orchard";
+        RuntimeDirectoryMode = "0700";
       } // nbLib.allowedIPAddresses cfg.tor.enforce;
     };
 
@@ -218,13 +241,6 @@ in {
       requires = [ "orchard-rpc-tls.service" ];
       after = [ "orchard-rpc-tls.service" ];
       serviceConfig.ExecStartPost = mkAfter [
-        # PrivateUsers maps only the mint's uid/gid, so an ACL naming Orchard's
-        # group cannot be set inside that namespace. Leave it with `+`, then
-        # immediately drop to the mint user before accessing mint-owned paths.
-        (nbLib.rootScript "orchard-database-access" ''
-          exec ${pkgs.util-linux}/bin/setpriv --reuid=${escapeShellArg mint.user} \
-            --regid=${escapeShellArg mint.group} --clear-groups -- ${grantDatabaseAccess}
-        '')
         "-+${config.systemd.package}/bin/systemctl start --no-block --job-mode=ignore-requirements orchard.service"
       ];
     };
