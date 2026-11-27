@@ -278,7 +278,7 @@ in {
         checkKey "$priv" "the WireGuard clients set up with the current keys"
         # Derive the public key on every run, so that it always matches
         derivedPub=$(${wg} pubkey < "$priv")
-        if [[ ! -r "$pub" || $(< "$pub") != "$derivedPub" ]]; then
+        if [[ ! -f "$pub" || ! -r "$pub" || $(< "$pub") != "$derivedPub" ]]; then
           writeSecret "$pub" echo "$derivedPub"
         fi
       }

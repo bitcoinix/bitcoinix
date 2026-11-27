@@ -155,7 +155,7 @@ let
     if is_selected("bitcoinix"):
         infos["bitcoinix"] = {"revision": revision}
     for service, make_info, systemd_service, version in entries:
-        if active.get(systemd_service) != "active":
+        if active.get(systemd_service) not in ("active", "reloading", "refreshing"):
             infos[service] = f"'{systemd_service}.service' is not running"
         else:
             info = {}

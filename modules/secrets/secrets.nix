@@ -221,7 +221,9 @@ let
             checkKey "$name-key" "clients that pinned the $name certificate"
             # Also replace a missing, empty or broken cert
             local currentAltNames=""
-            [[ ! -r "$name-cert-alt-names" ]] || currentAltNames=$(< "$name-cert-alt-names")
+            if [[ -f "$name-cert-alt-names" && -r "$name-cert-alt-names" ]]; then
+              currentAltNames=$(< "$name-cert-alt-names")
+            fi
             if ! ${pkgs.openssl}/bin/openssl x509 -noout -in "$name-cert" 2>/dev/null \
                || [[ $currentAltNames != "$extraAltNames" ]]; then
               # Create cert from existing key
