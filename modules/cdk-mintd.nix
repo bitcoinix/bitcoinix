@@ -211,7 +211,9 @@ in {
     services.bitcoind.enable = mkIf cfg.onchain.enable true;
 
     systemd.tmpfiles.rules = [
-      "d '${cfg.dataDir}' 0700 ${cfg.user} ${cfg.group} - -"
+      # Keep Orchard's live ACL mask intact before tmpfiles reaches ACL rules.
+      # Without Orchard, continue enforcing the directory mode on every run.
+      "d '${cfg.dataDir}' ${optionalString (config.services.orchard.enable or false) ":"}0700 ${cfg.user} ${cfg.group} - -"
       "d /var/lib/nixos 0755 root root - -"
       "d ${stateDir} 0755 root root - -"
     ];

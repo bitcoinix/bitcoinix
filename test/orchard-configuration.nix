@@ -88,6 +88,17 @@ in {
       .systemd.services.orchard.environment.MINT_API) [ "::" "[::]" "::1" "0.0.0.0" ];
     expected = [ "http://[::1]:8085" "http://[::1]:8085" "http://[::1]:8085" "http://127.0.0.1:8085" ];
   };
+  testOrchardMintDirectoryMode = {
+    expr = map (config: lib.findFirst
+      (lib.hasPrefix "d '${config.services.cdk-mintd.dataDir}' ") null
+      config.systemd.tmpfiles.rules)
+      [ plain isolated (evaluate { services.cdk-mintd.enable = true; }) ];
+    expected = [
+      "d '/var/lib/cdk-mintd' :0700 cdk-mintd cdk-mintd - -"
+      "d '/var/lib/cdk-mintd' :0700 cdk-mintd cdk-mintd - -"
+      "d '/var/lib/cdk-mintd' 0700 cdk-mintd cdk-mintd - -"
+    ];
+  };
   testOrchardDisabled = {
     expr = {
       unit = disabled.systemd.services ? orchard;

@@ -137,8 +137,8 @@ in {
 
     systemd.tmpfiles.rules = [
       "d '${cfg.dataDir}' 0700 ${cfg.user} ${cfg.group} - -"
-      # The mint's `d` rule resets its directory mode to 0700 on each run.
-      # Restore traversal for a running Orchard, including the existing ACL mask.
+      # Install traversal access and its bounded mask. The mint's `d` rule uses
+      # a creation-only mode so it never temporarily masks this access away.
       "a+ '${mint.dataDir}' - - - - group:${databaseGroup}:--x,mask::--x"
     ];
 

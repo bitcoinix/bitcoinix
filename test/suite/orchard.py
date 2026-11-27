@@ -99,7 +99,15 @@ def test_orchard():
     # or invalidating the login session. Repeat to catch an existing masked ACL.
     mint_invocation = succeed("systemctl show -P InvocationID cdk-mintd")
     orchard_invocation = succeed("systemctl show -P InvocationID orchard")
+    mint_directory_rule = next(
+        line for line in succeed("systemd-tmpfiles --cat-config").splitlines()
+        if line.startswith("d ") and shlex.split(line)[1] == data["mintDataDir"]
+    )
     for _ in range(2):
+        # Run the actual directory rule alone to observe the interval before
+        # tmpfiles reaches its glob-capable rules (including the ACL repair).
+        succeed(f"printf '%s\\n' {shlex.quote(mint_directory_rule)} | systemd-tmpfiles --create -")
+        assert query_ok('{ mint_keysets { id } }', token)["mint_keysets"]
         succeed(f"systemd-tmpfiles --create --prefix={data['mintDataDir']}")
         assert query_ok('{ mint_keysets { id } }', token)["mint_keysets"]
         assert succeed("systemctl show -P InvocationID cdk-mintd") == mint_invocation

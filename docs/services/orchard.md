@@ -53,8 +53,11 @@ credentials. The mint data filesystem must support POSIX ACLs.
 Explicit ACL masks prevent pre-existing named user or group entries from
 regaining write access when Orchard starts.
 Orchard reapplies its read access at each start; an ACL failure stops only
-Orchard, leaving the mint running. Tmpfiles preserves directory traversal access
-when it refreshes permissions, so database queries keep working without a restart.
+Orchard, leaving the mint running. While Orchard is enabled, tmpfiles sets the
+mint directory's mode to `0700` only when creating it, preserving its ACL mask
+throughout later runs. Tmpfiles no longer repairs manually changed owner/other
+permission bits on that directory. Without Orchard, normal `0700` enforcement
+applies on every run.
 Without network namespace isolation, a systemd socket reserves the HTTP port
 even while Orchard is stopped and proxies connections to its private Unix socket.
 
