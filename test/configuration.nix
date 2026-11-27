@@ -2,13 +2,23 @@
 { pkgs, nixBitcoinModule }:
 let
   inherit (pkgs) lib;
-  base = pkgs.nixos {
+  baseConfig = {
     imports = [ nixBitcoinModule ];
     boot.isContainer = true;
     system.stateVersion = "26.05";
     nix-bitcoin.secretsSetupMethod = "manual";
   };
+  # The cases share these pkgs, which have the security fixes, and drop the fixes' overlay.
+  # An overlay would give each case its own pkgs instance, which takes minutes.
+  pkgsWithFixes = pkgs.appendOverlays [ (import ../pkgs/security-fixes.nix).overlay ];
+  base = pkgsWithFixes.nixos {
+    imports = [ baseConfig ];
+    nixpkgs.overlays = lib.mkForce [ ];
+  };
   evaluate = module: (base.extendModules { modules = [ module ]; }).config;
+  # The security fix cases evaluate the overlay, as a user's system does
+  systemWithOverlays = module: pkgs.nixos { imports = [ baseConfig module ]; };
+  evaluateWithOverlays = module: (systemWithOverlays module).config;
   failedAssertions = config:
     map (a: a.message) (builtins.filter (a: !a.assertion) config.assertions);
   versioningErrors = config: builtins.filter (message:
@@ -504,6 +514,60 @@ let
     config.services.lnd.restAddress
     config.services.clightning.plugins.clnrest.address
   ];
+
+  # Whether the system's pkgs and `nix-bitcoin.pkgs` have each security fix. These cases
+  # hold for any entries of pkgs/security-fixes.nix and pass when it has none.
+  inherit (import ../pkgs/security-fixes.nix) fixes;
+  hasFixes = system: lib.mapAttrs (name: fix: {
+    system = lib.versionAtLeast system._module.args.pkgs.${name}.version fix.fixedIn;
+    nbPkgs = lib.versionAtLeast system.config.nix-bitcoin.pkgs.pkgs.${name}.version fix.fixedIn;
+  }) fixes;
+  fixesAre = system: nbPkgs: lib.mapAttrs (_: _: { inherit system nbPkgs; }) fixes;
+  # An overlay that brings back the pin's packages
+  pinPackages = _: _: lib.mapAttrs (name: _: pkgs.${name}) fixes;
+  # A system that runs dhcpcd with this version, set by an overlay that runs after all
+  # others, and whether its unit allows chown
+  dhcpcdAt = version: module: evaluateWithOverlays {
+    imports = [ module ];
+    nixpkgs.overlays = lib.mkOrder 3000
+      [ (_: prev: { dhcpcd = prev.dhcpcd.overrideAttrs {
+        inherit version;
+        __intentionallyOverridingVersion = true;
+      }; }) ];
+  };
+  allowsChown = config: let
+    filters = builtins.filter (lib.flip lib.elem [ "@chown" "~@chown" "~@privileged" ])
+      config.systemd.services.dhcpcd.serviceConfig.SystemCallFilter;
+  in filters != [] && lib.last filters == "@chown";
+  securityFixesWarnings = config:
+    builtins.length (builtins.filter (lib.hasInfix "lack the bitcoinix security fixes") config.warnings);
+  # A system without `nixpkgs.pkgs`, whose nixpkgs module imports nixpkgs itself
+  systemWithoutGivenPkgs = import "${pkgs.path}/nixos/lib/eval-config.nix" {
+    system = null;
+    modules = [ baseConfig { nixpkgs.hostPlatform = pkgs.stdenv.hostPlatform; } ];
+  };
+  # A system that gets its pkgs through `specialArgs`, which `nixpkgs.overlays` doesn't reach
+  specialArgsSystem = givenPkgs: module: import "${pkgs.path}/nixos/lib/eval-config.nix" {
+    system = null;
+    specialArgs.pkgs = givenPkgs;
+    modules = [ baseConfig module { nixpkgs.hostPlatform = pkgs.stdenv.hostPlatform; } ];
+  };
+  hasDhcpcdNotice = config:
+    lib.any (lib.hasInfix "dhcpcd's control socket") config.nix-bitcoin.versioning.incompatibleChanges;
+  # A system whose `nixpkgs.pkgs` is read-only and doesn't take overlays
+  readOnlyPkgsSystem = givenPkgs: import "${pkgs.path}/nixos/lib/eval-config.nix" {
+    system = null;
+    modules = [
+      "${pkgs.path}/nixos/modules/misc/nixpkgs/read-only.nix"
+      nixBitcoinModule
+      {
+        nixpkgs.pkgs = givenPkgs;
+        boot.isContainer = true;
+        system.stateVersion = "26.05";
+        nix-bitcoin.secretsSetupMethod = "manual";
+      }
+    ];
+  };
 
   extraConfigFixtures = map (service: {
     name = service;
@@ -2802,6 +2866,89 @@ let
         };
       };
       expected = { onDisk = true; onRoot = true; sshfs = false; previous = true; acknowledged = false; };
+    };
+    testSecurityFixes = {
+      expr = map (module: hasFixes (systemWithOverlays module)) [
+        {}
+        { nix-bitcoin.useVersionLockedPkgs = false; }
+        { nix-bitcoin.securityFixes.enable = false; }
+        # The fixes' overlay runs after the system's other overlays
+        { nixpkgs.overlays = [ pinPackages ]; }
+        { nixpkgs.overlays = lib.mkAfter [ pinPackages ]; }
+        # Given pkgs that are built from the system's overlays
+        ({ config, ... }: {
+          nixpkgs.pkgs = lib.mkForce (import pkgs.path {
+            inherit (pkgs.stdenv.hostPlatform) system;
+            inherit (config.nixpkgs) overlays;
+          });
+        })
+      ];
+      expected = [
+        (fixesAre true true) (fixesAre true true) (fixesAre false false)
+        (fixesAre true true) (fixesAre true true) (fixesAre true true)
+      ];
+    };
+    testSecurityFixesWithoutGivenPkgs = {
+      expr = hasFixes systemWithoutGivenPkgs;
+      expected = fixesAre true true;
+    };
+    testSecurityFixesReadOnlyPkgs = {
+      expr = map (givenPkgs: let system = readOnlyPkgsSystem givenPkgs; in {
+        fixes = hasFixes system;
+        warns = securityFixesWarnings system.config > 0;
+      }) [ pkgs pkgsWithFixes ];
+      expected = [
+        { fixes = fixesAre false true; warns = fixes != {}; }
+        { fixes = fixesAre true true; warns = false; }
+      ];
+    };
+    # dhcpcd 10.5.1 and later chown their control socket
+    testDhcpcdChown = {
+      expr = map (version: allowsChown (dhcpcdAt version {})) [ "10.5.0" "10.5.1" "10.5.2" ];
+      expected = [ false true true ];
+    };
+    # The chown fix doesn't create a dhcpcd unit on systems without dhcpcd
+    testDhcpcdChownOnlyWithDhcpcd = {
+      expr = (dhcpcdAt "10.5.2" { networking.useDHCP = false; }).systemd.services ? dhcpcd;
+      expected = false;
+    };
+    testVersioningDhcpcdControlSocket = let
+      noticeAt = version: module: hasDhcpcdNotice (dhcpcdAt version {
+        imports = [ module ];
+        nix-bitcoin.configVersion = "0.1.6";
+      });
+    in {
+      expr = [
+        (noticeAt "10.4.9" {})
+        (noticeAt "10.5.0" {})
+        (noticeAt "10.5.0" { networking.useDHCP = false; })
+        (noticeAt "10.5.0" { systemd.services.dhcpcd.enable = false; })
+        # The fixes didn't change dhcpcd
+        (noticeAt "10.5.0" { nix-bitcoin.securityFixes.enable = false; })
+      ];
+      expected = [ false true false false false ];
+    };
+    # With `pkgs` from `specialArgs`, the notice and the warning see the pkgs that the node runs
+    testSecurityFixesSpecialArgs = let
+      check = givenPkgs: module: let
+        inherit (specialArgsSystem givenPkgs {
+          imports = [ module ];
+          nix-bitcoin.configVersion = "0.1.6";
+        }) config;
+      in {
+        notice = hasDhcpcdNotice config;
+        warns = securityFixesWarnings config > 0;
+      };
+      runs105 = somePkgs: lib.versionAtLeast somePkgs.dhcpcd.version "10.5";
+    in {
+      expr = [
+        (check pkgs {})
+        (check pkgsWithFixes {})
+      ];
+      expected = [
+        { notice = runs105 pkgs; warns = fixes != {}; }
+        { notice = runs105 pkgsWithFixes; warns = false; }
+      ];
     };
   };
   failures = lib.debug.runTests tests;

@@ -23,6 +23,12 @@
       ];
 
       test = import ./test/tests.nix nixpkgs.lib self.nixosModules.default;
+
+      # The locked nixpkgs with the security fixes, created once for each system and
+      # shared by all systems that use it
+      lockedPkgsWithFixes = builtins.mapAttrs (_: pkgs:
+        pkgs.appendOverlays [ self.overlays.securityFixes ]
+      ) nixpkgs.legacyPackages;
     in {
       lib = {
         mkNbPkgs = {
@@ -42,6 +48,10 @@
         nbPkgs = self.lib.mkNbPkgs { inherit (final) system; pkgs = final; };
       in removeAttrs nbPkgs [ "pinned" "krops" ];
 
+      # The fixes of ./pkgs/security-fixes.nix, for pkgs that the NixOS module can't
+      # extend, like a read-only `nixpkgs.pkgs`
+      overlays.securityFixes = (import ./pkgs/security-fixes.nix).overlay;
+
       nixosModules.default = { config, pkgs, lib, ... }: {
         # The declaration file of the options below, otherwise it's the importing file
         _file = ./flake.nix;
@@ -60,8 +70,9 @@
               (for example with `bitcoinix.inputs.nixpkgs.follows`).
               The downsides are increased evaluation times and increased system
               closure size. The system's nixpkgs.overlays and nixpkgs.config do
-              not apply to these pinned packages. System evaluation requires
-              unstable nixpkgs regardless of this option.
+              not apply to these pinned packages, but `nix-bitcoin.securityFixes`
+              does. System evaluation requires unstable nixpkgs regardless of
+              this option.
 
               If `false`, the default system pkgs are used. Use an unstable nixpkgs
               for your system; release branches are not supported.
@@ -75,10 +86,16 @@
         config = {
           nix-bitcoin.revision = lib.mkDefault (self.rev or self.dirtyRev or null);
 
-          nix-bitcoin.pkgs =
-            if config.nix-bitcoin.useVersionLockedPkgs
-            then (self.lib.mkNbPkgs { inherit (pkgs.stdenv.hostPlatform) system; }).modulesPkgs
-            else (self.lib.mkNbPkgs { inherit (pkgs.stdenv.hostPlatform) system; inherit pkgs; }).modulesPkgs;
+          nix-bitcoin.pkgs = let
+            inherit (pkgs.stdenv.hostPlatform) system;
+            # `nixpkgs.overlays` doesn't reach the locked pkgs, so they get the security fixes here
+            lockedPkgs = (if config.nix-bitcoin.securityFixes.enable
+              then lockedPkgsWithFixes
+              else nixpkgs.legacyPackages).${system};
+          in (self.lib.mkNbPkgs {
+            inherit system;
+            pkgs = if config.nix-bitcoin.useVersionLockedPkgs then lockedPkgs else pkgs;
+          }).modulesPkgs;
         };
       };
 
@@ -124,6 +141,7 @@
             touch "$out"
           '';
           docs-options = legacyPackages.docsOptions;
+          stale-packages = import ./test/stale-packages.nix { inherit pkgs; };
           cve-tools = pkgs.runCommand "nix-bitcoin-cve-tools" {
             nativeBuildInputs = [ pkgs.python3 ];
           } ''

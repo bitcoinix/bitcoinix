@@ -68,6 +68,51 @@ You now have access to deployment commands:
 See [Upgrading](./upgrading.md) for how to update bitcoinix and for the changes that
 need manual action in each release.
 
+## Security fixes for nixpkgs packages
+
+When an urgent security fix hasn't reached nixpkgs yet, bitcoinix ships it in
+[`pkgs/security-fixes.nix`](https://github.com/bitcoinix/bitcoinix/blob/master/pkgs/security-fixes.nix).
+Your node applies these fixes as an overlay, both to the system's packages and to
+the packages of the bitcoinix services. Only the fixed packages and the packages that
+depend on them are built locally, and everything else still comes from the NixOS
+binary cache.
+
+Each entry names the first fixed version. An entry has no effect once your nixpkgs
+has that version or a newer one, so it never downgrades a package. Once the bitcoinix
+pin has the fixed version, a CI check fails until the maintainers remove the entry.
+
+To add a fix, add an entry with the package's name, the first fixed version and the
+fixed package, built from the pin's package `prev`:
+
+```nix
+dhcpcd = {
+  fixedIn = "10.5.2";
+  package = prev: prev.dhcpcd.overrideAttrs { /* version and src of 10.5.2 */ };
+};
+```
+
+Also send the fix to nixpkgs. An entry for a package with many dependents, like
+OpenSSL, rebuilds a large part of the system, so keep such entries rare.
+
+To run without these fixes, set:
+
+```nix
+nix-bitcoin.securityFixes.enable = false;
+```
+
+A system can't add overlays when it gets its `pkgs` through `specialArgs` or uses
+nixpkgs' read-only `nixpkgs.pkgs` module. bitcoinix then shows a warning, and you can
+add the overlay to your own `pkgs`:
+
+```nix
+pkgs = import nixpkgs {
+  inherit system;
+  overlays = [ bitcoinix.overlays.securityFixes ];
+};
+```
+
+Without flakes, the overlay is `(import <nix-bitcoin/pkgs/security-fixes.nix>).overlay`.
+
 # Customizing your configuration
 
 ## Get started with Nix
