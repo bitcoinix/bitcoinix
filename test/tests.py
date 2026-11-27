@@ -47,6 +47,7 @@ TEST_PHASES = (
         "restart-bitcoind",
         "config-replace",
         "clnrest-admin-rune",
+        "lndconnect-onion-lnd-restart",
         "lnd-wallet-init",
         "rtl-stops-with-backend",
     )),

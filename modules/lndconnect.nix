@@ -33,6 +33,9 @@ let
         description = ''
           Create an onion service for the lnd REST server,
           which is used by lndconnect.
+          The onion service forwards to the Unix socket `/run/lnd-rest/rest.sock`,
+          where lnd also serves REST. lnd keeps listening on
+          `services.lnd.restAddress`.
         '';
       };
     };
@@ -90,6 +93,10 @@ let
     clightning;
 
   inherit (clightning.plugins) clnrest;
+
+  # The `lnd-rest` onion service forwards to this socket of lnd
+  lndRestSocketDir = "/run/lnd-rest";
+  lndRestSocket = "${lndRestSocketDir}/rest.sock";
 
   mkLndconnect = {
     name,
@@ -261,9 +268,30 @@ in {
           services.tor = {
             enable = true;
             relay.onionServices.lnd-rest = nbLib.mkOnionService {
-              target.addr = nbLib.address lnd.restAddress;
-              target.port = lnd.restPort;
+              target.unix = lndRestSocket;
               port = lnd.restPort;
+            };
+          };
+          # Tor runs in a root dir of its own. The bind mount needs the dir when
+          # tor starts. tmpfiles creates it before, at boot and on a switch, and
+          # the dir stays while lnd restarts. connect() works on a read-only mount.
+          systemd.services.tor.serviceConfig.BindReadOnlyPaths = [ lndRestSocketDir ];
+          # Only lnd can create entries, and only lnd and tor can enter.
+          # setgid gives the socket the tor group.
+          systemd.tmpfiles.rules = [ "d '${lndRestSocketDir}' 2750 ${lnd.user} tor - -" ];
+
+          services.lnd.restSocket = lndRestSocket;
+          systemd.services.lnd = {
+            # Right before lnd starts. lnd can't listen on a socket that a crash
+            # left behind.
+            preStart = mkAfter "rm -f '${lndRestSocket}'";
+            serviceConfig = {
+              ReadWritePaths = [ lndRestSocketDir ];
+              # lnd creates the socket with its umask 0022, but tor needs write
+              # access to connect. lnd is ready only after its REST listeners are
+              # up. `-`: with REST turned off in `services.lnd.extraConfig`,
+              # there's no socket, and lnd still starts.
+              ExecStartPost = mkBefore [ "-${pkgs.coreutils}/bin/chmod 660 ${lndRestSocket}" ];
             };
           };
           # Two definitions, so that `operatorName == lnd.user` is not a duplicate key

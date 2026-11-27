@@ -34,6 +34,83 @@ def test_lndconnect_onion_lnd():
     onion_file = "/var/lib/onion-addresses/lnd/lnd-rest"
     for command in ("runuser -u operator -- lndconnect", "lndconnect"):
         assert_needs_onion_address(command, onion_file)
+    # The onion service forwards to a Unix socket of lnd
+    torrc = succeed("systemctl show -P ExecStart tor | grep -oE '/nix/store/[^ ;]+-torrc' | head -1").strip()
+    ports = onion_service_ports(succeed(f"cat {torrc}"), "lnd-rest")
+    port = test_data["lndconnect-onion-lnd"]["restPort"]
+    assert ports == [f"{port} unix:{lnd_rest_socket}"], ports
+    assert_lnd_rest_socket()
+    assert_no_lnd_rest_access()
+    # lnd keeps its TCP listener
+    netns = "ip netns exec nb-lnd " if "netns-isolation" in enabled_tests else ""
+    assert succeed_json(netns + lnd_rest_state(url=f"https://{ip('lnd')}:{port}"))["state"]
+
+
+# Impure: stops lnd, and starts it again with a socket left behind
+@test("lndconnect-onion-lnd-restart")
+def test_lndconnect_onion_lnd_restart():
+    # charge-lnd `requires` lnd, so a timer tick would start lnd during the test
+    timers = ["charge-lnd.timer"] if "charge-lnd" in enabled_tests else []
+    # The preceding tests use up the start limits of lnd and of RTL, which
+    # lnd's start starts
+    reset = "systemctl reset-failed lnd" + (" rtl" if "rtl" in enabled_tests else "")
+    # The preceding tests may have left lnd down
+    succeed(reset, "systemctl start lnd")
+    wait_for_lnd_server()
+    succeed(*[f"systemctl stop {unit}" for unit in timers + ["lnd"]])
+    try:
+        # lnd removes the socket when it stops
+        succeed(f"[[ ! -e {lnd_rest_socket} ]]")
+        assert_no_lnd_rest_access()
+        # A crash leaves the socket behind. nc can't remove it after a SIGKILL.
+        machine.execute(f"runuser -u lnd -- timeout -s KILL 2 nc -lU {lnd_rest_socket}")
+        succeed(f"[[ -S {lnd_rest_socket} ]]")
+    finally:
+        succeed(reset, "systemctl start lnd", *[f"systemctl start {unit}" for unit in timers])
+    assert_lnd_rest_socket()
+
+
+# Only lnd can create entries in this dir, and only lnd and tor can enter it
+lnd_rest_socket_dir = "/run/lnd-rest"
+lnd_rest_socket = f"{lnd_rest_socket_dir}/rest.sock"
+
+
+def lnd_rest_state(curl="curl", url=f"--unix-socket {lnd_rest_socket} https://localhost"):
+    # lnd's state needs no macaroon
+    return f"{curl} -sSk --max-time 10 {url}/v1/state"
+
+
+def assert_lnd_rest_socket():
+    assert_file_metadata(lnd_rest_socket_dir, owner="lnd", group="tor", mode="2750", file_type="directory")
+    assert_file_metadata(lnd_rest_socket, owner="lnd", group="tor", mode="660", file_type="socket")
+    assert succeed_json(lnd_rest_state())["state"]
+    # Connect like tor, as its user and from its mount namespace, where `/`
+    # is tor's root dir with the bind mount
+    machine.wait_for_unit("tor")
+    pid = succeed("systemctl show -P MainPID tor").strip()
+    curl = succeed("readlink -f $(command -v curl)").strip()
+    as_tor = f"nsenter -t {pid} -m -S $(id -u tor) -G $(id -g tor) --"
+    assert succeed_json(f"{as_tor} {lnd_rest_state(curl)}")["state"]
+
+
+def assert_no_lnd_rest_access():
+    for user in ("nobody", "operator"):
+        status, output = machine.execute(f"runuser -u {user} -- touch {lnd_rest_socket_dir}/probe 2>&1")
+        assert status != 0 and "Permission denied" in output, output
+        machine.fail(f"runuser -u {user} -- {lnd_rest_state()}")
+
+
+def onion_service_ports(torrc, name):
+    """The `HiddenServicePort` values of onion service `name` in `torrc`"""
+    ports = []
+    service_dir = ""
+    for line in torrc.splitlines():
+        key, _, value = line.partition(" ")
+        if key == "HiddenServiceDir":
+            service_dir = value
+        elif key == "HiddenServicePort" and service_dir == f"/var/lib/tor/onion/{name}":
+            ports.append(value)
+    return ports
 
 
 @test("lnconnect-onion-clnrest")

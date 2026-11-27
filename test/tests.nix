@@ -40,6 +40,10 @@ let
         (mkIfTest "rtl-backend-certs" [ openssl ])
         # Calls lnd, clnrest and RTL's API with RTL's credentials
         (mkIfTest "rtl-permissions" [ curl xxd ])
+        # Calls lnd's REST API through its Unix socket
+        (mkIfTest "lndconnect-onion-lnd" [ curl ])
+        # Also leaves a socket behind with nc
+        (mkIfTest "lndconnect-onion-lnd-restart" [ curl netcat ])
         # Needed to trace the commands run by secret generation
         (mkIfTest "secrets-no-argv" [ strace ])
         # Talks to the Electrum relay
@@ -303,6 +307,8 @@ let
       };
 
       tests.lndconnect-onion-lnd = with cfg.lnd.lndconnect; enable && onion;
+      tests.lndconnect-onion-lnd-restart = with cfg.lnd.lndconnect; enable && onion;
+      test.data.lndconnect-onion-lnd = { inherit (cfg.lnd) restPort; };
       tests.lnconnect-onion-clnrest = with cfg.clightning.plugins.clnrest.lnconnect; enable && onion;
       tests.lnconnect-clnrest-cert = with cfg.clightning.plugins.clnrest;
         enable && lnconnect.enable && !lnconnect.onion;
