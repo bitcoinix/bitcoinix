@@ -11,6 +11,10 @@
     "channel": "unstable",
     "version": "0.18.3"
   },
+  "cashu-orchard": {
+    "channel": "local",
+    "version": "1.12.1"
+  },
   "charge-lnd": {
     "channel": "unstable",
     "version": "0.3.2"

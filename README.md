@@ -131,6 +131,7 @@ NixOS modules ([src](modules/modules.nix))
   * [Ride The Lightning (RTL)](https://github.com/Ride-The-Lightning/RTL): web interface for LND and Core Lightning
   * [mempool](https://github.com/mempool/mempool): Bitcoin visualizer, explorer, and API service
   * [CDK Mintd](https://github.com/cashubtc/cdk): Cashu mint with LND or Core Lightning and optional on-chain payments
+  * [Orchard](https://orchard.space): web dashboard and management for the local Cashu mint
   * [Unbeholden LNURL](https://github.com/unbeholdendev/unbeholden-lnurl): Lightning Addresses, vouchers, notifications and Nostr zaps for LND or Core Lightning
   * [Unbeholden Wallet](https://github.com/unbeholdendev/unbeholden-wallet): watch-only wallet in the browser that signs on an air-gapped device
   * [electrs](https://github.com/romanz/electrs): Electrum server

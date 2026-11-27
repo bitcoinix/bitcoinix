@@ -1,0 +1,108 @@
+Make Telegram honor TOR_PROXY_SERVER, including SOCKS-side DNS resolution.
+
+grammY uses its own HTTP agent, separately from Orchard's FetchService.
+
+--- a/src/server/modules/message/telegram/telegram.service.ts
++++ b/src/server/modules/message/telegram/telegram.service.ts
+@@ -2,6 +2,8 @@
+ import {Injectable, Logger, type OnModuleInit, type OnModuleDestroy} from '@nestjs/common';
+ /* Vendor Dependencies */
+ import {Bot} from 'grammy';
++import {ConfigService} from '@nestjs/config';
++import {SocksProxyAgent} from 'socks-proxy-agent';
+ import {EventEmitter2} from '@nestjs/event-emitter';
+ /* Application Dependencies */
+ import {SettingService} from '#server/modules/setting/setting.service';
+@@ -19,13 +21,18 @@
+ export class TelegramService implements OnModuleInit, OnModuleDestroy {
+ 	private readonly logger = new Logger(TelegramService.name);
+ 	private bot: Bot | null = null;
++	private readonly proxyAgent: SocksProxyAgent | undefined;
+ 	private lifecycle: Promise<void> = Promise.resolve();
+ 
+ 	constructor(
+ 		private readonly settingService: SettingService,
+ 		private readonly userService: UserService,
+ 		private readonly eventEmitter: EventEmitter2,
+-	) {}
++		configService: ConfigService,
++	) {
++		const proxy = configService.get<string>('server.proxy');
++		this.proxyAgent = proxy ? new SocksProxyAgent(proxy) : undefined;
++	}
+ 
+ 	/* *******************************************************
+ 		Lifecycle
+@@ -38,6 +45,7 @@
+ 
+ 	async onModuleDestroy(): Promise<void> {
+ 		await this.stopBot();
++		this.proxyAgent?.destroy();
+ 	}
+ 
+ 	/* *******************************************************
+@@ -58,7 +66,7 @@
+ 		const token = await this.settingService.getStringSetting(SettingKey.MESSAGES_TELEGRAM_BOT_TOKEN);
+ 		if (!enabled || vendor !== 'telegram' || !token) return;
+ 
+-		const bot = new Bot(token);
++		const bot = new Bot(token, this.proxyAgent ? {client: {baseFetchConfig: {agent: this.proxyAgent}}} : undefined);
+ 		try {
+ 			await bot.init();
+ 		} catch (error) {
+--- a/src/server/modules/message/telegram/telegram.service.spec.ts
++++ b/src/server/modules/message/telegram/telegram.service.spec.ts
+@@ -2,6 +2,9 @@
+ import {Test, TestingModule} from '@nestjs/testing';
+ /* Vendor Dependencies */
+ import {EventEmitter2} from '@nestjs/event-emitter';
++import {ConfigService} from '@nestjs/config';
++import {Bot} from 'grammy';
++import {SocksProxyAgent} from 'socks-proxy-agent';
+ /* Application Dependencies */
+ import {SettingService} from '#server/modules/setting/setting.service';
+ import {UserService} from '#server/modules/user/user.service';
+@@ -17,6 +20,7 @@
+ 		const module: TestingModule = await Test.createTestingModule({
+ 			providers: [
+ 				TelegramService,
++				{provide: ConfigService, useValue: {get: jest.fn().mockReturnValue('socks5h://127.0.0.1:9050')}},
+ 				{
+ 					provide: SettingService,
+ 					useValue: {
+@@ -45,6 +49,11 @@
+ 		service = module.get<TelegramService>(TelegramService);
+ 		settingService = module.get(SettingService) as jest.Mocked<SettingService>;
+ 		userService = module.get(UserService) as jest.Mocked<UserService>;
++	});
++
++	afterEach(async () => {
++		await service.onModuleDestroy();
++		jest.restoreAllMocks();
+ 	});
+ 
+ 	it('should be defined', () => {
+@@ -78,6 +87,22 @@
+ 	});
+ 
+ 	describe('initializeBot', () => {
++		it('uses the SOCKS agent for Telegram API requests without falling back on failure', async () => {
++			settingService.getBooleanSetting.mockResolvedValue(true);
++			settingService.getStringSetting.mockResolvedValueOnce('telegram').mockResolvedValueOnce('123:test-token');
++			const connect = jest.spyOn(SocksProxyAgent.prototype, 'connect').mockRejectedValue(new Error('Proxy unavailable'));
++			// Exercise the real API client, without Bot.init's automatic retry loop.
++			jest.spyOn(Bot.prototype, 'init').mockImplementation(async function (this: Bot) {
++				await this.api.getMe();
++			});
++
++			await service.initializeBot();
++
++			expect(connect).toHaveBeenCalledTimes(1);
++			expect(connect).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({host: 'api.telegram.org', port: 443}));
++			expect(service.isRunning()).toBe(false);
++		});
++
+ 		it('should not start bot when messages are disabled', async () => {
+ 			settingService.getBooleanSetting.mockResolvedValue(false);
+ 			await service.initializeBot();
+

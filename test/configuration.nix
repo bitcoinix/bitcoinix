@@ -752,12 +752,13 @@ let
     };
   };
 
+  orchardTests = import ./orchard-configuration.nix { inherit lib evaluate failedAssertions; };
   cdkMintdTests = import ./cdk-mintd-configuration.nix { inherit lib evaluate failedAssertions; };
 
   tests = lib.mapAttrs' (name: case: lib.nameValuePair "testREST-${name}" {
     expr = restAllowed case.args;
     inherit (case) expected;
-  }) restCases // cdkMintdTests // lnurlTests // extraConfigTests // pluginsConfigTests // pluginMigrationTests // {
+  }) restCases // cdkMintdTests // orchardTests // lnurlTests // extraConfigTests // pluginsConfigTests // pluginMigrationTests // {
     testLockedPackagesDefault = {
       expr = bitcoin.nix-bitcoin.useVersionLockedPkgs;
       expected = true;

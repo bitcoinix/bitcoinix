@@ -194,6 +194,10 @@
   # accessible via Tor.
   # nix-bitcoin.onionServices.btcpayserver.enable = true;
 
+  # Orchard dashboard (also enables the Cashu mint):
+  # https://docs.bitcoinix.net/services/orchard.html
+  # services.orchard.enable = true;
+
   # Cashu mint (see https://docs.bitcoinix.net/services/cdk-mint.html)
   # services.cdk-mintd = {
   #   enable = true;

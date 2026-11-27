@@ -491,6 +491,10 @@ in {
           config.services.mempool.electrumServer
         ];
       };
+      orchard = {
+        id = 37;
+        connections = [ "cdk-mintd" "nginx" ];
+      };
       cdk-mintd = {
         id = 36;
         connections = [ "nginx" ]
@@ -542,6 +546,7 @@ in {
     services.mempool.frontend.address = netns.nginx.address;
 
     services.cdk-mintd.address = netns.cdk-mintd.address;
+    services.orchard.address = netns.orchard.address;
 
     services.unbeholden-lnurl.address = netns.unbeholden-lnurl.address;
 

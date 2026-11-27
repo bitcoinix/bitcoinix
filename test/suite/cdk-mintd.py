@@ -13,7 +13,9 @@ def test_cdk_mintd():
     assert keys["keysets"], keys
     seed_hash = succeed(f"sha256sum {data['seedFile']}")
     machine.fail(f"runuser -u nobody -- cat {data['seedFile']}")
-    assert_full_match(f"stat -c '%U %a' {data['dataDir']}", f"{data['user']} 700\n")
+    # Orchard receives directory traversal through a named, read-only DB group.
+    mode = "710" if test_data.get("orchard") else "700"
+    assert_full_match(f"stat -c '%U %a' {data['dataDir']}", f"{data['user']} {mode}\n")
     machine.fail(f"test -d {data['dataDir']}/logs")
     guard = "/var/lib/nixos/cdk-mintd/initialized"
     assert_full_match(f"stat -c '%U' {guard}", "root\n")
