@@ -608,7 +608,10 @@ in {
         extraRpcauth = concatMapStrings (name: let
           user = cfg.rpc.users.${name};
         in optionalString user.passwordHMACFromFile ''
-          hmac=$(< '${secretsDir}/bitcoin-HMAC-${name}')
+          hmac=""
+          if [[ -f '${secretsDir}/bitcoin-HMAC-${name}' && -r '${secretsDir}/bitcoin-HMAC-${name}' ]]; then
+            hmac=$(< '${secretsDir}/bitcoin-HMAC-${name}')
+          fi
           extraRpcauth+="rpcauth=${user.name}:$hmac"$'\n'
         '') (builtins.attrNames cfg.rpc.users);
       in ''
