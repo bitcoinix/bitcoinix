@@ -87,8 +87,9 @@ let
   grantDatabaseAccess = nbLib.script "orchard-database-access-as-mint" ''
     for _attempt in $(seq 1 600); do
       if [[ -f ${escapeShellArg "${database}-wal"} && -f ${escapeShellArg "${database}-shm"} ]]; then
-        ${pkgs.acl}/bin/setfacl -P -m g:${databaseGroup}:--x ${escapeShellArg mint.dataDir}
-        ${pkgs.acl}/bin/setfacl -P -m g:${databaseGroup}:r-- \
+        # Explicit masks keep old named ACL entries from regaining write access.
+        ${pkgs.acl}/bin/setfacl -P -m g:${databaseGroup}:--x,m::--x ${escapeShellArg mint.dataDir}
+        ${pkgs.acl}/bin/setfacl -P -m g:${databaseGroup}:r--,m::r-- \
           ${escapeShellArg database} ${escapeShellArg "${database}-wal"} ${escapeShellArg "${database}-shm"}
         exit 0
       fi

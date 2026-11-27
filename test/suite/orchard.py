@@ -111,6 +111,31 @@ def test_orchard():
             succeed(f"{as_orchard} test -r {database}{suffix}")
             machine.fail(f"{as_orchard} test -w {database}{suffix}")
 
+    # Dormant ACL entries must not regain write access when Orchard starts.
+    # Cycle through startup and tmpfiles with old writable entries still present.
+    database_files = [f"{database}{suffix}" for suffix in ["", "-wal", "-shm"]]
+    files = " ".join(database_files)
+    as_nobody = "runuser -u nobody --"
+    succeed("systemctl stop orchard")
+    succeed(f"setfacl -m u:nobody:rwx,m::--- {data['mintDataDir']}")
+    succeed(f"setfacl -m u:nobody:rw-,m::--- {files}")
+    try:
+        for _ in range(2):
+            succeed("systemctl restart orchard")
+            machine.wait_until_succeeds(f"curl -fsS {url}/config.json")
+            assert query_ok('{ mint_keysets { id } }', login())["mint_keysets"]
+            assert_matches(f"getfacl -cp {data['mintDataDir']}", r"(?m)^mask::--x$")
+            succeed(f"{as_nobody} test -x {data['mintDataDir']}")
+            machine.fail(f"{as_nobody} test -r {data['mintDataDir']}")
+            machine.fail(f"{as_nobody} test -w {data['mintDataDir']}")
+            for path in database_files:
+                assert_matches(f"getfacl -cp {path}", r"(?m)^mask::r--$")
+                machine.fail(f"{as_nobody} test -w {path}")
+            assert succeed("systemctl show -P InvocationID cdk-mintd") == mint_invocation
+            succeed(f"systemd-tmpfiles --create --prefix={data['mintDataDir']}")
+    finally:
+        succeed(f"setfacl -n -x u:nobody {data['mintDataDir']} {files}")
+
     # Force setfacl to fail by changing ownership of the live DB. This also
     # checks that the grant runs as the mint user, without root's override.
     # The mint keeps its open database handles throughout the Orchard failure.

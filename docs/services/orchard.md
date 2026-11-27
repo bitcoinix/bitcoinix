@@ -50,6 +50,8 @@ created. Restarting Orchard invalidates login sessions.
 Orchard runs as a separate user. It can read the mint SQLite database and its
 WAL files, but cannot write them or read the mint seed, BDK wallet or Lightning
 credentials. The mint data filesystem must support POSIX ACLs.
+Explicit ACL masks prevent pre-existing named user or group entries from
+regaining write access when Orchard starts.
 Orchard reapplies its read access at each start; an ACL failure stops only
 Orchard, leaving the mint running. Tmpfiles preserves directory traversal access
 when it refreshes permissions, so database queries keep working without a restart.
