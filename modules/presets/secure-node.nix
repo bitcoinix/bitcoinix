@@ -3,7 +3,6 @@
 with lib;
 
 let
-  cfg = config.services;
   nbLib = config.nix-bitcoin.lib;
   operatorName = config.nix-bitcoin.operator.name;
 in {

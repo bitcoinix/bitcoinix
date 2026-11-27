@@ -22,6 +22,10 @@
         # Only these 64-bit Linux platforms are supported and tested.
       ];
 
+      lockedNbPkgs = nixpkgs.lib.genAttrs supportedSystems (system:
+        self.lib.mkNbPkgs { inherit system; }
+      );
+
       test = import ./test/tests.nix nixpkgs.lib self.nixosModules.default;
     in {
       lib = {
@@ -77,7 +81,8 @@
 
           nix-bitcoin.pkgs =
             if config.nix-bitcoin.useVersionLockedPkgs
-            then (self.lib.mkNbPkgs { inherit (pkgs.stdenv.hostPlatform) system; }).modulesPkgs
+            then (lockedNbPkgs.${pkgs.stdenv.hostPlatform.system}
+              or (self.lib.mkNbPkgs { inherit (pkgs.stdenv.hostPlatform) system; })).modulesPkgs
             else (self.lib.mkNbPkgs { inherit (pkgs.stdenv.hostPlatform) system; inherit pkgs; }).modulesPkgs;
         };
       };
@@ -90,7 +95,7 @@
     } // (flake-utils.lib.eachSystem supportedSystems (system:
       let
         pkgs = nixpkgs.legacyPackages.${system};
-        nbPkgs = self.lib.mkNbPkgs { inherit system pkgs; };
+        nbPkgs = lockedNbPkgs.${system};
       in rec {
         checks = {
           ci-workflows = pkgs.runCommand "nix-bitcoin-ci-workflows" {

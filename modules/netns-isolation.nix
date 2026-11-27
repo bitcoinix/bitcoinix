@@ -93,6 +93,7 @@ let
   };
 
   cfg = config.nix-bitcoin.netns-isolation;
+  nbLib = config.nix-bitcoin.lib;
 
   netns = builtins.mapAttrs (n: v: {
     inherit (v) id;
@@ -103,27 +104,19 @@ let
 
   # Symmetric netns connection matrix
   # if clightning.connections = [ "bitcoind" ]; then
-  #   availableNetns.bitcoind = [ "clighting" ];
+  #   availableNetns.bitcoind = [ "clightning" ];
   #   and
-  #   availableNetns.clighting = [ "bitcoind" ];
-  #
-  # TODO-EXTERNAL:
-  # Although negligible for our purposes, this calculation's runtime
-  # is in the order of (number of connections * number of services),
-  # because attrsets and lists are fully copied on each update with '//' or '++'.
-  # This can only be improved with an update in the nix language.
-  #
+  #   availableNetns.clightning = [ "bitcoind" ];
   availableNetns = let
-    # base = { clightning = [ "bitcoind" ]; ... }
-    base = builtins.mapAttrs (n: v:
-      builtins.filter isEnabled v.connections
-    ) enabledServices;
+    edges = concatLists (mapAttrsToList (s1: v:
+      concatMap (s2: [ { from = s1; to = s2; } { from = s2; to = s1; } ])
+        (builtins.filter isEnabled v.connections)
+    ) enabledServices);
+    byService = builtins.groupBy (e: e.from) edges;
   in
-    foldl (xs: s1:
-      foldl (xs: s2:
-        xs // { "${s2}" = xs.${s2} ++ [ s1 ]; }
-      ) xs cfg.services.${s1}.connections
-    ) base (builtins.attrNames base);
+    builtins.mapAttrs (n: _:
+      unique (map (e: e.to) (byService.${n} or []))
+    ) enabledServices;
 
   enabledServices = filterAttrs (n: v: isEnabled n) cfg.services;
   isEnabled = x: config.services.${x}.enable;
@@ -134,13 +127,9 @@ let
   # nftables ruleset. Any other build, such as a renamed or wrapped one, counts
   # as iptables-nft. The bridge runs the iptables of `networking.firewall.package`.
   bridgeUsesNftables = "${config.networking.firewall.package}" != "${pkgs.iptables-legacy}";
-  # The host firewall, which opens ports on `nb-br`, runs the first iptables
-  # on its PATH, after only nftables' bin, which has no iptables. This is the
-  # check of the WireGuard preset.
-  firewallUsesNftables = config.networking.firewall.enable
-    && findFirst (dir: dir != "${pkgs.nftables}/bin") null
-         (splitString ":" (toString (config.systemd.services.firewall.environment.PATH or null)))
-       != "${pkgs.iptables-legacy}/bin";
+  # The host firewall, which opens ports on `nb-br`, runs iptables-nft unless
+  # iptables-legacy comes first on its PATH.
+  firewallUsesNftables = config.networking.firewall.enable && nbLib.firewallUsesIptablesNft;
   # nb-netns-forward runs the iptables of the bridge, also when the host
   # firewall is off or runs iptables-legacy
   forwardUsesNftables = cfg.restrictForwarding && bridgeUsesNftables;
@@ -154,9 +143,7 @@ let
     ++ optional (firewallUsesNftables && config.networking.enableIPv6) "ip6 filter"
     ++ optional firewallChecksReversePath "ip mangle"
     ++ optional (firewallChecksReversePath && config.networking.enableIPv6) "ip6 mangle";
-  iptablesTablesInNftables = filter (table: elem table iptablesTables)
-    (mapAttrsToList (_: t: "${t.family} ${t.name}")
-      (filterAttrs (_: t: t.enable) config.networking.nftables.tables));
+  iptablesTablesInNftables = nbLib.conflictingNftablesTables iptablesTables;
   # These restore the rules after the last flush, in their boot order. A
   # reload replaces the rules in place. A restart of the firewall or of
   # nb-netns-forward first removes the rules that are still there.
@@ -228,7 +215,7 @@ in {
         # `networking.nftables.tables`. Raw `flush` or `delete` commands in
         # `ruleset`, `rulesetFile` or `extraDeletions` aren't checked.
         assertion = !config.networking.nftables.enable || iptablesTablesInNftables == [];
-        message = "`nix-bitcoin.netns-isolation` needs the NAT rule of the namespace bridge, the forwarding rules of `nb-netns-forward` and the host firewall, which iptables-nft keeps in the tables `ip nat`, `ip filter`, `ip6 filter`, `ip mangle` and `ip6 mangle`, but `networking.nftables.tables` replaces ${concatStringsSep " and " (unique iptablesTablesInNftables)} whenever `nftables.service` starts or reloads, and deletes each one when `nftables.service` stops. Rename the table or use the `inet` family. After deploying, reboot once or run ${restoreRules}, since the first reload or stop still deletes the old table.";
+        message = "`nix-bitcoin.netns-isolation` needs the NAT rule of the namespace bridge, the forwarding rules of `nb-netns-forward` and the host firewall, which iptables-nft keeps in the tables `ip nat`, `ip filter`, `ip6 filter`, `ip mangle` and `ip6 mangle`, but `networking.nftables.tables` replaces ${concatStringsSep " and " iptablesTablesInNftables} whenever `nftables.service` starts or reloads, and deletes each one when `nftables.service` stops. Rename the table or use the `inet` family. After deploying, reboot once or run ${restoreRules}, since the first reload or stop still deletes the old table.";
       }
       {
         # Services with `tor.enforce` may reach the whole namespace subnet
@@ -367,13 +354,15 @@ in {
           # services in their namespaces too. The copy is made when the netns
           # is set up, so a later change on the host needs a reboot.
           if [ -e /proc/sys/net/mptcp/enabled ]; then
-            hostMptcp=$(cat /proc/sys/net/mptcp/enabled)
+            read -r hostMptcp < /proc/sys/net/mptcp/enabled
             export hostMptcp
           fi
           exec ${nsenter} --net=/run/netns/${netnsName} ${script "in-netns" setupInNetns}
         '';
 
-        setupInNetns = ''
+        setupInNetns = let
+          torEnforce = config.services.${n}.tor.enforce or false;
+        in ''
           ${ip} link set lo up
           if [ -n "''${hostMptcp:-}" ]; then
             echo "$hostMptcp" > /proc/sys/net/mptcp/enabled
@@ -386,13 +375,16 @@ in {
           ${ip} link set ${veth} up
           ${ip} route add default via ${bridgeIp}
 
-          ${iptables} -w -P INPUT DROP
-          # allow return traffic to outgoing connections initiated by the service itself
-          ${iptables} -w -A INPUT -m conntrack --ctstate ESTABLISHED -j ACCEPT
-          ${iptables} -w -A INPUT -s ${allowedAddresses} -j ACCEPT
-        '' + optionalString (config.services.${n}.tor.enforce or false) ''
-          ${iptables} -w -P OUTPUT DROP
-          ${iptables} -w -A OUTPUT -d ${allowedAddresses} -j ACCEPT
+          # Allow return traffic to outgoing connections initiated by the service itself
+          ${iptables}-restore -w <<'EOF'
+          *filter
+          :INPUT DROP [0:0]
+          :OUTPUT ${if torEnforce then "DROP" else "ACCEPT"} [0:0]
+          -A INPUT -m conntrack --ctstate ESTABLISHED -j ACCEPT
+          -A INPUT -s ${allowedAddresses} -j ACCEPT
+          ${optionalString torEnforce "-A OUTPUT -d ${allowedAddresses} -j ACCEPT"}
+          COMMIT
+          EOF
         '';
         script = name: src: pkgs.writers.writeDash name ''
           set -e
@@ -430,9 +422,7 @@ in {
         };
       };
     in
-      foldl (services: n:
-        services // (makeNetnsServices n netns.${n})
-      ) {} (builtins.attrNames netns)
+      concatMapAttrs makeNetnsServices netns
     );
   }
 

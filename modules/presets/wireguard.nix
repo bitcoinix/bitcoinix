@@ -30,6 +30,7 @@ let
   };
 
   cfg = config.nix-bitcoin.wireguard;
+  nbLib = config.nix-bitcoin.lib;
   wgSubnet = cfg.subnet;
   inherit (config.networking.wireguard.interfaces) wg-nb;
   inherit (config.services)
@@ -41,19 +42,8 @@ let
   lnconnect-clnrest = clnrest.enable && clnrest.lnconnect.enable;
   # The firewall rules below guard these REST APIs and enforce `restrictPeer`.
   needsFirewallRules = lndconnect || lnconnect-clnrest || cfg.restrictPeer;
-  iptablesTablesInNftables = mapAttrsToList (_: t: "${t.family} ${t.name}")
-    (filterAttrs (_: t: t.enable && t.name == "filter" && elem t.family [ "ip" "ip6" ])
-      config.networking.nftables.tables);
-  # `pkgs.iptables-legacy` keeps its rules in the legacy xtables, outside the
-  # nftables ruleset. It ships `bin/iptables`, so it's the iptables the firewall
-  # runs when its bin comes first on the service's PATH, after only nftables' bin,
-  # which has no iptables. Anything else, such as a renamed or wrapped build,
-  # counts as iptables-nft.
-  firewallUsesIptablesLegacy =
-    findFirst (dir: dir != "${pkgs.nftables}/bin") null
-      (splitString ":" (toString (config.systemd.services.firewall.environment.PATH or null)))
-    == "${pkgs.iptables-legacy}/bin";
-  iptablesUsesNftables = !firewallUsesIptablesLegacy;
+  iptablesTablesInNftables = nbLib.conflictingNftablesTables [ "ip filter" "ip6 filter" ];
+  iptablesUsesNftables = nbLib.firewallUsesIptablesNft;
 
   serverAddress = "${wgSubnet}.1";
   peerAddress = "${wgSubnet}.2";
@@ -288,7 +278,7 @@ in {
         checkKey "$priv" "the WireGuard clients set up with the current keys"
         # Derive the public key on every run, so that it always matches
         derivedPub=$(${wg} pubkey < "$priv")
-        if [[ $(cat "$pub" 2>/dev/null) != "$derivedPub" ]]; then
+        if [[ ! -f "$pub" || ! -r "$pub" || $(< "$pub") != "$derivedPub" ]]; then
           writeSecret "$pub" echo "$derivedPub"
         fi
       }

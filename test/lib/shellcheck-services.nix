@@ -85,12 +85,12 @@ let
       ) scriptAttrs
     ) servicesToCheck;
 
-  # A list of all binaries included in `serviceCmds`
-  serviceBinaries = map (cmd: builtins.head (
+  # A deduplicated list of all binaries included in `serviceCmds`
+  serviceBinaries = lib.unique (map (cmd: builtins.head (
     # Extract the first component (the binary).
     # cmd can start with extra modifiers like `+`
     builtins.match "[^/]*([^[:space:]]+).*" (toString cmd)
-  )) serviceCmds;
+  )) serviceCmds);
 
   shellcheckServices = pkgs.runCommand "shellcheck-services" {
     inherit serviceBinaries;
@@ -101,10 +101,10 @@ let
   } ''
     echo "Checked binaries:"
     # Find and check all binaries that have a bash shebang
-    grep -Pl '\A#! *\S+bash\b' $serviceBinaries | while IFS= read -r script; do
-      echo "$script"
-      ${pkgs.shellcheck}/bin/shellcheck --shell bash "$script"
-    done | tee "$out"
+    mapfile -t scripts < <(grep -Pl '\A#! *\S+bash\b' $serviceBinaries)
+    (( ''${#scripts[@]} > 0 ))
+    printf '%s\n' "''${scripts[@]}" | tee "$out"
+    ${pkgs.shellcheck}/bin/shellcheck --shell bash "''${scripts[@]}"
   '';
 in
 {

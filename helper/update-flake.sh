@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
+. "${BASH_SOURCE[0]%/*}/run-in-nix-env" "coreutils git gnugrep gnused jq" "$@"
 
 # This script does the following:
 # - When called without arguments, update all flake inputs, including nixpkgs.
@@ -59,10 +60,12 @@ else
 fi
 
 echo
-nix eval --raw -f update-flake.nix --argstr prevVersions "$versions" showUpdates; echo
+result=$(nix eval --json -f update-flake.nix --argstr prevVersions "$versions" \
+    --apply 'x: { inherit (x) showUpdates versionsFile; }')
+jq -r .showUpdates <<< "$result"
+echo
 
-nix eval --json -f update-flake.nix versionsFile |
-    nix shell --inputs-from .. nixpkgs#jq -c jq . > ../versions.json
+jq .versionsFile <<< "$result" > ../versions.json
 ./gen-docs-versions.sh > ../docs/versions-table.md
 
 # krops is pinned in ../pkgs/krops, outside of the flake inputs

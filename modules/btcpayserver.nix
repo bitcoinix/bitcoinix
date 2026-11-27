@@ -136,7 +136,7 @@ let
   '' + optionalString (cfg.btcpayserver.rootpath != null) ''
     rootpath=${cfg.btcpayserver.rootpath}
   '' + optionalString (cfg.btcpayserver.lightningBackend == "clightning") ''
-    btclightning=type=clightning;server=unix:///${cfg.clightning.dataDir}/${nbLib.networkName { mainnet = "bitcoin"; }}/lightning-rpc
+    btclightning=type=clightning;server=unix:///${cfg.clightning.networkDir}/lightning-rpc
   '' + optionalString (cfg.btcpayserver.lightningBackend == "lnd")
     (
       "btclightning=type=lnd-rest;" +
@@ -232,11 +232,12 @@ in {
       after = requires ++ wants ++ [ "nix-bitcoin-secrets.target" ];
       environment = dotnetNoReload;
       preStart = ''
+        rpcpass=$(< '${config.nix-bitcoin.secretsDir}/bitcoin-rpcpassword-btcpayserver')
         conf=$(
           cat ${configFile}
-          echo "btcrpcpassword=$(cat ${config.nix-bitcoin.secretsDir}/bitcoin-rpcpassword-btcpayserver)"
+          printf 'btcrpcpassword=%s\n' "$rpcpass"
         )
-        install -T -m 600 <(echo "$conf") '${cfg.nbxplorer.dataDir}/settings.config'
+        install -T -m 600 <(printf '%s\n' "$conf") '${cfg.nbxplorer.dataDir}/settings.config'
       '';
       serviceConfig = nbLib.defaultHardening // {
         ExecStart = ''

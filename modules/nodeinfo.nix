@@ -63,7 +63,6 @@ let
     import stat
     import subprocess
     import sys
-    from collections import OrderedDict
 
     parser = argparse.ArgumentParser(
         description="Show the bitcoinix revision and the addresses of the enabled services."
@@ -91,30 +90,33 @@ let
     def is_enabled(unit):
         return success("systemctl", "is-enabled", "--quiet", unit)
 
-    def cmd(*args):
-        return subprocess.run(args, stdout=subprocess.PIPE).stdout.decode('utf-8')
+    def cli_json_field(cmd_args, field):
+        out = subprocess.run(cmd_args, stdout=subprocess.PIPE).stdout
+        try:
+            value = json.loads(out).get(field)
+        except (ValueError, AttributeError):
+            return ""
+        return "" if value is None else str(value)
 
-    def shell(*args):
-        return cmd("bash", "-c", *args).strip()
-
-    infos = OrderedDict()
-    infos["bitcoinix"] = {
-        "revision": revision,
-    }
     available = ["bitcoinix"]
+    entries = []
     operator = "${config.nix-bitcoin.operator.name}"
+    operator_uid = None
 
     def get_onion_address(name, port):
+        global operator_uid
         path = f"/var/lib/onion-addresses/{operator}/{name}"
         # The operator owns this dir, and root also runs nodeinfo. So only read
         # a regular file that the operator owns, and don't follow a symlink.
         # O_NONBLOCK keeps a FIFO from blocking the open. An onion address with
         # its newline has 63 bytes.
         try:
+            if operator_uid is None:
+                operator_uid = pwd.getpwnam(operator).pw_uid
             fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
             try:
                 st = os.fstat(fd)
-                if not stat.S_ISREG(st.st_mode) or st.st_uid != pwd.getpwnam(operator).pw_uid:
+                if not stat.S_ISREG(st.st_mode) or st.st_uid != operator_uid:
                     raise OSError
                 onion_address = os.read(fd, 100).decode().strip()
             finally:
@@ -126,17 +128,8 @@ let
 
     def add_service(service, make_info, systemd_service = None, version = None):
         available.append(service)
-        if not is_selected(service):
-            return
-        systemd_service = systemd_service or service
-        if not is_active(systemd_service):
-            infos[service] = f"'{systemd_service}.service' is not running"
-        else:
-            info = OrderedDict()
-            if version is not None:
-                info["version"] = version
-            exec(make_info, globals(), locals())
-            infos[service] = info
+        if is_selected(service):
+            entries.append((service, make_info, systemd_service or service, version))
 
     if is_enabled("onion-addresses") and not is_active("onion-addresses"):
         print("error: service 'onion-addresses' is not running")
@@ -150,7 +143,27 @@ let
         print(f"available: {', '.join(available)}", file=sys.stderr)
         exit(1)
 
-    infos = OrderedDict((name, info) for name, info in infos.items() if is_selected(name))
+    units = list(dict.fromkeys(unit for _, _, unit, _ in entries))
+    active = {}
+    if units:
+        states = subprocess.run(
+            ["systemctl", "is-active", "--", *units],
+            stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True,
+        ).stdout.splitlines()
+        active = dict(zip(units, states))
+
+    infos = {}
+    if is_selected("bitcoinix"):
+        infos["bitcoinix"] = {"revision": revision}
+    for service, make_info, systemd_service, version in entries:
+        if active.get(systemd_service) not in ("active", "reloading", "refreshing"):
+            infos[service] = f"'{systemd_service}.service' is not running"
+        else:
+            info = {}
+            if version is not None:
+                info["version"] = version
+            exec(make_info, globals(), locals())
+            infos[service] = info
 
     print(json.dumps(infos, indent=2))
   '';
@@ -195,7 +208,7 @@ in {
     nix-bitcoin.nodeinfo.services = with nodeinfoLib; {
       bitcoind = mkInfo "";
       clightning = mkInfo ''
-        info["nodeid"] = shell("lightning-cli getinfo | ${pkgs.jq}/bin/jq -r '.id'")
+        info["nodeid"] = cli_json_field(["lightning-cli", "getinfo"], "id")
         if 'onion_address' in info:
             info["id"] = f"{info['nodeid']}@{info['onion_address']}"
       '';
@@ -204,7 +217,7 @@ in {
       '' + mkIfOnionPort "lnd-rest" (onionPort: ''
         info["onion_rest_address"] = get_onion_address("lnd-rest", ${onionPort})
       '') + ''
-        info["nodeid"] = shell("lncli getinfo | ${pkgs.jq}/bin/jq -r '.identity_pubkey'")
+        info["nodeid"] = cli_json_field(["lncli", "getinfo"], "identity_pubkey")
       '') name cfg;
       clnrest = name: cfg: mkInfoLong {
         inherit name cfg;

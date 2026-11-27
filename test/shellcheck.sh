@@ -5,18 +5,11 @@ set -euo pipefail
 # Shellcheck all bash sources in this repo
 
 cd "${BASH_SOURCE[0]%/*}/.."
-{
-    # Skip .git dir in all find commands
-    find . -type f ! -path './.git/*' -name '*.sh'
-    # Find files without extensions that have a shell shebang
-    find . -type f ! -path './.git/*' ! -name "*.*" -exec grep -lP '\A^#! */usr/bin/env (?:nix-shell|bash)' {} \;
-} | while IFS= read -r path; do
-    echo "$path"
-    file=${path##*/}
-    dir=${path%/*}
-    # Switch working directory so that shellcheck can access external sources
-    # (via arg `--external-sources`)
-    pushd "$dir" > /dev/null
-    shellcheck --external-sources --shell bash "$file"
-    popd > /dev/null
-done
+mapfile -t files < <(
+    find . -path ./.git -prune -o -type f \( \
+        -name '*.sh' -print -o \
+        ! -name '*.*' -exec grep -lP '\A^#! */usr/bin/env (?:nix-shell|bash)' {} + \
+    \) | sort
+)
+printf '%s\n' "${files[@]}"
+shellcheck --external-sources --source-path=SCRIPTDIR --shell bash "${files[@]}"

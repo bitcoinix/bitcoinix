@@ -125,17 +125,27 @@ in {
           echo "''${content%$'\n'}"
         }
 
+        declare -A cachedAddress=() cachedFailed=()
         failed=
         writeOnionAddress() {
           local service=$1 dest=$2 owner=$3 mode=$4 address
-          if address=$(readOnionAddress "$service"); then
-            echo "$address" > "$dest"
-            chown "$owner" "$dest"
-            chmod "$mode" "$dest"
-          else
+          if [[ -v cachedAddress[$service] ]]; then
+            address=''${cachedAddress[$service]}
+          elif [[ -v cachedFailed[$service] ]]; then
             echo "Error: Skipping onion address of service $service for $owner" >&2
             failed=1
+            return
+          elif address=$(readOnionAddress "$service"); then
+            cachedAddress[$service]=$address
+          else
+            cachedFailed[$service]=1
+            echo "Error: Skipping onion address of service $service for $owner" >&2
+            failed=1
+            return
           fi
+          echo "$address" > "$dest"
+          chown "$owner" "$dest"
+          chmod "$mode" "$dest"
         }
 
         # Wait until tor is up

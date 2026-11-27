@@ -171,10 +171,7 @@ let
   configFile = builtins.toFile "mempool-config" (builtins.toJSON cfg.settings);
   cacheDir = "/var/cache/mempool";
 
-  inherit (config.services)
-    bitcoind
-    electrs
-    fulcrum;
+  inherit (config.services) bitcoind;
 
   torSocket = config.services.tor.client.socksListenAddress;
 

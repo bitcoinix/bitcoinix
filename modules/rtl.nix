@@ -136,8 +136,6 @@ let
   ] ++ map (rpc: "/walletrpc.WalletKit/${rpc}") [
     "BumpFee" "LabelTransaction" "LeaseOutput" "ListUnspent" "ReleaseOutput"
   ];
-  uriPermissions = concatMapStringsSep ",\n"
-    (rpc: builtins.toJSON { entity = "uri"; action = rpc; });
 
   # RTL's clightning rune allows only the methods in RTL's `backend/controllers/cln`.
   # clnrest checks `listclnrest-notifications` for RTL's websocket connection.
@@ -171,7 +169,7 @@ let
   # clightning gives each new rune its own ID, but it counts them in its database.
   # So after a start on a new database, a new rune can get the ID of an older rune
   # that clightning doesn't list, see `docs/service/rtl.md`.
-  runeAction = pkgs.writeText "rtl-rune-action.jq" ''
+  runeAction = builtins.toFile "rtl-rune-action.jq" ''
     def restrictions: [.restrictions[] | [.alternatives[] | .fieldname + .condition + .value]];
     [.runes[] | select(.blacklisted | not)] as $valid
     | (first($valid[] | select(.rune == $rune and restrictions == $want)) // null) as $kept
@@ -181,28 +179,6 @@ let
   '';
 
   runuser = "${pkgs.util-linux}/bin/runuser";
-
-  # Shared by the root scripts that copy lnd/clightning credentials to RTL.
-  # The source dirs are writable by the lnd/clightning user and `cfg.dataDir` is
-  # writable by the rtl user, so any of them could place symlinks there.
-  # So never access paths in these dirs as root:
-  # - Read the source as the user that owns it (`runuser`), into "$tmpFile",
-  #   a file in a fresh dir that only root can write to.
-  # - Install the file to its destination as the rtl user.
-  #   This only grants the rtl user rights it already has.
-  #   `install --compare` doesn't rewrite unchanged files.
-  installAsRtl = ''
-    umask 077
-    tmpDir=$(mktemp -d)
-    trap 'rm -rf "$tmpDir"' EXIT
-    # Let the rtl user access "$tmpFile" (owned by rtl, mode 600), but not list the dir
-    chmod 711 "$tmpDir"
-    tmpFile=$tmpDir/file
-    installAsRtl() {
-      chown ${cfg.user}:${cfg.group} "$tmpFile"
-      ${runuser} -u ${cfg.user} -- install --compare -m 640 -D "$tmpFile" "$1"
-    }
-  '';
 
   backends = optional cfg.nodes.clightning.enable "clightning" ++
              optional cfg.nodes.lnd.enable "lnd";
@@ -355,8 +331,8 @@ in {
       enable = true;
       macaroons.rtl = {
         inherit (cfg) user;
-        permissions = uriPermissions lndRpcs;
-        optionalPermissions = uriPermissions optionalLndRpcs;
+        permissions = nbLib.uriPermissions lndRpcs;
+        optionalPermissions = nbLib.uriPermissions optionalLndRpcs;
       };
     };
     services.clightning = mkIf cfg.nodes.clightning.enable {
@@ -436,27 +412,41 @@ in {
           "${pkgs.coreutils}/bin/rm -f ${escapeShellArgs unusedCopies}"
         ++ optional cfg.nodes.lnd.enable
           # Copy the macaroon that lnd creates for RTL (`services.lnd.macaroons.rtl`)
-          # to the file that RTL reads. Read it as the rtl user, who owns it.
+          # to the file that RTL reads. Runs as the rtl user, who owns both the
+          # macaroon and the destination.
           # The lnd user can write `/run/lnd`. So don't follow a symlink, which could
           # make this copy a file of the rtl user, and RTL send it to lnd.
-          (nbLib.rootScript "rtl-copy-macaroon" ''
-            ${installAsRtl}
-            ${runuser} -u ${cfg.user} -- \
-              dd if=/run/lnd/rtl.macaroon iflag=nofollow,fullblock bs=65536 count=1 status=none > "$tmpFile"
-            if [[ ! -s $tmpFile ]]; then
+          (nbLib.script "rtl-copy-macaroon" ''
+            umask 077
+            tmp=$(mktemp)
+            trap 'rm -f "$tmp"' EXIT
+            dd if=/run/lnd/rtl.macaroon iflag=nofollow,fullblock bs=65536 count=1 status=none > "$tmp"
+            if [[ ! -s $tmp ]]; then
               echo "Error: '/run/lnd/rtl.macaroon' is empty" >&2
               exit 1
             fi
-            installAsRtl '${macaroonCopy}'
+            install --compare -m 640 -D "$tmp" '${macaroonCopy}'
           '')
         ++ optional cfg.nodes.clightning.enable
+          # Runs as root to bridge clightning and rtl credentials. Neither user's
+          # dir is accessed as root: read as clightning into a root-owned temp dir
+          # and install into `cfg.dataDir` as rtl.
           (nbLib.rootScript "rtl-create-clnrest-rune-file" ''
-            ${installAsRtl}
+            umask 077
+            tmpDir=$(mktemp -d)
+            trap 'rm -rf "$tmpDir"' EXIT
+            # Let the rtl user access "$tmpFile" (owned by rtl, mode 600), but not list the dir
+            chmod 711 "$tmpDir"
+            tmpFile=$tmpDir/file
+            installAsRtl() {
+              chown ${cfg.user}:${cfg.group} "$tmpFile"
+              ${runuser} -u ${cfg.user} -- install --compare -m 640 -D "$tmpFile" "$1"
+            }
             asClightning() {
               ${runuser} -u ${clightning.user} -- "$@"
             }
             cli() {
-              asClightning ${clightning.cli}/bin/lightning-cli "$@"
+              asClightning ${clightning.package}/bin/lightning-cli --lightning-dir='${clightning.dataDir}' "$@"
             }
             jq=${pkgs.jq}/bin/jq
             restrictions=${escapeShellArg runeRestrictions}
@@ -505,9 +495,7 @@ in {
                 echo "RTL's new rune has the blacklisted unique ID $id. Create another one."
               done
               # Replace the file in one step, so that a crash can't leave a partial rune
-              tmp=$(asClightning mktemp '${clightningRune}.XXXXXX')
-              asClightning tee "$tmp" <<< "$rune" > /dev/null
-              asClightning mv -fT "$tmp" '${clightningRune}'
+              asClightning ${nbLib.writeAtomic} '${clightningRune}' <<< "$rune"
             fi
             printf 'LIGHTNING_RUNE="%s"\n' "$rune" > "$tmpFile"
             installAsRtl '${runePath}'
@@ -516,15 +504,14 @@ in {
             # clnrest's cert dir, which `clnrest-certs` can change.
             # The query fails when clnrest isn't running, for example because
             # another process took its port. `Restart=on-failure` tries again.
-            if ! response=$(${runuser} -u ${clightning.user} -- \
-                   ${clightning.cli}/bin/lightning-cli listconfigs clnrest-certs) ||
+            if ! response=$(cli listconfigs clnrest-certs) ||
                ! cert=$(${clightning.plugins.clnrest.serverCertPathFromConfigs} <<< "$response"); then
               echo "Error: Can't get clnrest's cert dir from clightning: $response" >&2
               exit 1
             fi
             # clnrest creates the cert before it listens, which clightning's start
             # waits for. When it's still missing, `Restart=on-failure` tries again.
-            ${runuser} -u ${clightning.user} -- head -c 65536 "$cert" > "$tmpFile"
+            asClightning head -c 65536 "$cert" > "$tmpFile"
             if [[ ! -s $tmpFile ]]; then
               echo "Error: '$cert' is empty" >&2
               exit 1
@@ -535,6 +522,7 @@ in {
         # Show "rtl" instead of "node" in the journal
         SyslogIdentifier = "rtl";
         User = cfg.user;
+        Group = cfg.group;
         Restart = "on-failure";
         RestartSec = "10s";
         ReadWritePaths = [ cfg.dataDir ];

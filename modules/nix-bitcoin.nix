@@ -86,7 +86,7 @@ with lib;
         internal = true;
         readOnly = true;
         default = pkgs.writers.writeBashBin "torify" ''
-          ${pkgs.tor}/bin/torify \
+          exec ${pkgs.tor}/bin/torify \
             --address ${config.services.tor.client.socksListenAddress.addr} \
             "$@"
         '';

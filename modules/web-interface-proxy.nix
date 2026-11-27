@@ -11,8 +11,7 @@ let
   dataDir = cfg.dataDir or null;
   nbLib = config.nix-bitcoin.lib;
   # ListenStream needs brackets around an IPv6 address.
-  address = if hasInfix ":" cfg.address then "[${cfg.address}]" else cfg.address;
-  listenAddress = "${address}:${toString cfg.port}";
+  listenAddress = "${nbLib.bracketIPv6 cfg.address}:${toString cfg.port}";
   # A switch replaces a removed socket unit, but doesn't restart a changed one.
   proxy = "${name}-proxy";
   socket = "${proxy}-${substring 0 8 (builtins.hashString "sha256" listenAddress)}";

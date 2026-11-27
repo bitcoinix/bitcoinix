@@ -1,4 +1,4 @@
-{ lib, config, ... }:
+{ lib, ... }:
 let
   defaultTrue = lib.mkDefault true;
   defaultEnableTorProxy = {

@@ -53,9 +53,8 @@
 
 set -euo pipefail
 
-# These vars are set by ../run-tests.sh
+# This var is set by ../run-tests.sh
 : "${container:=}"
-: "${scriptDir:=}"
 
 containerCommand=shell
 

@@ -49,40 +49,39 @@ let
   };
 
   # Version directories sort numerically; notices within a version sort by filename.
-  changes = concatMap (version: let
-    dir = ./versioning + "/${version}";
-    upgradeNotes = if builtins.pathExists (../docs/upgrading + "/${version}")
-      then "docs/upgrading/${version}/"
-      else if builtins.pathExists (../docs/upgrading + "/${version}.md")
-      then "docs/upgrading/${version}.md"
+  versionDirs = sort lib.versionOlder (attrNames (filterAttrs (_: type:
+    type == "directory"
+  ) (builtins.readDir ./versioning)));
+
+  loadChanges = concatMap (v: let
+    dir = ./versioning + "/${v}";
+    upgradeNotes = if builtins.pathExists (../docs/upgrading + "/${v}")
+      then "docs/upgrading/${v}/"
+      else if builtins.pathExists (../docs/upgrading + "/${v}.md")
+      then "docs/upgrading/${v}.md"
       else "docs/upgrading.md";
     files = attrNames (filterAttrs (name: type:
       type == "regular" && hasSuffix ".nix" name
     ) (builtins.readDir dir));
-  in map (name: let
+  in concatMap (name: let
     change = import (dir + "/${name}") { inherit config options lib; };
-  in change // {
-    inherit version;
+  in optional (change.condition or true) (change // {
+    version = v;
     message = change.message
-      + optionalString (versionAtLeast version "0.1.0") ''
+      + optionalString (versionAtLeast v "0.1.0") ''
 
         See ${upgradeNotes}.
       '';
-  }) files) (sort lib.versionOlder (attrNames (filterAttrs (_: type:
-    type == "directory"
-  ) (builtins.readDir ./versioning))));
+  })) files);
 
   version = config.nix-bitcoin.configVersion;
 
   releasedVersion = config.nix-bitcoin.versioning.releasedVersion;
-  releasedChanges = optionals (version != null) (builtins.filter
-    (change: versionAtLeast releasedVersion change.version
-      && versionOlder version change.version
-      && (change.condition or true)) changes);
+  releasedChanges = optionals (version != null) (loadChanges (builtins.filter
+    (v: versionAtLeast releasedVersion v && versionOlder version v) versionDirs));
   # Unreleased notices remain applicable regardless of configVersion.
-  unreleasedChanges = optionals (version != null) (builtins.filter
-    (change: versionOlder releasedVersion change.version
-      && (change.condition or true)) changes);
+  unreleasedChanges = optionals (version != null) (loadChanges (builtins.filter
+    (v: versionOlder releasedVersion v) versionDirs));
   incompatibleChanges = releasedChanges ++ unreleasedChanges;
 
   errorMsg = ''

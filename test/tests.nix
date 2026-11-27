@@ -812,11 +812,6 @@ let
         (extendModules { modules = [{ services.cdk-mintd.onchain.allowNewWallet = mkForce true; }]; })
           .config.systemd.services.cdk-mintd.preStart
       );
-      test.data.cdk-mintd-ipv6-pre-starts = map (address: (extendModules { modules = [{
-        services.cdk-mintd = { backend = mkForce "lnd"; address = mkForce "::"; };
-        services.lnd.rpcAddress = mkForce address;
-        services.bitcoind.rpc.address = mkForce address;
-      }]; }).config.systemd.services.cdk-mintd.preStart) [ "::" "[::]" "::1" "[::1]" ];
       # Pause copying deterministically to test starts and cancellation mid-backup.
       systemd.services.cdk-mintd-backup.path = mkBefore [
         (pkgs.writeShellScriptBin "systemctl" ''

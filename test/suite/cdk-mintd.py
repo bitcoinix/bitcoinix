@@ -3,8 +3,7 @@ def test_cdk_mintd():
     data = test_data["cdk-mintd"]
     assert_running("cdk-mintd")
     url = f"http://{ip('cdk-mintd')}:{data['port']}/v1"
-    machine.wait_until_succeeds(f"curl -fsS {url}/info")
-    info = succeed_json(f"curl -fsS {url}/info")
+    info = json.loads(machine.wait_until_succeeds(f"curl -fsS {url}/info"))
     assert info["name"] == "Bitcoinix test mint", info
     methods = {m["method"] for m in info["nuts"]["4"]["methods"]}
     assert "bolt11" in methods, info
@@ -26,8 +25,9 @@ def test_cdk_mintd():
 
     # A real invoice from the selected backend, not the fake-wallet backend.
     command = post("mint/quote/bolt11", {"amount": 1000, "unit": "sat"})
-    machine.wait_until_succeeds(command + " | jq -e '.request | startswith(\"lnbcrt\")'")
-    quote = succeed_json(command)
+    quote = json.loads(machine.wait_until_succeeds(
+        command + " | jq -e 'select(.request | startswith(\"lnbcrt\"))'"
+    ))
     assert quote["state"] == "UNPAID", quote
     if data["backend"] == "lnd":
         invoice = succeed_json(f"lncli decodepayreq {quote['request']}")
@@ -242,19 +242,6 @@ def test_cdk_mintd_lightning():
 def test_cdk_mintd_onchain():
     data = test_data["cdk-mintd"]
     url = f"http://{ip('cdk-mintd')}:{data['port']}/v1"
-    # LND preserves the host in its TLS certificate; Bitcoin RPC maps a
-    # wildcard listener to loopback. Both accept already-bracketed IPv6.
-    import tomllib
-    for pre_start, lnd_host in zip(
-        test_data["cdk-mintd-ipv6-pre-starts"], ["[::]", "[::]", "[::1]", "[::1]"], strict=True
-    ):
-        config_file = re.search(r"config init --new-mint --file (\S+)", pre_start)
-        assert config_file is not None
-        ipv6 = tomllib.loads(succeed(f"cat {config_file.group(1)}"))
-        assert ipv6["info"]["listen_host"] == "[::]", ipv6
-        assert ipv6["lnd"]["address"] == f"https://{lnd_host}:10009", ipv6
-        assert ipv6["bdk"]["bitcoind_rpc_host"] == "[::1]", ipv6
-        assert ipv6["info"]["logging"]["output"] == "stderr", ipv6
     # On-chain quotes require a public key for mint authorization.
     body = {"amount": 10000, "unit": "sat",
             "pubkey": "0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798"}

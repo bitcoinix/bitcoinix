@@ -209,14 +209,15 @@ in {
         # follow the symlink or reuse the file.
         ${optionalString (cfg.getPublicAddressCmd != "")
           (nbLib.readPublicAddress "clightning" cfg.getPublicAddressCmd)}
+        rpcpass=$(< '${config.nix-bitcoin.secretsDir}/bitcoin-rpcpassword-clightning')
         conf=$(
           cat '${configFile}'
-          echo "bitcoin-rpcpassword=$(cat '${config.nix-bitcoin.secretsDir}/bitcoin-rpcpassword-clightning')"
+          printf 'bitcoin-rpcpassword=%s\n' "$rpcpass"
           ${optionalString (cfg.getPublicAddressCmd != "") ''
             echo "announce-addr=$publicAddress:${toString publicPort}"
           ''}
         )
-        install -T -m 640 <(echo "$conf") '${cfg.dataDir}/config'
+        install -T -m 640 <(printf '%s\n' "$conf") '${cfg.dataDir}/config'
       '';
       serviceConfig = nbLib.defaultHardening // {
         ExecStart = "${cfg.package}/bin/lightningd --lightning-dir=\"${cfg.dataDir}\"";

@@ -14,6 +14,7 @@
         || (node.nodeType === Node.COMMENT_NODE && node.data.trim() === "bitcoinix-options-end");
 
     // Group each heading with the content that follows it, up to the next heading
+    const fragment = document.createDocumentFragment();
     const options = headings.map((heading) => {
         const section = document.createElement("section");
         section.className = "nb-option";
@@ -24,13 +25,14 @@
             section.append(node);
             node = next;
         }
-        list.append(section);
+        fragment.append(section);
         return {
             section,
             name: heading.textContent.toLowerCase(),
             text: section.textContent.toLowerCase(),
         };
     });
+    list.append(fragment);
 
     const input = document.createElement("input");
     input.type = "search";
@@ -54,16 +56,24 @@
         const byText = [];
         for (const option of options) {
             if (terms.every((term) => option.name.includes(term))) {
+                option.section.hidden = false;
                 byName.push(option);
             } else if (terms.every((term) => option.text.includes(term))) {
+                option.section.hidden = false;
                 byText.push(option);
             } else {
                 option.section.hidden = true;
             }
         }
+        // Only move visible sections whose order changed.
+        let cursor = list.firstElementChild;
         for (const option of byName.concat(byText)) {
-            option.section.hidden = false;
-            list.append(option.section);
+            while (cursor && cursor.hidden) cursor = cursor.nextElementSibling;
+            if (option.section === cursor) {
+                cursor = cursor.nextElementSibling;
+            } else {
+                list.insertBefore(option.section, cursor);
+            }
         }
         const shown = byName.length + byText.length;
         count.textContent = terms.length === 0

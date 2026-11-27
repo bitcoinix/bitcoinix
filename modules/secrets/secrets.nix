@@ -220,8 +220,12 @@ let
           else
             checkKey "$name-key" "clients that pinned the $name certificate"
             # Also replace a missing, empty or broken cert
+            local currentAltNames=""
+            if [[ -f "$name-cert-alt-names" && -r "$name-cert-alt-names" ]]; then
+              currentAltNames=$(< "$name-cert-alt-names")
+            fi
             if ! ${pkgs.openssl}/bin/openssl x509 -noout -in "$name-cert" 2>/dev/null \
-               || [[ $(cat "$name-cert-alt-names" 2>/dev/null) != $extraAltNames ]]; then
+               || [[ $currentAltNames != "$extraAltNames" ]]; then
               # Create cert from existing key
               doMakeCert -key "$name-key"
             fi
@@ -375,8 +379,8 @@ in {
         }
 
         # Make all other files accessible to root only, including dotfiles.
-        while IFS= read -r -d "" file; do
-          file=''${file#./}
+        shopt -s dotglob nullglob
+        for file in *; do
           isProcessed "$file" && continue
           if [[ -L $file ]]; then
             # chmod would follow the link and change its target
@@ -385,7 +389,7 @@ in {
             chown root: -- "$file"
             chmod 0440 -- "$file"
           fi
-        done < <(find . -mindepth 1 -maxdepth 1 -print0)
+        done
 
         # Now make the secrets dir accessible to other users
         chmod 0751 "$dir"

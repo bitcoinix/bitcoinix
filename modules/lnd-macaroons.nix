@@ -77,28 +77,34 @@ let
     before = a: b: if a.entity == b.entity then a.action < b.action else a.entity < b.entity;
   in if all isPermission parsed then sort before (unique parsed) else null;
 
+  # Parse and canonicalize each macaroon's permissions once.
+  parsedMacaroons = mapAttrs (_: macaroon: let
+    req = canonicalPermissions macaroon.permissions;
+    opt = canonicalPermissions macaroon.optionalPermissions;
+    toLncli = map (p: "${p.entity}:${p.action}");
+    reqCli = toLncli req;
+    extraCli = subtractLists reqCli (toLncli opt);
+  in {
+    inherit req opt reqCli extraCli;
+  }) cfg.macaroons;
+
   # The same definition keeps its ID, so lnd reuses its root key and the copies
   # stay valid across restarts. Without optional permissions, a macaroon keeps the
   # ID that earlier versions gave it. IDs carry 48 bits of the hash, so two
   # definitions can be crafted to collide, but only by whoever writes both of them.
-  macaroonRootKeyId = name: { user, permissions, optionalPermissions, ... }: let
-    optionalOnes = canonicalPermissions optionalPermissions;
+  macaroonRootKeyId = name: { user, ... }: let
+    parsed = parsedMacaroons.${name};
     hash = builtins.hashString "sha256" (concatStringsSep "\n" ([
-      "bitcoinix-macaroon-v1" name user (builtins.toJSON (canonicalPermissions permissions))
-    ] ++ optional (optionalOnes != []) (builtins.toJSON optionalOnes)));
+      "bitcoinix-macaroon-v1" name user (builtins.toJSON parsed.req)
+    ] ++ optional (parsed.opt != []) (builtins.toJSON parsed.opt)));
   in toString (fromHexString (macaroonIdTag + substring 0 12 hash));
   rootKeyIds = mapAttrsToList (_: macaroon: macaroon.rootKeyId) cfg.macaroons;
-
-  # As lncli takes them: `entity:action`
-  lncliPermissions = permissions: map (p: "${p.entity}:${p.action}") (canonicalPermissions permissions);
 
   # lnd refuses to bake a `uri` permission for an RPC that it doesn't register, and
   # a package built without a subserver's build tag, like `walletrpc`, doesn't
   # register the subserver's RPCs. Only for optional permissions does the script
   # ask lnd for its RPCs. A required permission of an RPC that lnd lacks fails it.
-  optionalOnly = macaroon: subtractLists (lncliPermissions macaroon.permissions)
-    (lncliPermissions macaroon.optionalPermissions);
-  hasOptionalPermissions = any (macaroon: optionalOnly macaroon != []) (attrValues cfg.macaroons);
+  hasOptionalPermissions = any (parsed: parsed.extraCli != []) (attrValues parsedMacaroons);
   # Under the script's `set -eo pipefail`, each error here fails the start:
   # no process substitution hides one.
   keepRegistered = ''
@@ -126,12 +132,13 @@ let
     }
   '';
   bakeMacaroon = name: macaroon: let
+    parsed = parsedMacaroons.${name};
     bake = "bake ${escapeShellArgs ([ name macaroon.user macaroon.rootKeyId ]
-      ++ lncliPermissions macaroon.permissions)}";
-  in if optionalOnly macaroon == [] then ''
+      ++ parsed.reqCli)}";
+  in if parsed.extraCli == [] then ''
     ${bake}
   '' else ''
-    keepRegistered ${escapeShellArgs ([ name ] ++ optionalOnly macaroon)}
+    keepRegistered ${escapeShellArgs ([ name ] ++ parsed.extraCli)}
     ${bake} "''${kept[@]}"
   '';
 
@@ -269,7 +276,9 @@ in {
       { assertion = allUnique rootKeyIds;
         message = "Two macaroons in services.lnd.macaroons have the same root key ID. Rename one of them.";
       }
-    ] ++ concatLists (mapAttrsToList (name: macaroon: [
+    ] ++ concatLists (mapAttrsToList (name: _: let
+      parsed = parsedMacaroons.${name};
+    in [
       { # The name is part of file names: `<name>.macaroon` must fit 255 bytes
         assertion = builtins.match "[A-Za-z0-9_-][A-Za-z0-9._-]*" name != null
           && stringLength name <= 246;
@@ -278,15 +287,14 @@ in {
           `.`, `_` and `-`, must not start with `.` and may have at most 246 characters.
         '';
       }
-      { assertion = !elem (canonicalPermissions macaroon.permissions) [ null [] ];
+      { assertion = !elem parsed.req [ null [] ];
         message = ''
           services.lnd.macaroons.${name}.permissions must be a non-empty, comma-separated
           list of objects like {"entity":"info","action":"read"}, with exactly these two
           fields, both strings without a colon.
         '';
       }
-      { assertion = let optionalOnes = canonicalPermissions macaroon.optionalPermissions; in
-          optionalOnes != null && all (p: p.entity == "uri" && p.action != "") optionalOnes;
+      { assertion = parsed.opt != null && all (p: p.entity == "uri" && p.action != "") parsed.opt;
         message = ''
           services.lnd.macaroons.${name}.optionalPermissions must be a comma-separated
           list of `uri` permissions like {"entity":"uri","action":"/walletrpc.WalletKit/ListUnspent"},

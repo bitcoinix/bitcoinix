@@ -295,7 +295,7 @@ in {
               getCertPathCmd = let
                 defaultCert = "${clightning.networkDir}/server.pem";
               in ''
-                if ! response=$(${clightning.cli}/bin/lightning-cli listconfigs clnrest-certs) ||
+                if ! response=$(${clightning.package}/bin/lightning-cli --lightning-dir='${clightning.dataDir}' listconfigs clnrest-certs) ||
                    ! ${clnrest.serverCertPathFromConfigs} <<< "$response"; then
                   {
                     echo "Warning: Can't ask clightning for clnrest's cert dir''${response:+: $response}"

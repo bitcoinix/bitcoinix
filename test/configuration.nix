@@ -640,6 +640,15 @@ let
     expectedBuilderLogEntries = [ "must be a numeric IP address without a zone ID" "not '${address}'" ];
   }) [ "localhost" "fe80::1%lo" "/run/rtl/frontend.sock" "@rtl-ui" "1.2.3" ];
   rtlAddressAccepted = map rtlAddressCheck [ "127.0.0.1" "::1" "::ffff:127.0.0.1" "0.0.0.0" "::" ];
+  # LND preserves the host in its TLS certificate; Bitcoin RPC maps a wildcard
+  # listener to loopback. Both accept bare and already-bracketed IPv6.
+  cdkMintdIpv6PreStarts = pkgs.writeText "cdk-mintd-ipv6-prestarts" (lib.concatMapStringsSep "\n---\n"
+    (address: (evaluate {
+      services.cdk-mintd = { enable = true; backend = "lnd"; address = "::"; onchain.enable = true; };
+      services.lnd.rpcAddress = address;
+      services.bitcoind.rpc.address = address;
+    }).systemd.services.cdk-mintd.preStart)
+    [ "::" "[::]" "::1" "[::1]" ]);
 
   lnurlConfig = backend: module: evaluate {
     imports = [ module ];
@@ -2905,6 +2914,20 @@ else
     (
       for result in ${toString (rtlAddressRefused ++ rtlAddressAccepted)}; do [[ -e $result ]]; done
     )
+
+    # cdk-mintd formats IPv6 listener, LND and bitcoind RPC hosts in its generated TOML
+    ${pkgs.python3}/bin/python3 -c '
+    import pathlib, re, tomllib
+    pre_starts = pathlib.Path("${cdkMintdIpv6PreStarts}").read_text().split("\n---\n")
+    for pre_start, lnd_host in zip(pre_starts, ["[::]", "[::]", "[::1]", "[::1]"], strict=True):
+        m = re.search(r"config init --new-mint --file (\S+)", pre_start)
+        assert m is not None, pre_start
+        ipv6 = tomllib.loads(pathlib.Path(m.group(1)).read_text())
+        assert ipv6["info"]["listen_host"] == "[::]", ipv6
+        assert ipv6["lnd"]["address"] == f"https://{lnd_host}:10009", ipv6
+        assert ipv6["bdk"]["bitcoind_rpc_host"] == "[::1]", ipv6
+        assert ipv6["info"]["logging"]["output"] == "stderr", ipv6
+    '
 
     echo '${toString (builtins.length (builtins.attrNames tests))} configuration tests passed' > "$out"
   ''

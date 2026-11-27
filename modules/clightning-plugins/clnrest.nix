@@ -101,7 +101,7 @@ in
            [[ -f $runeFile && -r $runeFile && $(< "$runeFile") =~ ^(null)?$ ]]; then
           # Fail the start instead of installing a bad rune.
           # `Restart=on-failure` then tries again.
-          if ! response=$(${clightning.cli}/bin/lightning-cli createrune) ||
+          if ! response=$(${clightning.package}/bin/lightning-cli --lightning-dir='${clightning.dataDir}' createrune) ||
              ! rune=$(${pkgs.jq}/bin/jq -er .rune <<< "$response") || [[ ! $rune ]]; then
             echo "Error: Can't create the admin rune: $response" >&2
             exit 1

@@ -367,9 +367,6 @@ let
   # members read it.
   rpcCookieDir = "/run/bitcoind";
 
-  # Keep the mount path one systemd argument and escape literal % specifiers.
-  unitPath = path: ''"${replaceStrings [ "\\" "\"" "%" ] [ "\\\\" "\\\"" "%%" ] path}"'';
-
   # Lets the bitcoind group read the blocks dir, see `dataDirReadableByGroup`.
   # Bitcoin Core sets umask 077, so it creates files with mode 0600. Below a
   # dir with a default ACL, the ACL takes the place of the umask, so the group
@@ -394,7 +391,7 @@ let
     # output on stdin, and $2 in their default ACLs. All other users and groups
     # keep their effective rights. Leaves alone the entries of other groups.
     grantGroup() {
-      ${pkgs.gawk}/bin/awk -v access="$1" -v defaults="$2" -v gid="$(id -g)" \
+      ${pkgs.gawk}/bin/awk -v access="$1" -v defaults="$2" -v gid="$gid" \
         -f ${./bitcoind/grant-group.awk} |
         ${pkgs.acl}/bin/setfacl -P --restore=/dev/stdin
     }
@@ -416,6 +413,7 @@ let
     setUpGroupRead() (
       set -o pipefail
       umask 077
+      gid=$(id -g)
       failed=""
       cd '${cfg.dataDir}' || exit
       ${getfacl} . | grantGroup --x "" || failed=1
@@ -610,23 +608,27 @@ in {
         extraRpcauth = concatMapStrings (name: let
           user = cfg.rpc.users.${name};
         in optionalString user.passwordHMACFromFile ''
-            echo "rpcauth=${user.name}:$(cat ${secretsDir}/bitcoin-HMAC-${name})"
-          ''
-        ) (builtins.attrNames cfg.rpc.users);
+          hmac=""
+          if [[ -f '${secretsDir}/bitcoin-HMAC-${name}' && -r '${secretsDir}/bitcoin-HMAC-${name}' ]]; then
+            hmac=$(< '${secretsDir}/bitcoin-HMAC-${name}')
+          fi
+          extraRpcauth+="rpcauth=${user.name}:$hmac"$'\n'
+        '') (builtins.attrNames cfg.rpc.users);
       in ''
         ${optionalString (cfg.getPublicAddressCmd != "")
           (nbLib.readPublicAddress "bitcoind" cfg.getPublicAddressCmd)}
+        extraRpcauth=""
+        ${extraRpcauth}
         cfg=$(
           cat ${configFile}
-          ${extraRpcauth}
-          echo
+          printf '%s\n' "$extraRpcauth"
           ${optionalString (cfg.getPublicAddressCmd != "") ''
             echo "externalip=$publicAddress"
           ''}
         )
         # Always replace the file. Older versions let the operator write the data
         # dir, so the file can belong to the operator.
-        install -T -o '${cfg.user}' -g '${cfg.group}' -m 640 <(echo "$cfg") '${cfg.dataDir}/bitcoin.conf'
+        install -T -m 640 <(printf '%s\n' "$cfg") '${cfg.dataDir}/bitcoin.conf'
       '';
 
       serviceConfig = nbLib.defaultHardening // {
@@ -650,7 +652,7 @@ in {
     # groups that an ACL names, so it can't change an ACL that names others.
     systemd.services.bitcoind-group-read = mkIf cfg.dataDirReadableByGroup {
       # Covers a mount at blocks/index, at blocks and at each dir above them
-      unitConfig.RequiresMountsFor = [ (unitPath "${cfg.networkDir}/blocks/index") ];
+      unitConfig.RequiresMountsFor = [ (nbLib.unitPath "${cfg.networkDir}/blocks/index") ];
       # bitcoind's start limit covers this unit too
       startLimitIntervalSec = 0;
       serviceConfig = nbLib.defaultHardening // {

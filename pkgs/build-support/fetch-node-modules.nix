@@ -1,7 +1,7 @@
 # This is a modified version of
 # https://github.com/NixOS/nixpkgs/pull/128749
 
-{ lib, stdenvNoCC, makeWrapper, nodejs, cacert }:
+{ lib, stdenvNoCC, nodejs, cacert }:
 
 { src
 , hash ? ""
@@ -15,7 +15,6 @@ stdenvNoCC.mkDerivation ({
 
   name = "${src.name}-node_modules";
   nativeBuildInputs = [
-    makeWrapper
     (args.nodejs or nodejs)
   ];
 
@@ -32,11 +31,11 @@ stdenvNoCC.mkDerivation ({
     runHook preBuild
 
     if [[ ! -f package.json ]]; then
-        echo "Error: file `package.json` doesn't exist"
+        echo "Error: file 'package.json' doesn't exist"
         exit 1
     fi
     if [[ ! -f package-lock.json ]]; then
-        echo "Error: file `package-lock.json` doesn't exist"
+        echo "Error: file 'package-lock.json' doesn't exist"
         exit 1
     fi
 

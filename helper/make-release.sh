@@ -82,26 +82,18 @@ check_up_to_date() {
         die "HEAD is not at $remote/$branch. Run 'git pull --ff-only', or push your commits first."
 }
 
-check_tag_absent() {
+check_remote_tags() {
     if git rev-parse -q --verify "refs/tags/$tag" >/dev/null; then
         die "Tag $tag already exists locally."
     fi
-    # ls-remote --exit-code: 0 = match found, 2 = no match, anything else = error
-    local status=0
-    git ls-remote --exit-code --tags -- "$remote" "refs/tags/$tag" >/dev/null || status=$?
-    case $status in
-        2) ;;
-        0) die "Tag $tag already exists on '$remote'." ;;
-        *) die "Could not query tags of '$remote'." ;;
-    esac
-}
-
-check_version_is_newest() {
-    local highest
-    highest=$(git ls-remote --tags --refs -- "$remote" 'refs/tags/v*' \
-              | sed -nE 's|.*[[:space:]]refs/tags/v([0-9]+\.[0-9]+\.[0-9]+)$|\1|p' \
-              | sort -V | tail -1) ||
-        die "Could not list tags of '$remote'."
+    local remoteTags highest
+    remoteTags=$(git ls-remote --tags --refs -- "$remote" 'refs/tags/v*') ||
+        die "Could not query tags of '$remote'."
+    if grep -qE "[[:space:]]refs/tags/${tag//./\\.}$" <<< "$remoteTags"; then
+        die "Tag $tag already exists on '$remote'."
+    fi
+    highest=$(sed -nE 's|.*[[:space:]]refs/tags/v([0-9]+\.[0-9]+\.[0-9]+)$|\1|p' <<< "$remoteTags" \
+              | sort -V | tail -1)
     [[ -z $highest ]] && return
     [[ $highest != "$version" &&
        $(printf '%s\n%s\n' "$highest" "$version" | sort -V | tail -1) == "$version" ]] ||
@@ -179,8 +171,7 @@ trap 'rm -f "$verifyOutput"' EXIT
 check_branch
 check_clean
 check_up_to_date
-check_tag_absent
-check_version_is_newest
+check_remote_tags
 check_migrations_finalized
 bash "$scriptDir/check-release-notes.sh" "$version"
 check_signing_config

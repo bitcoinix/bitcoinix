@@ -103,6 +103,7 @@ let
   cfg = config.services.clightning.replication;
   inherit (config.services) clightning;
 
+  nbLib = config.nix-bitcoin.lib;
   secretsDir = config.nix-bitcoin.secretsDir;
   replicaFiles = import ./clightning-replica-files.nix;
   user = clightning.user;
@@ -129,15 +130,11 @@ let
     else
       localDir;
 
-  # systemd splits these path settings at whitespace, unquotes the words and
-  # expands `%` specifiers. So quote the path, which keeps it as one word.
-  unitPath = path: ''"${replaceStrings [ "\\" "\"" "%" ] [ "\\\\" "\\\"" "%%" ] path}"'';
-
   # Without the mount, the replica would land on the filesystem below the mount
   # point, usually the primary disk. systemd can only wait for the mounts it
   # knows, like `fileSystems` entries.
   localDirMounts = optionalAttrs (localDir != null) {
-    RequiresMountsFor = [ (unitPath localDir) ];
+    RequiresMountsFor = [ (nbLib.unitPath localDir) ];
   };
   # At boot, tmpfiles can run before a `nofail` mount like the one in the docs.
   # So the unit that writes the local dir first also takes away write access of
@@ -147,7 +144,7 @@ let
   # `:` keeps systemd from expanding `$` in the path, and `-` starts the unit as
   # before when the dir belongs to another user.
   setsLocalDirMode = localDir != null && cfg.local.setupDirectory;
-  localDirMode = mkBefore [ "-:${pkgs.coreutils}/bin/chmod ug-s,go-w ${unitPath localDir}" ];
+  localDirMode = mkBefore [ "-:${pkgs.coreutils}/bin/chmod ug-s,go-w ${nbLib.unitPath localDir}" ];
 in {
   inherit options;
 
@@ -204,7 +201,7 @@ in {
         # not by root.
         # (This could be circumvented by FUSE-mounting `destDir` with option `allow_other`,
         # but this would grant access to all users.)
-        (if useMounts then mountsDir else unitPath localDir)
+        (if useMounts then mountsDir else nbLib.unitPath localDir)
       ];
     };
 

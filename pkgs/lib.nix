@@ -128,6 +128,15 @@ let self = {
     ${src}
   '';
 
+  # Read stdin and replace `$1` atomically with mode 0600 (cleaning up on failure).
+  writeAtomic = self.script "write-atomic" ''
+    umask 077
+    tmp=$(mktemp "$1.XXXXXX")
+    trap 'rm -f "$tmp"' EXIT
+    cat > "$tmp"
+    mv -fT "$tmp" "$1"
+  '';
+
   # A program that runs its arguments as `user` when root starts it, and as the
   # caller otherwise. CLI wrappers use it to access a service's files with the
   # rights of the service user, which owns the dirs that hold them.
@@ -181,6 +190,34 @@ let self = {
       addr;
 
   addressWithPort = addr: port: "${self.address addr}:${toString port}";
+
+  # Wrap an IPv6 address in brackets, accepting either bare or bracketed input.
+  bracketIPv6 = addr: let
+    bare = removePrefix "[" (removeSuffix "]" addr);
+  in if hasInfix ":" bare then "[${bare}]" else bare;
+
+  # Keep a path as one systemd argument and escape literal % specifiers.
+  unitPath = path: ''"${replaceStrings [ "\\" "\"" "%" ] [ "\\\\" "\\\"" "%%" ] path}"'';
+
+  # Format LND `uri` macaroon permissions as a comma-separated JSON object list.
+  uriPermissions = concatMapStringsSep ",\n"
+    (rpc: builtins.toJSON { entity = "uri"; action = rpc; });
+
+  # `pkgs.iptables-legacy` keeps its rules in legacy xtables, outside the
+  # nftables ruleset. It ships `bin/iptables`, so it's the iptables the firewall
+  # runs when its bin comes first on the service's PATH, after only nftables' bin,
+  # which has no iptables. Anything else, such as a renamed or wrapped build,
+  # counts as iptables-nft.
+  firewallUsesIptablesNft =
+    findFirst (dir: dir != "${pkgs.nftables}/bin") null
+      (splitString ":" (toString (config.systemd.services.firewall.environment.PATH or null)))
+    != "${pkgs.iptables-legacy}/bin";
+
+  # Enabled `networking.nftables.tables` entries whose `<family> <name>` matches `tables`.
+  conflictingNftablesTables = tables:
+    unique (filter (table: elem table tables)
+      (mapAttrsToList (_: t: "${t.family} ${t.name}")
+        (filterAttrs (_: t: t.enable) config.networking.nftables.tables)));
 
   optionalAttr = cond: name: if cond then name else null;
 
