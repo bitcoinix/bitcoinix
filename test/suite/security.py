@@ -1009,10 +1009,9 @@ EOF""")
 
     if "onion-addresses" in units:
         machine.wait_for_unit("onion-addresses")
-    unit_info = systemctl_show(list(units), ["MainPID", "Type", "ActiveState"])
     checked = []
     for unit in units:
-        info = unit_info[unit]
+        info = systemctl_show([unit], ["MainPID", "Type", "ActiveState"])[unit]
         pid = info["MainPID"]
         if pid != "0":
             writable = probe_daemon(unit, pid)

@@ -349,7 +349,7 @@ def test_tor_enforce():
     # Check each unit's own properties before setting up the probes, so a unit
     # that lost its deny rule, allow list or masks fails here.
     # `IPAddressDeny=any` shows as below.
-    props = systemctl_show(units, ["IPAddressDeny", "IPAddressAllow", "InaccessiblePaths", "MainPID"])
+    props = systemctl_show(units, ["IPAddressDeny", "IPAddressAllow", "InaccessiblePaths"])
     restrictions = {}
     for unit in units:
         unit_props = props[unit]
@@ -421,7 +421,8 @@ def test_tor_enforce():
     machine.log(f"tor-enforce: replayed the filter and masks of {units}")
 
     # 2. For units actually running, probe their real cgroup and mount namespace.
-    running = [u for u in units if props[u]["MainPID"] != "0"]
+    pids = systemctl_show(units, ["MainPID"])
+    running = [u for u in units if pids[u]["MainPID"] != "0"]
 
     def live_probe():
         if not running:
