@@ -85,7 +85,7 @@ let self = {
 
   # Allow takes precedence over Deny.
   allowLocalIPAddresses = let
-    netns = config.nix-bitcoin.netns-isolation;
+    netns = config.bitcoinix.netns-isolation;
   in {
     IPAddressAllow = [
       "127.0.0.1/32"

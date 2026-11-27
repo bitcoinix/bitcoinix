@@ -103,7 +103,7 @@ let
   cfg = config.services.clightning.replication;
   inherit (config.services) clightning;
 
-  secretsDir = config.nix-bitcoin.secretsDir;
+  secretsDir = config.bitcoinix.secretsDir;
   replicaFiles = import ./clightning-replica-files.nix;
   user = clightning.user;
   group = clightning.group;
@@ -274,7 +274,7 @@ in {
       };
     };
 
-    nix-bitcoin = mkMerge [
+    bitcoinix = mkMerge [
       (mkIf useSshfs {
         secrets.clightning-replication-ssh-key = {
           user = user;

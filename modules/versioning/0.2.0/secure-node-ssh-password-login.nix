@@ -4,7 +4,7 @@
   # A config can define these options in ways that are hard to tell apart at
   # evaluation time, and a missed notice can lock the operator out of the node.
   # So notify every config with the preset and sshd.
-  condition = config.nix-bitcoin ? secure-node-preset-enabled && config.services.openssh.enable;
+  condition = config.bitcoinix ? secure-node-preset-enabled && config.services.openssh.enable;
   message = ''
     The secure-node preset now sets `services.openssh.settings.PasswordAuthentication`
     and `services.openssh.settings.KbdInteractiveAuthentication` to `false` by

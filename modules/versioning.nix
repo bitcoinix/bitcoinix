@@ -13,7 +13,7 @@
 with lib;
 let
   versioningOptions = {
-    nix-bitcoin.configVersion = mkOption {
+    bitcoinix.configVersion = mkOption {
       type = with types; nullOr str;
       default = null;
       example = "0.0.92";
@@ -30,7 +30,7 @@ let
         latest finalized release are rejected. If unset, migration notices are disabled.
       '';
     };
-    nix-bitcoin.versioning.releasedVersion = mkOption {
+    bitcoinix.versioning.releasedVersion = mkOption {
       internal = true;
       type = types.str;
       default = import ../version.nix;
@@ -38,7 +38,7 @@ let
       description = "Latest finalized release; overridable for release-transition tests.";
     };
     # Lets tests check each notice
-    nix-bitcoin.versioning.incompatibleChanges = mkOption {
+    bitcoinix.versioning.incompatibleChanges = mkOption {
       internal = true;
       readOnly = true;
       type = with types; listOf str;
@@ -72,9 +72,9 @@ let
     type == "directory"
   ) (builtins.readDir ./versioning))));
 
-  version = config.nix-bitcoin.configVersion;
+  version = config.bitcoinix.configVersion;
 
-  releasedVersion = config.nix-bitcoin.versioning.releasedVersion;
+  releasedVersion = config.bitcoinix.versioning.releasedVersion;
   releasedChanges = optionals (version != null) (builtins.filter
     (change: versionAtLeast releasedVersion change.version
       && versionOlder version change.version
@@ -93,7 +93,7 @@ let
     ${concatMapStringsSep "\n" (change: ''
       - ${change.message}(This change was introduced in version ${change.version})
     '') releasedChanges}
-    After addressing the above changes, set nix-bitcoin.configVersion = "${releasedVersion}";
+    After addressing the above changes, set bitcoinix.configVersion = "${releasedVersion}";
     in your nix-bitcoin configuration.
   '';
 
@@ -104,7 +104,7 @@ let
       - ${change.message}(Planned for version ${change.version})
     '') unreleasedChanges}
     These warnings do not block deployment or require acknowledgement.
-    Review them before deploying. Keep nix-bitcoin.configVersion at
+    Review them before deploying. Keep bitcoinix.configVersion at
     ${releasedVersion} until the release is finalized; applicable warnings will repeat.
   '';
 in
@@ -122,8 +122,8 @@ in
     assertions = [{
       assertion = version == null || versionAtLeast releasedVersion version;
       message = ''
-        nix-bitcoin.configVersion = "${toString version}" is newer than the latest finalized release (${releasedVersion}).
-        Set nix-bitcoin.configVersion = "${releasedVersion}" until the release is finalized.
+        bitcoinix.configVersion = "${toString version}" is newer than the latest finalized release (${releasedVersion}).
+        Set bitcoinix.configVersion = "${releasedVersion}" until the release is finalized.
       '';
     } {
       assertion = releasedChanges == [];

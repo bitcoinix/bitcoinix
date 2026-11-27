@@ -20,7 +20,7 @@ let
         type = types.nullOr types.port;
         # When the bitcoind onion service is enabled, add an onion-tagged socket
         # to distinguish local connections from Tor connections
-        default = if (config.nix-bitcoin.onionServices.bitcoind.enable or false) then ports.onion else null;
+        default = if (config.bitcoinix.onionServices.bitcoind.enable or false) then ports.onion else null;
         defaultText = literalMD "`null` when the bitcoind onion service is disabled, otherwise ${describePorts "onion"}.";
         description = ''
           Port to listen for Tor peer connections.
@@ -171,7 +171,7 @@ let
       };
       proxy = mkOption {
         type = types.nullOr types.str;
-        default = if cfg.tor.proxy then config.nix-bitcoin.torClientAddressWithPort else null;
+        default = if cfg.tor.proxy then config.bitcoinix.torClientAddressWithPort else null;
         description = "Connect through SOCKS5 proxy";
       };
       i2p = mkOption {
@@ -357,9 +357,9 @@ let
   ports = networkPorts.${cfg.network};
   describePorts = name: concatStringsSep ", " (mapAttrsToList
     (network: values: "${toString values.${name}} on ${network}") networkPorts);
-  bitcoind = config.nix-bitcoin.pkgs.bitcoind;
-  nbLib = config.nix-bitcoin.lib;
-  secretsDir = config.nix-bitcoin.secretsDir;
+  bitcoind = config.bitcoinix.pkgs.bitcoind;
+  nbLib = config.bitcoinix.lib;
+  secretsDir = config.bitcoinix.secretsDir;
   # The RPC cookie lives outside the data directory. Older versions let group
   # members write the data directory, so a group member could swap the cookie
   # for a symlink while bitcoind sets its mode by path. This directory is a
@@ -671,9 +671,9 @@ in {
     users.groups.${cfg.group} = {};
     users.groups.bitcoinrpc-public = {};
 
-    nix-bitcoin.operator.groups = [ cfg.group ];
+    bitcoinix.operator.groups = [ cfg.group ];
 
-    nix-bitcoin.secrets = {
+    bitcoinix.secrets = {
       bitcoin-rpcpassword-privileged.user = cfg.user;
       bitcoin-rpcpassword-public = {
         user = cfg.user;
@@ -683,7 +683,7 @@ in {
       bitcoin-HMAC-privileged.user = cfg.user;
       bitcoin-HMAC-public.user = cfg.user;
     };
-    nix-bitcoin.generateSecretsCmds.bitcoind = ''
+    bitcoinix.generateSecretsCmds.bitcoind = ''
       makeBitcoinRPCPassword privileged
       makeBitcoinRPCPassword public
     '';

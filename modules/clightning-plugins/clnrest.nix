@@ -37,8 +37,8 @@ let
       };
       package = mkOption {
         type = types.package;
-        default = config.nix-bitcoin.pkgs.clightning-plugins.clnrest;
-        defaultText = "config.nix-bitcoin.pkgs.clightning-plugins.clnrest";
+        default = config.bitcoinix.pkgs.clightning-plugins.clnrest;
+        defaultText = "config.bitcoinix.pkgs.clightning-plugins.clnrest";
         description = "The package providing clnrest binaries.";
       };
       # Used by `../rtl.nix` and `../lndconnect.nix`
@@ -68,7 +68,7 @@ let
 
     # Internal read-only options used by `./nodeinfo.nix` and `./onion-services.nix`
     services.clnrest = let
-      inherit (config.nix-bitcoin.lib) mkAlias;
+      inherit (config.bitcoinix.lib) mkAlias;
     in {
       enable = mkAlias cfg.enable;
       address = mkAlias cfg.address;
@@ -77,7 +77,7 @@ let
   };
 
   cfg = config.services.clightning.plugins.clnrest;
-  nbLib = config.nix-bitcoin.lib;
+  nbLib = config.bitcoinix.lib;
   inherit (config.services) clightning;
 
   runePath = "${clightning.networkDir}/admin-rune";

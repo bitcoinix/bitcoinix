@@ -5,8 +5,11 @@ This is `bitcoinix`, a community fork of the archived `fort-nix/nix-bitcoin`
 (fork point tagged `forked` in history). Remote: `git@github.com:bitcoinix/bitcoinix.git`,
 default/base branch `master`. Fork policy leans toward removing/decoupling
 unmaintained services — check before assuming an upstream service stays.
-Option namespaces and internal names stay `nix-bitcoin.*`; don't rename them to
-`bitcoinix` (breaks existing user configs). `docs/` is the user guide, built with mdBook
+Module options live under `bitcoinix.*`. `nix-bitcoin.*` is a deprecated alias of the whole
+namespace (`modules/nix-bitcoin-alias.nix`); never read `config.nix-bitcoin` or probe
+`options.nix-bitcoin` in our code. Runtime and internal names (units, secrets dir, users,
+groups, `nix-bitcoin-wg-connect`, module file names) stay `nix-bitcoin`. Examples pinned to
+a release use that release's prefix. `docs/` is the user guide, built with mdBook
 (`book.toml`, favicon in `theme/`; `docs/SUMMARY.md` lists the pages). Pages with the
 "inherited from nix-bitcoin" banner have not been reviewed yet.
 
@@ -109,7 +112,7 @@ sudo ./test/run-tests.sh container          # fast container; needs systemd + ro
   dependency** — order matters; register new service modules in the right group.
 - `pkgs/` defines derivations; `pkgs/lib.nix` holds shared security hardening
   (systemd sandboxing, user/isolation helpers) used across services.
-- The single `nixpkgs` input tracks `nixos-unstable`. `nix-bitcoin.useVersionLockedPkgs`
+- The single `nixpkgs` input tracks `nixos-unstable`. `bitcoinix.useVersionLockedPkgs`
   defaults to true and selects the flake's pinned unstable nixpkgs for services.
 - Always update `flake.lock` via `helper/update-flake.sh`; never hand-edit it or
   run `nix flake update` / `nix flake lock` directly. The helper keeps
@@ -144,8 +147,8 @@ Start from an existing module: `modules/electrs.nix` (basic) →
 `modules/modules.nix`. Other integration points to wire up:
 
 - `modules/netns-isolation.nix`: unique netns `id` + `connections` to other services.
-- Secrets: declare in `nix-bitcoin.secrets`, order the unit after `nix-bitcoin-secrets.target`.
-- Tor: `modules/onion-services.nix` / `nix-bitcoin.onionServices`.
+- Secrets: declare in `bitcoinix.secrets`, order the unit after `nix-bitcoin-secrets.target`.
+- Tor: `modules/onion-services.nix` / `bitcoinix.onionServices`.
 - Tests: `tests.<name>` in `test/tests.nix` + `@test` in `test/suite/` + a place in
   `TEST_PHASES` in `test/tests.py`.
 
@@ -206,7 +209,7 @@ For each entry:
 - The `message` says what changed and what to do. Put longer migration steps in
   `docs/upgrading/<version>/<title>.md`; the message does not need to repeat
   the reference to the upgrade notes.
-- Keep `version.nix` and all examples' `nix-bitcoin.configVersion` at the latest
+- Keep `version.nix` and all examples' `configVersion` at the latest
   released version while adding changes or migration notices. Advance both only
   when finalizing the migration list immediately before tagging
   (see "Cutting a release" in `dev/README.md`). Later notices go in the next release.
@@ -257,7 +260,7 @@ in their `description`, not in that page.
   the consolidated draft notes in the release-preparation commit. Preserve each
   draft's heading and text together. CI and the signing helper compare the text
   under each heading, allowing rebased link destinations. End the upgrade page
-  with the instruction to set `nix-bitcoin.configVersion = "<version>";` after migrating.
+  with the instruction to set `bitcoinix.configVersion = "<version>";` after migrating.
   Rebase relative links, replace links to individual files with links
   to the matching headings in the consolidated pages, drop the upcoming labels
   from both indexes, and remove the individual Markdown files. Keep the Nix notices in

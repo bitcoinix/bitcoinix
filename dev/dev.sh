@@ -87,8 +87,8 @@ read -rd '' src <<'EOF' || :
           config = {
             imports = [ nix-bitcoin.nixosModules.default ];
             services.bitcoind.enable = true;
-            nix-bitcoin.generateSecrets = true;
-            nix-bitcoin.nodeinfo.enable = true;
+            bitcoinix.generateSecrets = true;
+            bitcoinix.nodeinfo.enable = true;
           };
         };
       };

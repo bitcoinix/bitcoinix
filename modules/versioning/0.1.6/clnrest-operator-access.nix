@@ -10,14 +10,14 @@ with lib;
   # lnd user's copy, and the only reader of the operator's copy is nodeinfo,
   # which enables the operator role itself.
   condition = let
-    operator = config.nix-bitcoin.operator;
+    operator = config.bitcoinix.operator;
     clnrest = config.services.clightning.plugins.clnrest;
-    access = config.nix-bitcoin.onionAddresses.access.${operator.name} or [];
+    access = config.bitcoinix.onionAddresses.access.${operator.name} or [];
   in !operator.enable
      && clnrest.enable && clnrest.lnconnect.enable && clnrest.lnconnect.onion
      && !(elem "clnrest" access);
   message = let
-    name = config.nix-bitcoin.operator.name;
+    name = config.bitcoinix.operator.name;
     # The attribute that defines the account, which can differ from its name.
     # Prefer an enabled declaration, then a disabled one.
     accountKeys = filter (key: config.users.users.${key}.name == name)
@@ -26,13 +26,13 @@ with lib;
       (if accountKeys == [] then name else head accountKeys) accountKeys;
   in ''
     lnconnect-clnrest now gives the operator user access to the clnrest onion
-    address only when `nix-bitcoin.operator.enable` is set. The operator role is
+    address only when `bitcoinix.operator.enable` is set. The operator role is
     disabled, so the operator user `${name}` doesn't get this access. Root
     doesn't need it, because root runs `lnconnect-clnrest` as user
     `${config.services.clightning.user}`, which has its own copy. To keep it for
-    `${name}`, add "clnrest" to `nix-bitcoin.onionAddresses.access.${name}`,
+    `${name}`, add "clnrest" to `bitcoinix.onionAddresses.access.${name}`,
     which needs `${name}` to be an enabled account in `users.users`. Or set
-    `nix-bitcoin.operator.enable = true`, but only if the account is declared as
+    `bitcoinix.operator.enable = true`, but only if the account is declared as
     an enabled `users.users.${name}` or doesn't exist yet, since the role
     declares it as a normal user. To run `lnconnect-clnrest` as
     `${name}` instead of root, also add "${config.services.clightning.group}" to

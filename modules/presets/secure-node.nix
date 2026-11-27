@@ -4,8 +4,8 @@ with lib;
 
 let
   cfg = config.services;
-  nbLib = config.nix-bitcoin.lib;
-  operatorName = config.nix-bitcoin.operator.name;
+  nbLib = config.bitcoinix.lib;
+  operatorName = config.bitcoinix.operator.name;
 in {
   imports = [
     ../modules.nix
@@ -15,13 +15,13 @@ in {
   options = {
     # Used by ../versioning/0.0.65/secure-node-secrets-dir.nix
     # and ../versioning/0.2.0/secure-node-ssh-password-login.nix
-    nix-bitcoin.secure-node-preset-enabled = {};
+    bitcoinix.secure-node-preset-enabled = {};
   };
 
   config =  {
     networking.firewall.enable = true;
 
-    nix-bitcoin.security.dbusHideProcessInformation = true;
+    bitcoinix.security.dbusHideProcessInformation = true;
 
     # Use doas instead of sudo
     security.doas.enable = true;
@@ -34,7 +34,7 @@ in {
 
     # Add a SSH onion service
     services.tor.relay.onionServices.sshd = nbLib.mkOnionService { port = 22; };
-    nix-bitcoin.onionAddresses.access.${operatorName} = [ "sshd" ];
+    bitcoinix.onionAddresses.access.${operatorName} = [ "sshd" ];
     # The onion service lets anyone try SSH logins over Tor, and the operator
     # is in the groups that control funds. So accept only keys by default.
     services.openssh.settings = {
@@ -48,12 +48,12 @@ in {
       dbCache = 1000;
     };
 
-    nix-bitcoin.nodeinfo.enable = true;
+    bitcoinix.nodeinfo.enable = true;
 
     services.backups.frequency = "daily";
 
     # operator
-    nix-bitcoin.operator.enable = true;
+    bitcoinix.operator.enable = true;
     users.users.${operatorName} = {
       openssh.authorizedKeys.keys = config.users.users.root.openssh.authorizedKeys.keys;
     };

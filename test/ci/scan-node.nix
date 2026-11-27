@@ -27,8 +27,8 @@ in
     # nodes that use it, and lndconnect with `services.lnd.lndconnect.enable`.
     "${f.outPath}/modules/presets/wireguard.nix"
     {
-      nix-bitcoin.generateSecrets = true;
-      nix-bitcoin.nodeinfo.enable = true;
+      bitcoinix.generateSecrets = true;
+      bitcoinix.nodeinfo.enable = true;
       services.backups.enable = true;
       services.bitcoind.enable = true;
 

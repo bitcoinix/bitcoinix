@@ -14,7 +14,7 @@
 
 with lib;
 let
-  options.nix-bitcoin.wireguard = {
+  options.bitcoinix.wireguard = {
     subnet = mkOption {
       type = types.str;
       default = "10.10.0";
@@ -29,7 +29,7 @@ let
     };
   };
 
-  cfg = config.nix-bitcoin.wireguard;
+  cfg = config.bitcoinix.wireguard;
   wgSubnet = cfg.subnet;
   inherit (config.networking.wireguard.interfaces) wg-nb;
   inherit (config.services)
@@ -58,10 +58,10 @@ let
   serverAddress = "${wgSubnet}.1";
   peerAddress = "${wgSubnet}.2";
 
-  secretsDir = config.nix-bitcoin.secretsDir;
+  secretsDir = config.bitcoinix.secretsDir;
 
-  wgConnectUser = if config.nix-bitcoin.operator.enable
-                  then config.nix-bitcoin.operator.name
+  wgConnectUser = if config.bitcoinix.operator.enable
+                  then config.bitcoinix.operator.name
                   else "root";
 
   # A script that prints a QR code to connect a peer to the server.
@@ -120,8 +120,8 @@ in {
     assertions = [
       {
         # Don't support `netns-isolation` for now to keep things simple
-        assertion = !(config.nix-bitcoin.netns-isolation.enable or false);
-        message = "`nix-bitcoin.wireguard` is not compatible with `netns-isolation`.";
+        assertion = !(config.bitcoinix.netns-isolation.enable or false);
+        message = "`bitcoinix.wireguard` is not compatible with `netns-isolation`.";
       }
       {
         # The REST APIs below are bound to 0.0.0.0 and are protected only by the
@@ -142,7 +142,7 @@ in {
                         && config.networking.firewall.backend == "iptables"
                         && (lib.getName config.networking.firewall.package != "nftables"
                             || lib.any (p: lib.getName p == "iptables") config.networking.firewall.extraPackages));
-        message = "`nix-bitcoin.wireguard` protects the REST API of the enabled `*connect` helpers (bound to 0.0.0.0) and enforces `restrictPeer` only through `networking.firewall.extraCommands`, which run only with the iptables backend and need `iptables` on the firewall service's PATH (`networking.firewall.package` is ${lib.getName config.networking.firewall.package}). Enable `networking.firewall` and disable `networking.nftables` and `services.firewalld`, or keep `networking.firewall.backend = \"iptables\"` and provide `iptables` through `networking.firewall.package` or `networking.firewall.extraPackages`.";
+        message = "`bitcoinix.wireguard` protects the REST API of the enabled `*connect` helpers (bound to 0.0.0.0) and enforces `restrictPeer` only through `networking.firewall.extraCommands`, which run only with the iptables backend and need `iptables` on the firewall service's PATH (`networking.firewall.package` is ${lib.getName config.networking.firewall.package}). Enable `networking.firewall` and disable `networking.nftables` and `services.firewalld`, or keep `networking.firewall.backend = \"iptables\"` and provide `iptables` through `networking.firewall.package` or `networking.firewall.extraPackages`.";
       }
       {
         # `pkgs.iptables` is iptables-nft, so the rules above live in the nftables
@@ -154,7 +154,7 @@ in {
         # its rules aren't part of the nftables ruleset, so a flush keeps them.
         assertion = !needsFirewallRules || !iptablesUsesNftables
                     || !(config.networking.nftables.enable && config.networking.nftables.flushRuleset);
-        message = "`nix-bitcoin.wireguard` needs its `networking.firewall.extraCommands` rules to stay in place, but `networking.nftables.flushRuleset` deletes them whenever `nftables.service` starts or reloads. It's on by default when `networking.nftables.ruleset` or `networking.nftables.rulesetFile` is set or `system.stateVersion` is older than 23.11. Move your nftables rules to `networking.nftables.tables` and set `networking.nftables.flushRuleset = false`. Restart `firewall.service` once after deploying, since the first reload still runs the old flush.";
+        message = "`bitcoinix.wireguard` needs its `networking.firewall.extraCommands` rules to stay in place, but `networking.nftables.flushRuleset` deletes them whenever `nftables.service` starts or reloads. It's on by default when `networking.nftables.ruleset` or `networking.nftables.rulesetFile` is set or `system.stateVersion` is older than 23.11. Move your nftables rules to `networking.nftables.tables` and set `networking.nftables.flushRuleset = false`. Restart `firewall.service` once after deploying, since the first reload still runs the old flush.";
       }
       {
         # iptables-nft keeps the firewall in the `filter` tables of the `ip` and
@@ -166,7 +166,7 @@ in {
         assertion = !needsFirewallRules || !iptablesUsesNftables
                     || !config.networking.nftables.enable
                     || iptablesTablesInNftables == [];
-        message = "`nix-bitcoin.wireguard` needs its `networking.firewall.extraCommands` rules, which iptables-nft keeps in the `ip filter` and `ip6 filter` tables, but `networking.nftables.tables` replaces ${concatStringsSep " and " iptablesTablesInNftables} on every start or reload of `nftables.service`. Rename the table or use the `inet` family, then restart `firewall.service` once after deploying, since the first reload still deletes the old table.";
+        message = "`bitcoinix.wireguard` needs its `networking.firewall.extraCommands` rules, which iptables-nft keeps in the `ip filter` and `ip6 filter` tables, but `networking.nftables.tables` replaces ${concatStringsSep " and " iptablesTablesInNftables} on every start or reload of `nftables.service`. Rename the table or use the `inet` family, then restart `firewall.service` once after deploying, since the first reload still deletes the old table.";
       }
     ];
 
@@ -267,14 +267,14 @@ in {
     # clnrest runs inside `clightning.service`
     services.clightning.tor.enforce = mkIf lnconnect-clnrest false;
 
-    nix-bitcoin.secrets = {
+    bitcoinix.secrets = {
       wg-server-private-key = {};
       wg-server-public-key = { user = wgConnectUser; group = "root"; };
       wg-peer-private-key = { user = wgConnectUser; group = "root"; };
       wg-peer-public-key = {};
     };
 
-    nix-bitcoin.generateSecretsCmds.wireguard = let
+    bitcoinix.generateSecretsCmds.wireguard = let
       wg = "${pkgs.wireguard-tools}/bin/wg";
     in ''
       makeWireguardKey() {

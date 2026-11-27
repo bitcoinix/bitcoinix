@@ -16,7 +16,7 @@ let
     };
     proxy = mkOption {
       type = types.nullOr types.str;
-      default = if cfg.tor.proxy then config.nix-bitcoin.torClientAddressWithPort else null;
+      default = if cfg.tor.proxy then config.bitcoinix.torClientAddressWithPort else null;
       description = ''
         Socks proxy for connecting to Tor nodes (or for all connections if option always-use-proxy is set).
       '';
@@ -96,7 +96,7 @@ let
     package = mkOption {
       type = types.package;
       default = nbPkgs.clightning;
-      defaultText = "config.nix-bitcoin.pkgs.clightning";
+      defaultText = "config.bitcoinix.pkgs.clightning";
       description = "The package providing Core Lightning binaries.";
     };
     cli = mkOption {
@@ -123,8 +123,8 @@ let
   };
 
   cfg = config.services.clightning;
-  nbLib = config.nix-bitcoin.lib;
-  nbPkgs = config.nix-bitcoin.pkgs;
+  nbLib = config.bitcoinix.lib;
+  nbPkgs = config.bitcoinix.pkgs;
 
   inherit (config.services) bitcoind;
 
@@ -146,8 +146,8 @@ let
   '';
 
   # If a public clightning onion service is enabled, use the onion port as the public port
-  publicPort = if (config.nix-bitcoin.onionServices.clightning.enable or false)
-                  && config.nix-bitcoin.onionServices.clightning.public
+  publicPort = if (config.bitcoinix.onionServices.clightning.enable or false)
+                  && config.bitcoinix.onionServices.clightning.public
                then
                  (builtins.elemAt config.services.tor.relay.onionServices.clightning.map 0).port
                else
@@ -186,7 +186,7 @@ in {
     ];
 
     systemd.services.clightning = {
-      path  = [ config.nix-bitcoin.pkgs.bitcoind ];
+      path  = [ config.bitcoinix.pkgs.bitcoind ];
       # `wantedBy` bitcoind: a deploy that changes the bitcoind unit stops and
       # starts bitcoind. `requires` propagates the stop to this unit, and on
       # production nodes the unit stayed down after such a switch. Being wanted
@@ -211,7 +211,7 @@ in {
           (nbLib.readPublicAddress "clightning" cfg.getPublicAddressCmd)}
         conf=$(
           cat '${configFile}'
-          echo "bitcoin-rpcpassword=$(cat '${config.nix-bitcoin.secretsDir}/bitcoin-rpcpassword-clightning')"
+          echo "bitcoin-rpcpassword=$(cat '${config.bitcoinix.secretsDir}/bitcoin-rpcpassword-clightning')"
           ${optionalString (cfg.getPublicAddressCmd != "") ''
             echo "announce-addr=$publicAddress:${toString publicPort}"
           ''}
@@ -243,16 +243,16 @@ in {
       group = cfg.group;
     };
     users.groups.${cfg.group} = {};
-    nix-bitcoin.operator.groups = [ cfg.group ];
+    bitcoinix.operator.groups = [ cfg.group ];
 
-    nix-bitcoin.secrets = {
+    bitcoinix.secrets = {
       bitcoin-rpcpassword-clightning = {
         user = bitcoind.user;
         inherit (cfg) group;
       };
       bitcoin-HMAC-clightning.user = bitcoind.user;
     };
-    nix-bitcoin.generateSecretsCmds.clightning = ''
+    bitcoinix.generateSecretsCmds.clightning = ''
       makeBitcoinRPCPassword clightning
     '';
   };

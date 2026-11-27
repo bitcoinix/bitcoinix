@@ -41,9 +41,9 @@ bitcoinix is built on top of Nix and [NixOS](https://nixos.org/) which provide p
 maintainable. Testament to this are its robust security features and its potent test framework. However,
 running bitcoinix does not require any previous experience with the Nix ecosystem.
 
-> [!WARNING]
-> Note that the NixOS option namespace is still `nix-bitcoin.*` (e.g. `nix-bitcoin.configVersion`).
-> It is kept to not break existing configurations.
+> [!NOTE]
+> Starting with 1.0.0, the NixOS options live under `bitcoinix.*` (e.g. `bitcoinix.configVersion`).
+> The old `nix-bitcoin.*` prefix still works as a deprecated alias.
 
 Project direction
 ---

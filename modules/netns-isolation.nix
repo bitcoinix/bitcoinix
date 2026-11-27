@@ -2,7 +2,7 @@
 
 with lib;
 let
-  options.nix-bitcoin.netns-isolation = {
+  options.bitcoinix.netns-isolation = {
     enable = mkEnableOption "netns isolation";
 
     addressblock = mkOption {
@@ -92,7 +92,7 @@ let
     };
   };
 
-  cfg = config.nix-bitcoin.netns-isolation;
+  cfg = config.bitcoinix.netns-isolation;
 
   netns = builtins.mapAttrs (n: v: {
     inherit (v) id;
@@ -213,7 +213,7 @@ in {
         # next to nftables is fine. firewalld is not supported.
         assertion = config.networking.firewall.backend == "iptables"
           && lib.getName config.networking.firewall.package != "nftables";
-        message = "`nix-bitcoin.netns-isolation` runs its iptables rules with `networking.firewall.package`, which is the nftables package without an iptables binary when `networking.nftables` is enabled, and firewalld is not supported. Disable `networking.nftables` and `services.firewalld`, or keep `networking.firewall.backend = \"iptables\"` and set `networking.firewall.package` to a package with `bin/iptables`, so that the firewall uses the iptables backend and package.";
+        message = "`bitcoinix.netns-isolation` runs its iptables rules with `networking.firewall.package`, which is the nftables package without an iptables binary when `networking.nftables` is enabled, and firewalld is not supported. Disable `networking.nftables` and `services.firewalld`, or keep `networking.firewall.backend = \"iptables\"` and set `networking.firewall.package` to a package with `bin/iptables`, so that the firewall uses the iptables backend and package.";
       }
       {
         # With `flushRuleset`, every start, reload or stop of `nftables.service`
@@ -221,14 +221,14 @@ in {
         # `rulesetFile` is set or `system.stateVersion` is older than 23.11.
         assertion = !(config.networking.nftables.enable && config.networking.nftables.flushRuleset)
                     || !(bridgeUsesNftables || firewallUsesNftables);
-        message = "`nix-bitcoin.netns-isolation` needs the NAT rule of the namespace bridge, the forwarding rules of `nb-netns-forward` and the host firewall, which iptables-nft keeps in the nftables ruleset, but `networking.nftables.flushRuleset` deletes them whenever `nftables.service` starts, reloads or stops. Without the NAT rule, the namespaces can't reach anything beyond the host. Without the forwarding rules, the host forwards traffic between all its interfaces. The flush is on by default when `networking.nftables.ruleset` or `networking.nftables.rulesetFile` is set or `system.stateVersion` is older than 23.11. Move your nftables rules to `networking.nftables.tables` and set `networking.nftables.flushRuleset = false`. After deploying, reboot once or run ${restoreRules}, since the first reload or stop still runs the old flush.";
+        message = "`bitcoinix.netns-isolation` needs the NAT rule of the namespace bridge, the forwarding rules of `nb-netns-forward` and the host firewall, which iptables-nft keeps in the nftables ruleset, but `networking.nftables.flushRuleset` deletes them whenever `nftables.service` starts, reloads or stops. Without the NAT rule, the namespaces can't reach anything beyond the host. Without the forwarding rules, the host forwards traffic between all its interfaces. The flush is on by default when `networking.nftables.ruleset` or `networking.nftables.rulesetFile` is set or `system.stateVersion` is older than 23.11. Move your nftables rules to `networking.nftables.tables` and set `networking.nftables.flushRuleset = false`. After deploying, reboot once or run ${restoreRules}, since the first reload or stop still runs the old flush.";
       }
       {
         # `nftables.service` deletes and recreates every table in
         # `networking.nftables.tables`. Raw `flush` or `delete` commands in
         # `ruleset`, `rulesetFile` or `extraDeletions` aren't checked.
         assertion = !config.networking.nftables.enable || iptablesTablesInNftables == [];
-        message = "`nix-bitcoin.netns-isolation` needs the NAT rule of the namespace bridge, the forwarding rules of `nb-netns-forward` and the host firewall, which iptables-nft keeps in the tables `ip nat`, `ip filter`, `ip6 filter`, `ip mangle` and `ip6 mangle`, but `networking.nftables.tables` replaces ${concatStringsSep " and " (unique iptablesTablesInNftables)} whenever `nftables.service` starts or reloads, and deletes each one when `nftables.service` stops. Rename the table or use the `inet` family. After deploying, reboot once or run ${restoreRules}, since the first reload or stop still deletes the old table.";
+        message = "`bitcoinix.netns-isolation` needs the NAT rule of the namespace bridge, the forwarding rules of `nb-netns-forward` and the host firewall, which iptables-nft keeps in the tables `ip nat`, `ip filter`, `ip6 filter`, `ip mangle` and `ip6 mangle`, but `networking.nftables.tables` replaces ${concatStringsSep " and " (unique iptablesTablesInNftables)} whenever `nftables.service` starts or reloads, and deletes each one when `nftables.service` stops. Rename the table or use the `inet` family. After deploying, reboot once or run ${restoreRules}, since the first reload or stop still deletes the old table.";
       }
       {
         # Services with `tor.enforce` may reach the whole namespace subnet
@@ -236,13 +236,13 @@ in {
         # cloud metadata addresses (169.254.169.254, 169.254.170.2), so keep the
         # subnet clear of them.
         assertion = !(builtins.elem cfg.addressblock [ 169 170 ]);
-        message = "`nix-bitcoin.netns-isolation.addressblock` must not be 169 or 170: the subnet 169.254.${toString cfg.addressblock}.0/24 would include a cloud metadata address, which services with `tor.enforce` are then allowed to reach. Choose a different address block.";
+        message = "`bitcoinix.netns-isolation.addressblock` must not be 169 or 170: the subnet 169.254.${toString cfg.addressblock}.0/24 would include a cloud metadata address, which services with `tor.enforce` are then allowed to reach. Choose a different address block.";
       }
       {
         # A module that sets this forwards for other networks, and nb-netns-forward
         # would drop that traffic
         assertion = !cfg.restrictForwarding || !forwardingSetElsewhere;
-        message = "`boot.kernel.sysctl.\"net.ipv4.conf.all.forwarding\"` is on, so this node forwards traffic for other networks. Modules like `networking.nat`, Docker (`virtualisation.docker`) and Tailscale with `useRoutingFeatures` set to `server` or `both` set it. With `nix-bitcoin.netns-isolation.restrictForwarding`, the host drops all forwarded traffic except that of the service namespaces. Set `nix-bitcoin.netns-isolation.restrictForwarding = false` to keep the forwarding. The host then forwards between all its interfaces, unless you filter forwarded traffic yourself.";
+        message = "`boot.kernel.sysctl.\"net.ipv4.conf.all.forwarding\"` is on, so this node forwards traffic for other networks. Modules like `networking.nat`, Docker (`virtualisation.docker`) and Tailscale with `useRoutingFeatures` set to `server` or `both` set it. With `bitcoinix.netns-isolation.restrictForwarding`, the host drops all forwarded traffic except that of the service namespaces. Set `bitcoinix.netns-isolation.restrictForwarding = false` to keep the forwarding. The host then forwards between all its interfaces, unless you filter forwarded traffic yourself.";
       }
     ];
     networking.dhcpcd.denyInterfaces = [ "nb-br" "nb-veth*" ];
@@ -438,7 +438,7 @@ in {
 
   # Service-specific config
   {
-    nix-bitcoin.netns-isolation.services = {
+    bitcoinix.netns-isolation.services = {
       bitcoind = {
         id = 12;
       };

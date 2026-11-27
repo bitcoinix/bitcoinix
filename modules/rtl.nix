@@ -105,9 +105,9 @@ let
   };
 
   cfg = config.services.rtl;
-  nbLib = config.nix-bitcoin.lib;
-  nbPkgs = config.nix-bitcoin.pkgs;
-  secretsDir = config.nix-bitcoin.secretsDir;
+  nbLib = config.bitcoinix.lib;
+  nbPkgs = config.bitcoinix.pkgs;
+  secretsDir = config.bitcoinix.secretsDir;
   # RTL reads `admin.macaroon` in `macaroonPath`. Earlier versions copied the admin
   # credentials to these paths, so keeping them overwrites those copies.
   macaroonCopy = "${cfg.dataDir}/macaroons/admin.macaroon";
@@ -290,7 +290,7 @@ let
   # connection to RTL's unix socket.
   # With netns-isolation, RTL's address exists only in RTL's namespace, which only
   # root can enter. So RTL keeps listening on it directly.
-  useProxy = !config.nix-bitcoin.netns-isolation.enable;
+  useProxy = !config.bitcoinix.netns-isolation.enable;
   # In RTL's runtime dir, which systemd removes at each stop and creates for each
   # start, accessible only to RTL's user. So no other user can take the path.
   socketPath = "/run/rtl/rtl.sock";
@@ -557,8 +557,8 @@ in {
     };
     users.groups.${cfg.group} = {};
 
-    nix-bitcoin.secrets.rtl-password.user = cfg.user;
-    nix-bitcoin.generateSecretsCmds.rtl = ''
+    bitcoinix.secrets.rtl-password.user = cfg.user;
+    bitcoinix.generateSecretsCmds.rtl = ''
       makePasswordSecret rtl-password
     '';
   };

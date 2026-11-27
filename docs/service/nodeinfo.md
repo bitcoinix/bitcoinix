@@ -12,11 +12,11 @@ nodeinfo | jq -r .bitcoinix.revision
 The `bitcoinix` entry is not a service: its `revision` is the bitcoinix git commit the
 system is built from, with a `-dirty` suffix for a checkout with uncommitted changes.
 It is `null` when the modules are imported without the bitcoinix flake; set
-`nix-bitcoin.revision` yourself in that case.
+`bitcoinix.revision` yourself in that case.
 
 The revision is baked into the `nodeinfo` script, so every bitcoinix update produces a
 new system generation and boot entry, even when no package changed; no service restarts.
-Set `nix-bitcoin.revision = null;` to opt out.
+Set `bitcoinix.revision = null;` to opt out.
 
 The entries of bitcoind, clightning, lnd, cdk-mintd, electrs, fulcrum, btcpayserver, rtl and mempool
 include the `version` of the package the service runs.
@@ -29,7 +29,7 @@ nodeinfo bitcoind lnd        # print only these entries
 See `nodeinfo --help`.
 
 `nodeinfo` and `jq` are included in the `secure-node.nix` preset. Without the preset,
-set `nix-bitcoin.nodeinfo.enable = true` and install `jq` for the example above.
+set `bitcoinix.nodeinfo.enable = true` and install `jq` for the example above.
 
 ## Troubleshoot onion addresses
 
@@ -38,7 +38,7 @@ hostname file is unreadable, contains invalid content, or takes more than 10 sec
 to read, its address is omitted. Other valid addresses are still published, but
 `onion-addresses.service` reports failure. `nodeinfo` then prints only
 `error: service 'onion-addresses' is not running`. bitcoind, lnd and clightning with a
-public onion service (`nix-bitcoin.onionServices.<service>.public`) don't start
+public onion service (`bitcoinix.onionServices.<service>.public`) don't start
 without their address, and their journal shows the error of
 `cat /var/lib/onion-addresses/services/<service>`.
 

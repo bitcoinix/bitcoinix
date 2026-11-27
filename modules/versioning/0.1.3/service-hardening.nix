@@ -9,10 +9,10 @@ with lib;
       bitcoind btcpayserver charge-lnd clightning electrs fulcrum
       lnd mempool nbxplorer rtl
     ]
-    || config.nix-bitcoin.onionAddresses.access != {}
-    || config.nix-bitcoin.onionAddresses.services != [];
+    || config.bitcoinix.onionAddresses.access != {}
+    || config.bitcoinix.onionAddresses.services != [];
   message = ''
-    Services using `nix-bitcoin.lib.defaultHardening` now see /run and /dev
+    Services using `bitcoinix.lib.defaultHardening` now see /run and /dev
     (including /dev/shm) as read-only outside their allowed writable paths.
     Custom service hooks and plugins that write there can fail with
     "Read-only file system".

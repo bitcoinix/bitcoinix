@@ -16,8 +16,8 @@ in
     The methods that only they need no longer reach the other services of
     `public`. Each user needs its own password and HMAC in the secrets dir:
     ${list (name: "`bitcoin-rpcpassword-${name}` and `bitcoin-HMAC-${name}`")}.
-  '' + (if config.nix-bitcoin.generateSecrets then ''
-    `nix-bitcoin.generateSecrets` creates them. If bitcoind runs on this node,
+  '' + (if config.bitcoinix.generateSecrets then ''
+    `bitcoinix.generateSecrets` creates them. If bitcoind runs on this node,
     there's nothing else to do.
   '' else ''
     Create them before deploying, unless the krops deployment shell creates

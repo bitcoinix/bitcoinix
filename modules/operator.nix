@@ -2,7 +2,7 @@
 
 with lib;
 let
-  options.nix-bitcoin.operator = {
+  options.bitcoinix.operator = {
     enable = mkOption {
       type = types.bool;
       default = false;
@@ -12,7 +12,7 @@ let
 
         When using nix-bitcoin as part of a larger system config, it makes sense
         to set your main system user as the operator, by setting option
-        `nix-bitcoin.operator.name = "MAIN_USER_NAME";`.
+        `bitcoinix.operator.name = "MAIN_USER_NAME";`.
       '';
     };
     name = mkOption {
@@ -32,7 +32,7 @@ let
     };
   };
 
-  cfg = config.nix-bitcoin.operator;
+  cfg = config.bitcoinix.operator;
 in {
   inherit options;
 

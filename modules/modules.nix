@@ -5,6 +5,7 @@
   imports = [
     # Core modules
     ./nix-bitcoin.nix
+    ./nix-bitcoin-alias.nix
     ./secrets/secrets.nix
     ./operator.nix
 

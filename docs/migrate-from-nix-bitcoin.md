@@ -92,8 +92,9 @@ over its changes. krops is a legacy deployment method in bitcoinix; consider
    from 0.1.0 on, oldest first. Several need action on the node, such as deleting the
    electrs index before deploying (0.1.3). The error stays after you complete them: the
    notices check your configuration, e.g. whether a service is enabled, not the node.
-3. Set `nix-bitcoin.configVersion` to the version named in the error, the bitcoinix
-   release you are deploying.
+3. Set `bitcoinix.configVersion` to the version named in the error, the bitcoinix
+   release you are deploying. Rename your other `nix-bitcoin.*` options to `bitcoinix.*`;
+   the old prefix still works, but evaluation warns about it.
 4. Evaluate again. Deploy only when evaluation succeeds.
 
 If `configVersion` is unset, evaluation doesn't report these changes. Set it to your

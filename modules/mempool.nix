@@ -66,7 +66,7 @@ let
         staticContentRoot = mkOption {
           type = types.path;
           default = nbPkgs.mempool-frontend.withConfig cfg.frontend.settings;
-          defaultText = "config.nix-bitcoin.pkgs.mempool-frontend";
+          defaultText = "config.bitcoinix.pkgs.mempool-frontend";
           description = "
             Path of the static frontend content root.
           ";
@@ -124,7 +124,7 @@ let
 
           `CORE_RPC.PASSWORD` can't be set here because these settings are copied
           to the world-readable Nix store. mempool reads the password at startup from
-          `bitcoin-rpcpassword-mempool` in the secrets dir (`nix-bitcoin.secretsDir`).
+          `bitcoin-rpcpassword-mempool` in the secrets dir (`bitcoinix.secretsDir`).
         '';
       };
       database = {
@@ -137,7 +137,7 @@ let
       package = mkOption {
         type = types.package;
         default = nbPkgs.mempool-backend;
-        defaultText = "config.nix-bitcoin.pkgs.mempool-backend";
+        defaultText = "config.bitcoinix.pkgs.mempool-backend";
         description = "The package providing mempool binaries.";
       };
       user = mkOption {
@@ -164,9 +164,9 @@ let
   };
 
   cfg = config.services.mempool;
-  nbLib = config.nix-bitcoin.lib;
-  nbPkgs = config.nix-bitcoin.pkgs;
-  secretsDir = config.nix-bitcoin.secretsDir;
+  nbLib = config.bitcoinix.lib;
+  nbPkgs = config.bitcoinix.pkgs;
+  secretsDir = config.bitcoinix.secretsDir;
 
   configFile = builtins.toFile "mempool-config" (builtins.toJSON cfg.settings);
   cacheDir = "/var/cache/mempool";
@@ -395,14 +395,14 @@ in {
     };
     users.groups.${cfg.group} = {};
 
-    nix-bitcoin.secrets = {
+    bitcoinix.secrets = {
       bitcoin-rpcpassword-mempool = {
         user = bitcoind.user;
         inherit (cfg) group;
       };
       bitcoin-HMAC-mempool.user = bitcoind.user;
     };
-    nix-bitcoin.generateSecretsCmds.mempool = ''
+    bitcoinix.generateSecretsCmds.mempool = ''
       makeBitcoinRPCPassword mempool
     '';
   };

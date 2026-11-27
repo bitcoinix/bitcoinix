@@ -18,9 +18,9 @@ let
 
     nixpkgs.pkgs = pkgs;
 
-    nix-bitcoin.generateSecrets = true;
+    bitcoinix.generateSecrets = true;
     # A member of group clightning
-    nix-bitcoin.operator.enable = true;
+    bitcoinix.operator.enable = true;
 
     services.clightning = {
       enable = true;
@@ -73,7 +73,7 @@ makeTestVM {
 
     replicationRemote = {
       imports = [ clientBaseConfig ];
-      nix-bitcoin.generateSecretsCmds.clightning-replication-ssh-key = mkForce ''
+      bitcoinix.generateSecretsCmds.clightning-replication-ssh-key = mkForce ''
         install -m 600 ${keys.client} clightning-replication-ssh-key
       '';
       programs.ssh.knownHosts."server".publicKey = keys.serverPub;

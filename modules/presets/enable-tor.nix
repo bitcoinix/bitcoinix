@@ -39,7 +39,7 @@ in {
   };
 
   # Add onion services for incoming connections
-  nix-bitcoin.onionServices = {
+  bitcoinix.onionServices = {
     bitcoind.enable = defaultTrue;
     electrs.enable = defaultTrue;
     fulcrum.enable = defaultTrue;

@@ -2,12 +2,12 @@
 
 Some releases contain changes that need manual action, such as a removed service, a
 changed default or a required reindex. bitcoinix reports them when it evaluates your
-configuration: if a released change is newer than `nix-bitcoin.configVersion` and
+configuration: if a released change is newer than `bitcoinix.configVersion` and
 affects your configuration, evaluation fails with a short description of the change.
 Options of removed services and other service assertions can fail evaluation
 regardless of the config version.
 
-Keep `nix-bitcoin.configVersion` set to the released version whose migrations you
+Keep `bitcoinix.configVersion` set to the released version whose migrations you
 have completed. Values newer than the latest finalized release in `version.nix`
 are rejected; use the released version named in the error until release finalization.
 If the option is unset, migration errors and warnings are disabled.
@@ -16,7 +16,7 @@ acknowledge migrations on each release.
 
 When evaluation fails after an update, follow the version pages below for each version
 newer than your config version, starting with the oldest. Then set
-`nix-bitcoin.configVersion` to the version named in the error message.
+`bitcoinix.configVersion` to the version named in the error message.
 
 On `master`, review unreleased migration warnings before deploying and keep
 `configVersion` at the latest release. These warnings do not block deployment or
@@ -43,6 +43,7 @@ See [Cutting a release](https://github.com/bitcoinix/bitcoinix/blob/master/dev/R
 
 ## Versions
 
+- [1.0.0](upgrading/1.0.0.md) (upcoming)
 - [0.2.1](upgrading/0.2.1.md) (upcoming)
 - [0.2.0](upgrading/0.2.0.md)
 - <a id="upgrading-to-config-version-016"></a>[0.1.6](upgrading/0.1.6.md)

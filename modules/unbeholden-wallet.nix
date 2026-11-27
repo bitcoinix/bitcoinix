@@ -69,8 +69,8 @@ let
     };
     package = mkOption {
       type = types.package;
-      default = config.nix-bitcoin.pkgs.unbeholden-wallet;
-      defaultText = "config.nix-bitcoin.pkgs.unbeholden-wallet";
+      default = config.bitcoinix.pkgs.unbeholden-wallet;
+      defaultText = "config.bitcoinix.pkgs.unbeholden-wallet";
       description = "The package providing the wallet and its server.";
     };
     user = mkOption {
@@ -86,14 +86,14 @@ let
   };
 
   cfg = config.services.unbeholden-wallet;
-  nbLib = config.nix-bitcoin.lib;
+  nbLib = config.bitcoinix.lib;
   electrumServer = config.services.${cfg.electrumServer};
 in {
   inherit options;
 
   config = mkIf cfg.enable {
     assertions = [
-      { assertion = cfg.allowedClients == [] || !config.nix-bitcoin.netns-isolation.enable;
+      { assertion = cfg.allowedClients == [] || !config.bitcoinix.netns-isolation.enable;
         message = ''
           `services.unbeholden-wallet.allowedClients` is not supported with netns-isolation,
           whose namespaces drop connections from other hosts.

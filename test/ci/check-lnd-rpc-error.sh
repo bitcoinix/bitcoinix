@@ -17,8 +17,8 @@ for address in "" "[]"; do
           modules = [ flake.nixosModules.default {
             boot.isContainer = true;
             system.stateVersion = "26.05";
-            nix-bitcoin.configVersion = "0.2.0";
-            nix-bitcoin.secretsSetupMethod = "manual";
+            bitcoinix.configVersion = "0.2.0";
+            bitcoinix.secretsSetupMethod = "manual";
             services.lnd = { enable = true; rpcAddress = builtins.getEnv "LND_TEST_RPC_ADDRESS"; };
           } ];
         }).config.warnings
