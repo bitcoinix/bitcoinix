@@ -50,10 +50,11 @@ created. Restarting Orchard invalidates login sessions.
 Orchard runs as a separate user. It can read the mint SQLite database and its
 WAL files, but cannot write them or read the mint seed, BDK wallet or Lightning
 credentials. The mint data filesystem must support POSIX ACLs.
-Orchard reapplies its read access at each start; an ACL
-failure stops only Orchard, leaving the mint running. Without network namespace
-isolation, a systemd socket reserves the HTTP port even while Orchard is stopped
-and proxies connections to its private Unix socket.
+Orchard reapplies its read access at each start; an ACL failure stops only
+Orchard, leaving the mint running. Tmpfiles preserves directory traversal access
+when it refreshes permissions, so database queries keep working without a restart.
+Without network namespace isolation, a systemd socket reserves the HTTP port
+even while Orchard is stopped and proxies connections to its private Unix socket.
 
 Management operations use CDK's gRPC API with mutual TLS. The RPC
 listener stays on loopback, or the mint's private namespace address, independently

@@ -81,9 +81,9 @@ let
   # never the mint's seed, BDK wallet or backend credentials, receive a read ACL.
   databaseGroup = "orchard-mint";
   openssl = "${pkgs.openssl}/bin/openssl";
-  # Reapply ACLs on every Orchard start: the mint may have recreated its WAL,
-  # or tmpfiles may have reset the directory's ACL mask. Fail only Orchard if
-  # the filesystem doesn't support ACLs. No directory default ACL is installed.
+  # Reapply ACLs on every Orchard start: the mint may have recreated its WAL.
+  # Fail only Orchard if the filesystem doesn't support ACLs. No directory
+  # default ACL is installed.
   grantDatabaseAccess = nbLib.script "orchard-database-access-as-mint" ''
     for _attempt in $(seq 1 600); do
       if [[ -f ${escapeShellArg "${database}-wal"} && -f ${escapeShellArg "${database}-shm"} ]]; then
@@ -134,7 +134,12 @@ in {
       };
     };
 
-    systemd.tmpfiles.rules = [ "d '${cfg.dataDir}' 0700 ${cfg.user} ${cfg.group} - -" ];
+    systemd.tmpfiles.rules = [
+      "d '${cfg.dataDir}' 0700 ${cfg.user} ${cfg.group} - -"
+      # The mint's `d` rule resets its directory mode to 0700 on each run.
+      # Restore traversal for a running Orchard, including the existing ACL mask.
+      "a+ '${mint.dataDir}' - - - - group:${databaseGroup}:--x,mask::--x"
+    ];
 
     # Ephemeral local-only mTLS credentials for the CDK management RPC.
     # Neither service persists or pins these certs, and the CA key is discarded

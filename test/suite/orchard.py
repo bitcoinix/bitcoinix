@@ -95,16 +95,21 @@ def test_orchard():
     assert result["mint_keysets"], result
     query_ok('mutation { mint_name_update(name: "Bitcoinix test mint") { name } }', token)
 
-    # A tmpfiles run resets the mint directory's ACL mask. Restarting only
-    # Orchard must restore access and let it open the database again.
+    # A live tmpfiles run must preserve access without restarting either service
+    # or invalidating the login session. Repeat to catch an existing masked ACL.
     mint_invocation = succeed("systemctl show -P InvocationID cdk-mintd")
-    succeed("systemctl stop orchard")
-    succeed(f"systemd-tmpfiles --create --prefix={data['mintDataDir']}")
-    machine.fail(f"{as_orchard} test -r {database}")
-    succeed("systemctl start orchard")
-    machine.wait_until_succeeds(f"curl -fsS {url}/config.json")
-    assert query_ok('{ mint_keysets { id } }', login())["mint_keysets"]
-    assert succeed("systemctl show -P InvocationID cdk-mintd") == mint_invocation
+    orchard_invocation = succeed("systemctl show -P InvocationID orchard")
+    for _ in range(2):
+        succeed(f"systemd-tmpfiles --create --prefix={data['mintDataDir']}")
+        assert query_ok('{ mint_keysets { id } }', token)["mint_keysets"]
+        assert succeed("systemctl show -P InvocationID cdk-mintd") == mint_invocation
+        assert succeed("systemctl show -P InvocationID orchard") == orchard_invocation
+        succeed(f"{as_orchard} test -x {data['mintDataDir']}")
+        machine.fail(f"{as_orchard} test -r {data['mintDataDir']}")
+        machine.fail(f"{as_orchard} test -w {data['mintDataDir']}")
+        for suffix in ["", "-wal", "-shm"]:
+            succeed(f"{as_orchard} test -r {database}{suffix}")
+            machine.fail(f"{as_orchard} test -w {database}{suffix}")
 
     # Force setfacl to fail by changing ownership of the live DB. This also
     # checks that the grant runs as the mint user, without root's override.
