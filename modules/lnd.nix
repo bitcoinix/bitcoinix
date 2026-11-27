@@ -43,6 +43,15 @@ let
       default = 8080;
       description = "Port to listen for REST connections.";
     };
+    restSocket = mkOption {
+      type = types.nullOr types.path;
+      default = null;
+      internal = true;
+      description = ''
+        A Unix socket where lnd also serves REST.
+        `services.lnd.lndconnect.onion` sets it and manages the socket.
+      '';
+    };
     dataDir = mkOption {
       type = types.path;
       default = "/var/lib/lnd";
@@ -168,6 +177,8 @@ let
 
   bitcoindRpcAddress = nbLib.address bitcoind.rpc.address;
   networkDir = cfg.networkDir;
+  restListeners = [ "${cfg.restAddress}:${toString cfg.restPort}" ]
+    ++ optional (cfg.restSocket != null) "unix://${cfg.restSocket}";
   configFile = pkgs.writeText "lnd.conf" ''
     datadir=${cfg.dataDir}
     tlscertpath=${cfg.certPath}
@@ -179,7 +190,7 @@ let
 
     listen=${toString cfg.address}:${toString cfg.port}
     rpclisten=${cfg.rpcEndpoint}
-    restlisten=${cfg.restAddress}:${toString cfg.restPort}
+    ${concatMapStringsSep "\n" (address: "restlisten=${address}") restListeners}
 
     bitcoin.${bitcoind.network}=1
     bitcoin.node=bitcoind

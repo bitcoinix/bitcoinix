@@ -77,6 +77,9 @@ With `onion`, the commands fail when they can't read the onion address, for exam
 while Tor still starts. They never look up your public IP then. `--host` replaces the
 onion address.
 
+For LND, the onion service forwards to a Unix socket where lnd also serves REST. lnd
+keeps listening on `services.lnd.restAddress` for RTL and local clients.
+
 ### Connecting without Tor or WireGuard
 Enabling `lndconnect` or `lnconnect` does not change the address that the REST server
 listens on. By default, the LND and clnrest REST servers only listen
