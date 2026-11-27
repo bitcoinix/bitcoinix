@@ -58,7 +58,7 @@ let
       defaultText = "config.nix-bitcoin.pkgs.cashu-orchard";
       description = "Package providing the cashu-orchard binary.";
     };
-    tor.enforce = nbLib.tor.enforce;
+    tor = nbLib.tor;
   };
 
   cfg = config.services.orchard;
@@ -209,6 +209,8 @@ in {
         MINT_RPC_KEY = "${rpcTlsDir}/client/client.key";
         MINT_RPC_CERT = "${rpcTlsDir}/client/client.pem";
         MINT_RPC_CA = "${rpcTlsDir}/client/ca.pem";
+      } // optionalAttrs cfg.tor.proxy {
+        TOR_PROXY_SERVER = "socks5h://${config.nix-bitcoin.torClientAddressWithPort}";
       } // (if useProxy then {
         SERVER_SOCKET = socketPath;
       } else {

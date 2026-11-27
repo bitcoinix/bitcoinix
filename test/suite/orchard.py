@@ -38,6 +38,15 @@ def test_orchard():
     assert result["mint_info_rpc"]["name"] == "Bitcoinix test mint", result
     assert result["mint_balances"] == [], result
     assert result["mint_keysets"], result
+    if "socksAddress" in data:
+        wait_for_open_port(data["socksAddress"], data["socksPort"])
+        # These names cannot resolve locally. The fixture accepts only these
+        # hosts, so the successful mint queries above also check local bypass.
+        image = query_ok('{ public_image(url: "http://orchard-proxy.invalid/icon") { data type } }', token)["public_image"]
+        assert image["type"] == "application/json", image
+        assert image["data"] == "data:application/json;base64," + base64.b64encode(b'{"via":"socks"}').decode(), image
+        urls = query_ok('{ public_urls(urls: ["http://orchard-proxy.invalid/v1/info", "http://orchard-proxy.onion/v1/info"]) { status has_data } }', token)["public_urls"]
+        assert urls == [{"status": 200, "has_data": True}] * 2, urls
     query_ok('mutation { mint_name_update(name: "Orchard test mint") { name } }', token)
     machine.wait_until_succeeds(f"curl -fsS {mint_url}/info | jq -e '.name == \"Orchard test mint\"'")
 

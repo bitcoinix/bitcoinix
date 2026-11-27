@@ -27,6 +27,7 @@ in {
       readWritePaths = unit.serviceConfig.ReadWritePaths;
       groups = unit.serviceConfig.SupplementaryGroups;
       environment = lib.getAttrs [ "SERVER_SOCKET" "MINT_RPC_MTLS" "MINT_DATABASE" "MINT_RPC_CA" ] unit.environment;
+      torProxy = unit.environment.TOR_PROXY_SERVER or null;
       secrets = lib.filter (lib.hasPrefix "orchard") (lib.attrNames plain.nix-bitcoin.secrets);
       setupKeyOwner = plain.nix-bitcoin.secrets.orchard-setup-key.user;
       restartHook = lib.any (lib.hasInfix "--job-mode=ignore-requirements orchard.service")
@@ -58,6 +59,7 @@ in {
         MINT_DATABASE = "/var/lib/cdk-mintd/cdk-mintd.sqlite";
         MINT_RPC_CA = "/run/orchard-rpc-tls/client/ca.pem";
       };
+      torProxy = null;
       secrets = [ "orchard-setup-key" ];
       setupKeyOwner = "orchard";
       restartHook = true;
@@ -147,15 +149,37 @@ in {
     expected = { assertions = []; secrets = []; database = "/srv/mint/cdk-mintd.sqlite"; };
   };
   testOrchardTor = {
-    expr = let config = orchard {
+    expr = map (isolated: let config = orchard {
       imports = [ ../modules/presets/enable-tor.nix ];
       nix-bitcoin.onionServices.orchard.enable = true;
+      nix-bitcoin.netns-isolation.enable = isolated;
     }; in {
       enforce = config.services.orchard.tor.enforce;
+      proxy = config.systemd.services.orchard.environment.TOR_PROXY_SERVER;
       allow = config.systemd.services.orchard.serviceConfig.IPAddressAllow;
       port = (lib.head config.services.tor.relay.onionServices.orchard.map).port;
+    }) [ false true ];
+    expected = [
+      { enforce = true; proxy = "socks5h://127.0.0.1:9050"; allow = [ "127.0.0.1/32" "::1/128" ]; port = 80; }
+      { enforce = true; proxy = "socks5h://169.254.1.10:9050"; allow = [ "127.0.0.1/32" "::1/128" "169.254.1.0/24" ]; port = 80; }
+    ];
+  };
+  testOrchardCustomTorProxy = {
+    expr = let config = orchard {
+      services.orchard.tor.proxy = true;
+      services.tor.client.socksListenAddress = { addr = "127.0.0.2"; port = 9150; };
+    }; in {
+      enforce = config.services.orchard.tor.enforce;
+      proxy = config.systemd.services.orchard.environment.TOR_PROXY_SERVER;
     };
-    expected = { enforce = true; allow = [ "127.0.0.1/32" "::1/128" ]; port = 80; };
+    expected = { enforce = false; proxy = "socks5h://127.0.0.2:9150"; };
+  };
+  testOrchardTorProxyDisabled = {
+    expr = let config = orchard {
+      imports = [ ../modules/presets/enable-tor.nix ];
+      services.orchard.tor.proxy = false;
+    }; in config.systemd.services.orchard.environment.TOR_PROXY_SERVER or null;
+    expected = null;
   };
   testOrchardInvalidOptions = {
     expr = map (module: failedAssertions (orchard module) != []) [

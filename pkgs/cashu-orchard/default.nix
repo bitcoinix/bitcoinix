@@ -21,7 +21,7 @@ buildNpmPackage (finalAttrs: {
   npmDepsHash = "sha256-lGkXLifA1yYH24AhrA/1QeN6pj818jSyUPXr7ZxXVmc=";
   nodejs = nodejs_24;
 
-  patches = [ ./runtime-config.patch ];
+  patches = [ ./runtime-config.patch ./tor-proxy.patch ];
 
   nativeBuildInputs = [ makeWrapper ];
   buildInputs = [ nodejs-slim_24 ];

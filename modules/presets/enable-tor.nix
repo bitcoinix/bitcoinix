@@ -26,12 +26,12 @@ in {
     # btcpayserver = defaultEnableTorProxy;
     mempool = defaultEnableTorProxy;
     unbeholden-lnurl = defaultEnableTorProxy;
+    orchard = defaultEnableTorProxy;
 
     # These services don't make outgoing connections but we restrict them to
     # Tor just to be safe.
     #
     cdk-mintd = defaultEnforceTor;
-    orchard = defaultEnforceTor;
     electrs = defaultEnforceTor;
     fulcrum = defaultEnforceTor;
     nbxplorer = defaultEnforceTor;

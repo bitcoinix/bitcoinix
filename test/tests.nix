@@ -730,11 +730,22 @@ let
       };
     };
 
-    orchard = {
+    orchard = { config, pkgs, ... }: let
+      socks = config.services.tor.client.socksListenAddress;
+    in {
       imports = [ scenarios.regtestBase ];
       nix-bitcoin.nodeinfo.enable = true;
       services.orchard.enable = true;
+      services.orchard.tor = { proxy = true; enforce = true; };
       services.cdk-mintd.settings.mint_info.name = "Bitcoinix test mint";
+      # Exercise Tor routing without internet access, including proxy-side DNS.
+      test.data.orchard.socksAddress = socks.addr;
+      test.data.orchard.socksPort = socks.port;
+      systemd.services.orchard-test-socks = {
+        wantedBy = [ "multi-user.target" ];
+        after = optional config.nix-bitcoin.netns-isolation.enable "nb-netns-bridge.service";
+        serviceConfig.ExecStart = "${pkgs.python3}/bin/python ${./lib/orchard-socks.py} ${socks.addr} ${toString socks.port}";
+      };
       # Keep this scenario focused on Orchard; the CDK scenarios cover payments
       # and recovery. Orchard tests exercise both RPC and database access.
       tests.cdk-mintd = mkForce false;

@@ -80,6 +80,22 @@ The mutual TLS certificates for the local management RPC are generated
 ephemerally at runtime under `/run/orchard-rpc-tls`, so no manual TLS setup is
 needed.
 
+## Outgoing requests and AI
+
+Orchard's server fetches mint icons and checks public URLs from the mint's info.
+OpenRouter and Telegram also make external requests when enabled in Orchard's
+settings. The `enable-tor` preset enables both `services.orchard.tor.proxy` and
+`services.orchard.tor.enforce`, routing these requests through Tor and blocking
+direct external connections. Local mint connections stay direct. Without the
+preset, enable the Tor client and both options to get the same behavior. Enabling
+only the onion service does not proxy outgoing requests; without `tor.proxy`,
+they use clearnet unless blocked by `tor.enforce`.
+
+AI is off by default. If you enable it in Orchard's settings, the assistant sends
+your conversation and mint data obtained through its tool calls to the configured
+provider, such as OpenRouter. Tor does not prevent that provider from receiving
+the data.
+
 ## State and recovery
 
 Orchard stores accounts, settings and `crypto.key` in
