@@ -101,6 +101,13 @@ in {
       "d '/var/lib/cdk-mintd' 0700 cdk-mintd cdk-mintd - -"
     ];
   };
+  testOrchardLoopbackMint = {
+    expr = let config = orchard {
+      services.orchard.tor.enforce = true;
+      services.cdk-mintd.address = "127.0.0.2";
+    }; in config.systemd.services.orchard.serviceConfig.IPAddressAllow;
+    expected = [ "127.0.0.1/32" "::1/128" "127.0.0.2/32" ];
+  };
   testOrchardDisabled = {
     expr = {
       unit = disabled.systemd.services ? orchard;

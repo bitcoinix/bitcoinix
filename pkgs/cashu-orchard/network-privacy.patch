@@ -1,0 +1,291 @@
+Resolve public checks through Tor without dropping the private-address guard.
+Proxy public TCP probes and classify local fetch destinations as IP addresses.
+
+--- a/src/server/modules/api/public/network-guard.ts
++++ b/src/server/modules/api/public/network-guard.ts
+@@ -1,7 +1,12 @@
+ /* Core Dependencies */
+ import {promises as dns} from 'dns';
++import {execFile} from 'node:child_process';
++import {promisify} from 'node:util';
++
+ import {URL} from 'url';
+ import * as net from 'net';
++
++const execFileAsync = promisify(execFile);
+ 
+ /**
+  * RFC 1918, loopback, link-local, and cloud metadata IP ranges
+@@ -120,7 +125,8 @@
+  *
+  * @throws Error if the hostname resolves to a blocked IP range
+  */
+-export async function assertPublicHost(host: string): Promise<string | null> {
++export async function assertPublicHost(host: string, proxy?: string): Promise<string | null> {
++	host = host.replace(/^\[|\]$/g, '').toLowerCase();
+ 	/* Block known metadata hostnames */
+ 	const lower = host.toLowerCase();
+ 	if (BLOCKED_HOSTNAMES.has(lower)) {
+@@ -140,15 +146,33 @@
+ 		return null;
+ 	}
+ 
+-	/* Resolve DNS and check all returned addresses */
++	/* Resolve through Tor when configured, retaining the private-address guard.
++	 * tor-resolve implements Tor's SOCKS RESOLVE command; never fall back to DNS.
++	 * https://spec.torproject.org/socks-extensions.html#name-lookup
++	 */
+ 	let addresses: string[];
+-	try {
+-		addresses = await dns.resolve4(host);
+-	} catch {
++	if (proxy) {
++		const endpoint = new URL(proxy);
++		if (!['socks5:', 'socks5h:', 'socks:'].includes(endpoint.protocol) || endpoint.username || endpoint.password) {
++			throw new Error('Public checks require an unauthenticated Tor SOCKS5 proxy');
++		}
++		if (host.startsWith('-')) throw new Error('Invalid hostname');
++		const {stdout} = await execFileAsync('@torResolve@', ['-5', '-p', endpoint.port || '1080', host, endpoint.hostname], {
++			timeout: 10000,
++			maxBuffer: 1024,
++		});
++		const address = stdout.trim();
++		if (!net.isIP(address)) throw new Error('Tor returned an invalid address');
++		addresses = [address];
++	} else {
+ 		try {
+-			addresses = await dns.resolve6(host);
++			addresses = await dns.resolve4(host);
+ 		} catch {
+-			return null;
++			try {
++				addresses = await dns.resolve6(host);
++			} catch {
++				return null;
++			}
+ 		}
+ 	}
+ 
+@@ -167,7 +191,7 @@
+  *
+  * @throws Error if the URL is invalid or resolves to a blocked range
+  */
+-export async function assertPublicUrl(url: string): Promise<string | null> {
++export async function assertPublicUrl(url: string, proxy?: string): Promise<string | null> {
+ 	let parsed: URL;
+ 	try {
+ 		parsed = new URL(url);
+@@ -180,5 +204,5 @@
+ 		throw new Error(`Blocked: scheme '${parsed.protocol}' is not allowed`);
+ 	}
+ 
+-	return await assertPublicHost(parsed.hostname);
+-}
++	return await assertPublicHost(parsed.hostname, proxy);
++}
+--- a/src/server/modules/api/public/port/port.service.ts
++++ b/src/server/modules/api/public/port/port.service.ts
+@@ -22,8 +22,8 @@
+ 		if (!server_proxy) return;
+ 		try {
+ 			const url = new URL(server_proxy);
+-			this.proxy_host = url.hostname;
+-			this.proxy_port = parseInt(url.port, 10);
++			this.proxy_host = url.hostname.replace(/^\[|\]$/g, '');
++			this.proxy_port = parseInt(url.port, 10) || 1080;
+ 		} catch {
+ 			this.logger.warn('Failed to parse proxy URL for TCP testing');
+ 		}
+@@ -35,13 +35,13 @@
+ 		return await Promise.all(promises);
+ 	}
+ 
+-	/** Routes to direct or SOCKS5 based on .onion detection */
++	/** Use SOCKS5 for every public target when a proxy is configured. */
+ 	private async testPort(host: string, port: number): Promise<OrchardPublicPort> {
+ 		const is_onion = host.endsWith('.onion');
+ 
+ 		/* SSRF guard: resolve DNS and reject private/reserved IPs before connecting */
+ 		try {
+-			await assertPublicHost(host);
++			await assertPublicHost(host, this.configService.get('server.proxy'));
+ 		} catch (error) {
+ 			const message = error instanceof Error ? error.message : 'Blocked';
+ 			this.logger.warn(`SSRF blocked for ${host}:${port}: ${message}`);
+@@ -49,7 +49,8 @@
+ 		}
+ 
+ 		try {
+-			if (is_onion && this.proxy_host && this.proxy_port) {
++			if (this.configService.get('server.proxy')) {
++				if (!this.proxy_host || !this.proxy_port) throw new Error('Invalid Tor proxy');
+ 				return await this.testPortViaSocks(host, port);
+ 			}
+ 			if (is_onion) {
+@@ -90,7 +91,7 @@
+ 		});
+ 	}
+ 
+-	/** TCP connect through SOCKS5 proxy for .onion addresses */
++	/** TCP connect through SOCKS5, with destination DNS handled by the proxy. */
+ 	private async testPortViaSocks(host: string, port: number): Promise<OrchardPublicPort> {
+ 		const start = Date.now();
+ 		try {
+--- a/src/server/modules/api/public/url/url.service.spec.ts
++++ b/src/server/modules/api/public/url/url.service.spec.ts
+@@ -1,5 +1,6 @@
+ /* Core Dependencies */
+ import {Test, TestingModule} from '@nestjs/testing';
++import {ConfigService} from '@nestjs/config';
+ import {expect} from '@jest/globals';
+ /* Application Dependencies */
+ import {FetchService} from '#server/modules/fetch/fetch.service';
+@@ -13,7 +14,7 @@
+ 
+ 	beforeEach(async () => {
+ 		const module: TestingModule = await Test.createTestingModule({
+-			providers: [PublicUrlService, {provide: FetchService, useValue: {fetchWithProxy: jest.fn()}}],
++			providers: [{provide: ConfigService, useValue: {get: jest.fn()}}, PublicUrlService, {provide: FetchService, useValue: {fetchWithProxy: jest.fn()}}],
+ 		}).compile();
+ 
+ 		publicUrlService = module.get<PublicUrlService>(PublicUrlService);
+--- a/src/server/modules/api/public/url/url.service.ts
++++ b/src/server/modules/api/public/url/url.service.ts
+@@ -1,5 +1,6 @@
+ /* Core Dependencies */
+ import {Injectable, Logger} from '@nestjs/common';
++import {ConfigService} from '@nestjs/config';
+ /* Application Dependencies */
+ import {FetchService} from '#server/modules/fetch/fetch.service';
+ /* Local Dependencies */
+@@ -12,7 +13,7 @@
+ 
+ 	private readonly FETCH_TIMEOUT = 15000;
+ 
+-	constructor(private fetchService: FetchService) {}
++	constructor(private fetchService: FetchService, private configService: ConfigService) {}
+ 
+ 	public async getUrlsData(urls: string[]): Promise<OrchardPublicUrl[]> {
+ 		const promises = urls.map((url) => this.getUrlData(url));
+@@ -25,7 +26,7 @@
+ 
+ 		/* SSRF guard: resolve DNS and reject private/reserved IPs before fetching */
+ 		try {
+-			ip_address = await assertPublicUrl(url);
++			ip_address = await assertPublicUrl(url, this.configService.get('server.proxy'));
+ 		} catch (error) {
+ 			this.logger.warn(`SSRF blocked: ${error instanceof Error ? error.message : error}`);
+ 			return new OrchardPublicUrl(url, null, null, has_data);
+@@ -33,7 +34,7 @@
+ 
+ 		let response: any;
+ 		try {
+-			response = await this.fetchService.fetchWithProxy(url, {signal: AbortSignal.timeout(this.FETCH_TIMEOUT)});
++			response = await this.fetchService.fetchWithProxy(url, {signal: AbortSignal.timeout(this.FETCH_TIMEOUT)}, true);
+ 		} catch {
+ 			return new OrchardPublicUrl(url, null, ip_address, has_data);
+ 		}
+--- a/src/server/modules/fetch/fetch.service.spec.ts
++++ b/src/server/modules/fetch/fetch.service.spec.ts
+@@ -4,6 +4,8 @@
+ import {ConfigService} from '@nestjs/config';
+ /* Vendor Dependencies */
+ import {SocksProxyAgent} from 'socks-proxy-agent';
++import {createServer} from 'node:http';
++import {once} from 'node:events';
+ /* Local Dependencies */
+ import {FetchService} from './fetch.service.js';
+ 
+@@ -34,4 +36,30 @@
+ 		expect(service_with_proxy['agent']).toBeDefined();
+ 		expect(service_with_proxy['agent']).toBeInstanceOf(SocksProxyAgent);
+ 	});
++
++	it('fetches a mint on another loopback address without contacting the proxy', async () => {
++		const server = createServer((_req, res) => res.end('local mint'));
++		server.listen(0, '127.0.0.2');
++		await once(server, 'listening');
++		const service = new FetchService(new ConfigService({server: {proxy: 'socks5h://127.0.0.1:1'}}));
++		try {
++			const address = server.address() as {port: number};
++			const response = await service.fetchWithProxy(`http://127.0.0.2:${address.port}/v1/info`);
++			expect(await response.text()).toBe('local mint');
++		} finally {
++			service.onModuleDestroy();
++			await new Promise<void>((resolve) => server.close(() => resolve()));
++		}
++	});
++
++	it('parses IPv6 proxy addresses for both fetch and Telegram agents', () => {
++		const agent = new SocksProxyAgent('socks5h://[::1]:9050');
++		expect(agent.proxy.host).toBe('::1');
++		agent.destroy();
++	});
++
++	it.each(['http://127.0.0.2.example.org', 'http://192.168.example.org', 'http://[2001:4860:4860::8888]'])
++	('does not mistake public hosts for local IP addresses (%s)', (url) => {
++		expect(fetchService['isLocalAddress'](url)).toBe(false);
++	});
+ });
+--- a/src/server/modules/fetch/fetch.service.ts
++++ b/src/server/modules/fetch/fetch.service.ts
+@@ -1,9 +1,20 @@
+ /* Core Dependencies */
+ import {Injectable, Logger, type OnModuleDestroy} from '@nestjs/common';
+ import {ConfigService} from '@nestjs/config';
++import {BlockList, isIP} from 'node:net';
+ /* Vendor Dependencies */
+ import fetch, {Response} from 'node-fetch';
+ import {SocksProxyAgent} from 'socks-proxy-agent';
++
++const localAddresses = new BlockList();
++localAddresses.addSubnet('127.0.0.0', 8);
++localAddresses.addSubnet('10.0.0.0', 8);
++localAddresses.addSubnet('172.16.0.0', 12);
++localAddresses.addSubnet('192.168.0.0', 16);
++localAddresses.addSubnet('169.254.0.0', 16);
++localAddresses.addAddress('::1', 'ipv6');
++localAddresses.addSubnet('fc00::', 7, 'ipv6');
++localAddresses.addSubnet('fe80::', 10, 'ipv6');
+ 
+ @Injectable()
+ export class FetchService implements OnModuleDestroy {
+@@ -23,10 +34,11 @@
+ 	 * Bypasses proxy for local/private addresses
+ 	 * @param {string} url - URL to fetch
+ 	 * @param {any} options - Fetch options (method, headers, body, etc.)
++	 * @param {boolean} force_proxy - Keep public checks on the proxy even for local-looking names
+ 	 * @returns {Promise<Response>} Fetch Response object
+ 	 */
+-	async fetchWithProxy(url: string, options?: any): Promise<Response> {
+-		const should_use_proxy = this.agent && !this.isLocalAddress(url);
++	async fetchWithProxy(url: string, options?: any, force_proxy = false): Promise<Response> {
++		const should_use_proxy = this.agent && (force_proxy || !this.isLocalAddress(url));
+ 		return should_use_proxy ? fetch(url, {agent: this.agent, ...options}) : fetch(url, options);
+ 	}
+ 
+@@ -44,19 +56,11 @@
+ 	private isLocalAddress(url: string): boolean {
+ 		try {
+ 			const parsed = new URL(url);
+-			const hostname = parsed.hostname.toLowerCase();
+-			if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1') return true;
+-			if (hostname.endsWith('.local') || hostname.endsWith('.internal') || hostname.endsWith('.lan')) return true;
+-			if (!hostname.includes('.')) return true;
+-			if (hostname.startsWith('192.168.') || hostname.startsWith('10.')) return true;
+-			if (hostname.startsWith('169.254.')) return true;
+-			if (hostname.startsWith('172.')) {
+-				const second_octet = parseInt(hostname.split('.')[1]);
+-				if (second_octet >= 16 && second_octet <= 31) {
+-					return true;
+-				}
+-			}
+-			return false;
++			const hostname = parsed.hostname.replace(/^\[|\]$/g, '').toLowerCase();
++			const family = isIP(hostname);
++			if (family) return localAddresses.check(hostname, family === 4 ? 'ipv4' : 'ipv6');
++			return hostname === 'localhost' || hostname.endsWith('.local') || hostname.endsWith('.internal')
++				|| hostname.endsWith('.lan') || !hostname.includes('.');
+ 		} catch {
+ 			return false;
+ 		}

@@ -74,6 +74,8 @@ let
     address = nbLib.address (removeSuffix "]" (removePrefix "[" mint.address));
   in if hasInfix ":" address then "[${address}]" else address;
   defaultSetupKey = cfg.setupKeyFile == "${secretsDir}/orchard-setup-key";
+  extraMintLoopback = optional (mintHost != "127.0.0.1"
+    && builtins.match "127\\.[0-9]+\\.[0-9]+\\.[0-9]+" mintHost != null) "${mintHost}/32";
   database = "${mint.dataDir}/cdk-mintd.sqlite";
   orchardPath = toString (/. + cfg.dataDir);
   mintPath = toString (/. + mint.dataDir);
@@ -244,7 +246,10 @@ in {
         # Only Orchard's user can reach the socket. systemd removes it on stop.
         RuntimeDirectory = "orchard";
         RuntimeDirectoryMode = "0700";
-      } // nbLib.allowedIPAddresses cfg.tor.enforce;
+      } // nbLib.allowedIPAddresses cfg.tor.enforce // optionalAttrs (cfg.tor.enforce && extraMintLoopback != []) {
+        # A mint on another loopback address still needs direct HTTP access.
+        IPAddressAllow = nbLib.allowLocalIPAddresses.IPAddressAllow ++ extraMintLoopback;
+      };
     };
 
     systemd.services.cdk-mintd = {

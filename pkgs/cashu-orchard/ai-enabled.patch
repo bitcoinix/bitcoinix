@@ -1,0 +1,238 @@
+Enforce ai.enabled before inference, scheduled work, Telegram conversations
+and agent tool execution. Requests already in flight may finish.
+
+--- a/src/server/modules/ai/agent/agent.service.spec.ts
++++ b/src/server/modules/ai/agent/agent.service.spec.ts
+@@ -46,6 +46,8 @@
+ 	};
+ 
+ 	const mock_ai_service = {
++		isEnabled: jest.fn(),
++		assertEnabled: jest.fn(),
+ 		streamAgent: jest.fn(),
+ 	};
+ 
+@@ -73,6 +75,8 @@
+ 
+ 	beforeEach(async () => {
+ 		jest.clearAllMocks();
++		mock_ai_service.isEnabled.mockResolvedValue(true);
++		mock_ai_service.assertEnabled.mockReset().mockResolvedValue(undefined);
+ 		mock_mint_metrics_service.isEnabled.mockReturnValue(true);
+ 		const module: TestingModule = await Test.createTestingModule({
+ 			providers: [
+@@ -91,6 +95,32 @@
+ 
+ 	it('should be defined', () => {
+ 		expect(service).toBeDefined();
++	});
++
++	it('skips scheduled runs while AI is disabled', async () => {
++		mock_ai_service.isEnabled.mockResolvedValue(false);
++		const execute = jest.spyOn(service, 'executeAgent');
++		await service['enqueueAgent']('agent-1', '*/5 * * * *');
++		expect(execute).not.toHaveBeenCalled();
++	});
++
++	it('rejects a queued or manual run after AI has been disabled', async () => {
++		mock_ai_service.assertEnabled.mockRejectedValueOnce(new Error('AI is disabled'));
++		await expect(service.executeAgent('agent-1')).rejects.toThrow('AI is disabled');
++		expect(mock_run_repo.save).not.toHaveBeenCalled();
++		expect(mock_ai_service.streamAgent).not.toHaveBeenCalled();
++	});
++
++	it('does not execute returned tools if AI was disabled during a model request', async () => {
++		mock_ai_service.streamAgent.mockImplementation(async function* () {
++			mock_ai_service.assertEnabled.mockRejectedValue(new Error('AI is disabled'));
++			yield {message: {role: AiMessageRole.ASSISTANT, content: '', tool_calls: [
++				{id: 'tool-1', function: {name: 'mint_tool', arguments: {}}},
++			]}, done: true};
++		});
++		await expect(service.runToolLoop({model: 'model', messages: [], tool_names: [], agent_context: {agent_id: '1', agent_name: 'test'}}))
++			.rejects.toThrow('AI is disabled');
++		expect(mock_tool_executor.executeTool).not.toHaveBeenCalled();
+ 	});
+ 
+ 	/* *******************************************************
+@@ -740,11 +770,15 @@
+ 				promises.push((service as any).enqueueAgent(`agent-q-${i}`, '10 * * * *'));
+ 			}
+ 
+-			/* The 11th and 12th should have been dropped */
+-			expect((service as any).queue_depth).toBe(10);
+-
+-			resolve_block!();
+-			await Promise.allSettled(promises);
++			/* Let the asynchronous AI setting checks finish before inspecting the queue. */
++			await Promise.resolve();
++			try {
++				/* The 11th and 12th should have been dropped. */
++				expect((service as any).queue_depth).toBe(10);
++			} finally {
++				resolve_block!();
++				await Promise.allSettled(promises);
++			}
+ 		});
+ 	});
+ 
+--- a/src/server/modules/ai/agent/agent.service.ts
++++ b/src/server/modules/ai/agent/agent.service.ts
+@@ -168,6 +168,7 @@
+ 	 * Deduplicates by agent_id and enforces a max queue depth to prevent unbounded growth.
+ 	 */
+ 	private async enqueueAgent(agent_id: string, schedule_trigger: string): Promise<void> {
++		if (!(await this.aiService.isEnabled())) return;
+ 		if (this.pending_agents.has(agent_id)) {
+ 			this.logger.warn(`Agent ${agent_id} already queued, skipping duplicate`);
+ 			return;
+@@ -222,6 +223,7 @@
+ 	 * Creates a run record, executes the agent via LLM with tool calling, and updates run status.
+ 	 */
+ 	public async executeAgent(agent_id: string, schedule_trigger: string | null = null): Promise<AgentRun> {
++		await this.aiService.assertEnabled();
+ 		const now = DateTime.utc().toUnixInteger();
+ 		const agent = await this.agentRepository.findOne({where: {id: agent_id}});
+ 		if (!agent) throw new Error(`Agent not found: ${agent_id}`);
+@@ -351,6 +353,7 @@
+ 				return {result: '', tokens_used: total_tokens, messages};
+ 			}
+ 
++			await this.aiService.assertEnabled();
+ 			const response = await this.collectStreamResponse(model, messages, tool_schemas, signal);
+ 			total_tokens += (response.usage?.prompt_tokens ?? 0) + (response.usage?.completion_tokens ?? 0);
+ 
+@@ -360,6 +363,7 @@
+ 					if (signal?.aborted) {
+ 						return {result: '', tokens_used: total_tokens, messages};
+ 					}
++					await this.aiService.assertEnabled();
+ 					const tool_result = await this.toolExecutor.executeTool(
+ 						tool_call.function.name,
+ 						tool_call.function.arguments,
+--- a/src/server/modules/ai/ai.service.spec.ts
++++ b/src/server/modules/ai/ai.service.spec.ts
+@@ -3,26 +3,58 @@
+ /* Local Dependencies */
+ import {SettingService} from '#server/modules/setting/setting.service';
+ import {AiService} from './ai.service.js';
++import {AiMessageRole} from './ai.enums.js';
++import {SettingKey} from '#server/modules/setting/setting.enums';
+ import {OllamaService} from './ollama/ollama.service.js';
+ import {OpenRouterService} from './openrouter/openrouter.service.js';
+ 
+ describe('AiService', () => {
+ 	let aiService: AiService;
++	let settings: jest.Mocked<SettingService>;
++	let ollama: jest.Mocked<OllamaService>;
++	let openrouter: jest.Mocked<OpenRouterService>;
+ 
+ 	beforeEach(async () => {
+ 		const module: TestingModule = await Test.createTestingModule({
+ 			providers: [
+ 				AiService,
+-				{provide: SettingService, useValue: {getSetting: jest.fn()}},
++				{provide: SettingService, useValue: {getBooleanSetting: jest.fn().mockResolvedValue(false), getStringSetting: jest.fn()}},
+ 				{provide: OllamaService, useValue: {getModels: jest.fn(), streamChat: jest.fn()}},
+ 				{provide: OpenRouterService, useValue: {getModels: jest.fn(), streamChat: jest.fn()}},
+ 			],
+ 		}).compile();
+ 
+ 		aiService = module.get<AiService>(AiService);
++		settings = module.get(SettingService);
++		ollama = module.get(OllamaService);
++		openrouter = module.get(OpenRouterService);
+ 	});
+ 
+ 	it('should be defined', () => {
+ 		expect(aiService).toBeDefined();
+ 	});
++
++	it.each(['ollama', 'openrouter'])('blocks assistant and agent inference while disabled (%s)', async (vendor) => {
++		settings.getStringSetting.mockResolvedValue(vendor);
++		const messages = [{role: AiMessageRole.TOOL, content: 'private mint data'}];
++		await expect(aiService.streamAgent('model', messages, []).next()).rejects.toThrow('AI is disabled');
++		await expect(aiService.streamAssistant('model', null, messages).next()).rejects.toThrow('AI is disabled');
++		expect(settings.getBooleanSetting).toHaveBeenCalledWith(SettingKey.AI_ENABLED);
++		expect(ollama.streamChat).not.toHaveBeenCalled();
++		expect(openrouter.streamChat).not.toHaveBeenCalled();
++	});
++
++	it.each(['ollama', 'openrouter'])('rechecks the switch before sending another tool result (%s)', async (vendor) => {
++		settings.getStringSetting.mockResolvedValue(vendor);
++		settings.getBooleanSetting.mockResolvedValue(true);
++		const provider = vendor === 'ollama' ? ollama : openrouter;
++		provider.streamChat.mockImplementation(async function* () {
++			yield {model: 'model', created_at: '', message: {role: AiMessageRole.ASSISTANT, content: 'ok'}, done: true};
++		});
++		for await (const _ of aiService.streamAgent('model', [], [])) { /* Drain the enabled request. */ }
++		settings.getBooleanSetting.mockResolvedValue(false);
++		await expect(aiService.streamAgent('model', [{role: AiMessageRole.TOOL, content: 'mint balance'}], []).next())
++			.rejects.toThrow('AI is disabled');
++		expect(provider.streamChat).toHaveBeenCalledTimes(1);
++	});
+ });
+--- a/src/server/modules/ai/ai.service.ts
++++ b/src/server/modules/ai/ai.service.ts
+@@ -21,6 +21,14 @@
+ 		private ollamaService: OllamaService,
+ 		private openRouterService: OpenRouterService,
+ 	) {}
++
++	async isEnabled(): Promise<boolean> {
++		return this.settingService.getBooleanSetting(SettingKey.AI_ENABLED);
++	}
++
++	async assertEnabled(): Promise<void> {
++		if (!(await this.isEnabled())) throw new Error('AI is disabled in Orchard settings');
++	}
+ 
+ 	/**
+ 	 * Resolve the vendor service based on the AI_VENDOR setting
+@@ -107,6 +115,7 @@
+ 		idle_ms: number,
+ 		caller_signal?: AbortSignal,
+ 	): AsyncGenerator<AiStreamChunk> {
++		await this.assertEnabled();
+ 		const idle_controller = new AbortController();
+ 		let handle: NodeJS.Timeout | undefined;
+ 		const reset = () => {
+--- a/src/server/modules/message/telegram/telegram.service.spec.ts
++++ b/src/server/modules/message/telegram/telegram.service.spec.ts
+@@ -124,4 +124,24 @@
+ 			expect(service.isRunning()).toBe(false);
+ 		});
+ 	});
++
++	it.each([false, true])('dispatches Telegram conversations only while AI is enabled (%s)', async (enabled) => {
++		settingService.getBooleanSetting.mockResolvedValue(enabled);
++		userService.getUserByTelegramChatId.mockResolvedValue({id: 'user-1'} as any);
++		const bot = new Bot('123:test-token', {botInfo: {id: 123, is_bot: true, first_name: 'Test', username: 'test_bot'} as any});
++		bot.api.config.use(async () => ({ok: true, result: {message_id: 1}}) as any);
++		service['bot'] = bot;
++		service['registerHandlers']();
++		const emit = jest.spyOn(service['eventEmitter'], 'emitAsync');
++		try {
++			await bot.handleUpdate({update_id: 1, message: {
++				message_id: 1, date: 0, text: 'What is my mint balance?',
++				chat: {id: 1, type: 'private', first_name: 'Operator'},
++				from: {id: 1, is_bot: false, first_name: 'Operator'},
++			}});
++			expect(emit).toHaveBeenCalledTimes(enabled ? 1 : 0);
++		} finally {
++			service['bot'] = null;
++		}
++	});
+ });
+--- a/src/server/modules/message/telegram/telegram.service.ts
++++ b/src/server/modules/message/telegram/telegram.service.ts
+@@ -128,6 +128,10 @@
+ 
+ 		this.bot.on('message:text', async (ctx) => {
+ 			if (ctx.message.text.startsWith('/')) return;
++			if (!(await this.settingService.getBooleanSetting(SettingKey.AI_ENABLED))) {
++				await ctx.reply('AI is disabled in Orchard settings.');
++				return;
++			}
+ 			const chat_id = ctx.chat.id.toString();
+ 			const user = await this.userService.getUserByTelegramChatId(chat_id);
+ 			if (!user) {

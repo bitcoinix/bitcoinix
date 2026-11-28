@@ -91,10 +91,23 @@ preset, enable the Tor client and both options to get the same behavior. Enablin
 only the onion service does not proxy outgoing requests; without `tor.proxy`,
 they use clearnet unless blocked by `tor.enforce`.
 
-AI is off by default. If you enable it in Orchard's settings, the assistant sends
-your conversation and mint data obtained through its tool calls to the configured
-provider, such as OpenRouter. Tor does not prevent that provider from receiving
-the data.
+With `tor.proxy`, public URL and TCP port checks also resolve hostnames through
+Tor, even if the node has a local DNS resolver. A failed Tor lookup or connection
+does not fall back to clearnet. Checks still reject private destinations, including
+names that Tor resolves to private addresses. Loopback mint addresses such as
+`127.0.0.2` stay direct; Tor SOCKS listeners on `[::1]` are supported too.
+
+AI is off by default and the server enforces the switch. When enabled in Orchard's
+settings, the web assistant, active scheduled agents and the Telegram conversation
+agent can send conversation content and mint data obtained through tool calls to
+the configured provider, such as OpenRouter. Scheduled agents can do this without
+a browser open. Tor does not prevent that provider from receiving the data.
+
+Turning AI off blocks new inference requests, scheduled runs, Telegram AI
+conversations and further agent tool calls. A provider request already in flight
+may finish; data already sent cannot be recalled. Agent configuration and schedules
+are retained, so active schedules resume when AI is enabled again. Model lists and
+provider connection checks remain available for configuration while AI is off.
 
 ## State and recovery
 
