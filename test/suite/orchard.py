@@ -2,7 +2,7 @@
 def test_orchard():
     data = test_data["orchard"]
     url = f"http://{ip('orchard')}:{data['port']}"
-    mint_url = f"http://{ip('cdk-mintd')}:{data['mintPort']}/v1"
+    mint_url = f"{data['mintApi']}/v1"
     assert_running("orchard")
     machine.wait_until_succeeds(f"curl -fsS {url}/config.json")
     runtime = succeed_json(f"curl -fsS {url}/config.json")
@@ -42,11 +42,23 @@ def test_orchard():
         wait_for_open_port(data["socksAddress"], data["socksPort"])
         # These names cannot resolve locally. The fixture accepts only these
         # hosts, so the successful mint queries above also check local bypass.
-        image = query_ok('{ public_image(url: "http://orchard-proxy.invalid/icon") { data type } }', token)["public_image"]
-        assert image["type"] == "application/json", image
-        assert image["data"] == "data:application/json;base64," + base64.b64encode(b'{"via":"socks"}').decode(), image
-        urls = query_ok('{ public_urls(urls: ["http://orchard-proxy.invalid/v1/info", "http://orchard-proxy.onion/v1/info"]) { status has_data } }', token)["public_urls"]
-        assert urls == [{"status": 200, "has_data": True}] * 2, urls
+        for host in ["orchard-proxy.invalid", "orchard-proxy.local", "orchard-proxy.lan", "orchard-proxy.internal", "orchard-proxy"]:
+            image = query_ok('{ public_image(url: "http://' + host + '/icon") { data type } }', token)["public_image"]
+            assert image["type"] == "application/json", image
+            assert image["data"] == "data:application/json;base64," + base64.b64encode(b'{"via":"socks"}').decode(), image
+        urls = query_ok('{ public_urls(urls: ["http://orchard-proxy.invalid/v1/info", "http://orchard-proxy.onion/v1/info", "http://orchard-proxy.local/v1/info"]) { status has_data } }', token)["public_urls"]
+        assert urls == [{"status": 200, "has_data": True}] * 3, urls
+        ports = query_ok('{ public_ports(targets: [{host: "orchard-proxy.invalid", port: 443}, {host: "orchard-proxy.onion", port: 443}]) { reachable } }', token)["public_ports"]
+        assert ports == [{"reachable": True}] * 2, ports
+        # A Tor lookup resolving to a private IP is still blocked. Failed Tor
+        # lookups must not fall back to local DNS or a direct connection either.
+        urls = query_ok('{ public_urls(urls: ["http://orchard-private.invalid/", "http://orchard-fail.invalid/"]) { status } }', token)["public_urls"]
+        assert urls == [{"status": None}] * 2, urls
+        ports = query_ok('{ public_ports(targets: [{host: "orchard-private.invalid", port: 80}, {host: "orchard-fail.invalid", port: 80}]) { reachable error } }', token)["public_ports"]
+        assert all(not port["reachable"] for port in ports), ports
+        assert "private/reserved" in ports[0]["error"], ports
+        machine.fail("test -e /tmp/orchard-dns-leak")
+        machine.fail("test -e /tmp/orchard-bad-connect")
     query_ok('mutation { mint_name_update(name: "Orchard test mint") { name } }', token)
     machine.wait_until_succeeds(f"curl -fsS {mint_url}/info | jq -e '.name == \"Orchard test mint\"'")
 

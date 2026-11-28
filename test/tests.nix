@@ -24,6 +24,7 @@ let
 
     options.test.features = {
       clightningPlugins = mkEnableOption "all clightning plugins";
+      orchardProxy = mkEnableOption "the offline Orchard SOCKS and DNS fixture";
     };
 
     config = mkMerge [{
@@ -173,6 +174,9 @@ let
         allow = [ "127.0.0.1/32" "::1/128" ]
           ++ optional netns.enable "169.254.${toString netns.addressblock}.0/24";
         extraAllow.unbeholden-wallet = cfg.unbeholden-wallet.allowedClients;
+        extraAllow.orchard = optional (cfg.orchard.enable && cfg.cdk-mintd.address != "127.0.0.1"
+          && builtins.match "127\\.[0-9]+\\.[0-9]+\\.[0-9]+" cfg.cdk-mintd.address != null)
+          "${cfg.cdk-mintd.address}/32";
       };
       # A custom unit with the restriction, which must start on every node,
       # also when no service enforces Tor
@@ -242,7 +246,11 @@ let
         mintBackend = cfg.cdk-mintd.backend;
         mintDataDir = cfg.cdk-mintd.dataDir;
         mintPort = cfg.cdk-mintd.port;
+        mintApi = config.systemd.services.orchard.environment.MINT_API;
         clnNetworkDir = cfg.clightning.networkDir;
+      } // optionalAttrs config.test.features.orchardProxy {
+        socksAddress = removeSuffix "]" (removePrefix "[" cfg.tor.client.socksListenAddress.addr);
+        socksPort = cfg.tor.client.socksListenAddress.port;
       };
 
       tests.cdk-mintd = cfg.cdk-mintd.enable;
@@ -732,20 +740,29 @@ let
 
     orchard = { config, pkgs, ... }: let
       socks = config.services.tor.client.socksListenAddress;
+      isolated = config.nix-bitcoin.netns-isolation.enable;
+      dnsAddress = if isolated then config.nix-bitcoin.netns-isolation.bridgeIp else "127.0.0.1";
     in {
       imports = [ scenarios.regtestBase ];
       nix-bitcoin.nodeinfo.enable = true;
       services.orchard.enable = true;
       services.orchard.tor = { proxy = true; enforce = true; };
+      services.cdk-mintd.address = mkDefault "127.0.0.2";
+      services.tor.client.socksListenAddress = mkDefault { addr = "[::1]"; port = 9050; };
+      test.features.orchardProxy = true;
       services.cdk-mintd.settings.mint_info.name = "Bitcoinix test mint";
       # Exercise Tor routing without internet access, including proxy-side DNS.
-      test.data.orchard.socksAddress = socks.addr;
-      test.data.orchard.socksPort = socks.port;
+      networking.firewall.interfaces.nb-br.allowedUDPPorts = [ 53 ];
       systemd.services.orchard-test-socks = {
         wantedBy = [ "multi-user.target" ];
         after = optional config.nix-bitcoin.netns-isolation.enable "nb-netns-bridge.service";
-        serviceConfig.ExecStart = "${pkgs.python3}/bin/python ${./lib/orchard-socks.py} ${socks.addr} ${toString socks.port}";
+        serviceConfig.ExecStart = "${pkgs.python3}/bin/python ${./lib/orchard-socks.py} ${socks.addr} ${toString socks.port} ${dnsAddress}";
       };
+      # Even with enforcement, a resolver at a local address is reachable.
+      # Record any preflight DNS query so the test detects this privacy leak.
+      systemd.services.orchard.serviceConfig.BindReadOnlyPaths = [
+        "${pkgs.writeText "orchard-resolv.conf" "nameserver ${dnsAddress}\n"}:/etc/resolv.conf"
+      ];
       # Keep this scenario focused on Orchard; the CDK scenarios cover payments
       # and recovery. Orchard tests exercise both RPC and database access.
       tests.cdk-mintd = mkForce false;
