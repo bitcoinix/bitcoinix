@@ -1,9 +1,46 @@
 Resolve public checks through Tor without dropping the private-address guard.
 Proxy public TCP probes and classify local fetch destinations as IP addresses.
 
+--- a/src/server/modules/api/public/image/image.service.ts
++++ b/src/server/modules/api/public/image/image.service.ts
+@@ -19,7 +19,7 @@
+ 
+ 	async getImageData(tag: string, url: string): Promise<OrchardPublicImage> {
+ 		try {
+-			const response = await this.fetchService.fetchWithProxy(url);
++			const response = await this.fetchService.fetchWithProxy(url, undefined, true);
+ 			const content_type = response.headers.get('content-type');
+ 			const buffer = Buffer.from(await response.arrayBuffer());
+ 			return new OrchardPublicImage(buffer, content_type || 'image/jpeg');
+--- a/src/server/modules/api/public/network-guard.spec.ts
++++ b/src/server/modules/api/public/network-guard.spec.ts
+@@ -5,6 +5,23 @@
+ 
+ describe('network-guard', () => {
+ 	describe('assertPublicUrl', () => {
++		it.each([
++			'8.8.8.8', '93.184.215.14', '208.67.222.222',
++			'2001:4860:4860::8888', '2606:4700:4700::1111', '2001:4860::a00:1',
++		])('accepts public literals without applying the other family\'s ranges (%s)', async (ip) => {
++			const host = ip.includes(':') ? `[${ip}]` : ip;
++			await expect(assertPublicHost(ip)).resolves.toBe(ip);
++			await expect(assertPublicUrl(`http://${host}/`)).resolves.toBe(ip);
++		});
++
++		it.each([
++			'::', '::1', 'fc00::1', 'fdff::1', 'fe80::1', 'febf::1',
++			'::ffff:127.0.0.1', '::ffff:8.8.8.8', '::ffff:c0a8:101',
++		])('still rejects private/reserved and IPv4-mapped IPv6 literals (%s)', async (ip) => {
++			await expect(assertPublicHost(ip)).rejects.toThrow('private/reserved');
++			await expect(assertPublicUrl(`http://[${ip}]/`)).rejects.toThrow('private/reserved');
++		});
++
+ 		it('rejects non-HTTP schemes', async () => {
+ 			await expect(assertPublicUrl('ftp://example.com')).rejects.toThrow('scheme');
+ 			await expect(assertPublicUrl('file:///etc/passwd')).rejects.toThrow('scheme');
 --- a/src/server/modules/api/public/network-guard.ts
 +++ b/src/server/modules/api/public/network-guard.ts
-@@ -1,7 +1,12 @@
+@@ -1,116 +1,43 @@
  /* Core Dependencies */
  import {promises as dns} from 'dns';
 +import {execFile} from 'node:child_process';
@@ -16,7 +53,137 @@ Proxy public TCP probes and classify local fetch destinations as IP addresses.
  
  /**
   * RFC 1918, loopback, link-local, and cloud metadata IP ranges
-@@ -120,7 +125,8 @@
+  * that must never be probed by agent-initiated requests (SSRF prevention).
+  */
+-const BLOCKED_CIDRS: {network: bigint; mask: bigint}[] = [
+-	/* 10.0.0.0/8        — RFC 1918 */
+-	parseCidr('10.0.0.0/8'),
+-	/* 172.16.0.0/12     — RFC 1918 */
+-	parseCidr('172.16.0.0/12'),
+-	/* 192.168.0.0/16    — RFC 1918 */
+-	parseCidr('192.168.0.0/16'),
+-	/* 127.0.0.0/8       — Loopback */
+-	parseCidr('127.0.0.0/8'),
+-	/* 169.254.0.0/16    — Link-local / cloud metadata */
+-	parseCidr('169.254.0.0/16'),
+-	/* 0.0.0.0/8         — "This" network */
+-	parseCidr('0.0.0.0/8'),
+-	/* 100.64.0.0/10     — Carrier-grade NAT (RFC 6598) */
+-	parseCidr('100.64.0.0/10'),
+-	/* 192.0.0.0/24      — IETF protocol assignments */
+-	parseCidr('192.0.0.0/24'),
+-	/* 198.18.0.0/15     — Benchmarking (RFC 2544) */
+-	parseCidr('198.18.0.0/15'),
+-	/* ::1/128           — IPv6 loopback */
+-	parseCidr6('::1/128'),
+-	/* fc00::/7          — IPv6 unique local */
+-	parseCidr6('fc00::/7'),
+-	/* fe80::/10         — IPv6 link-local */
+-	parseCidr6('fe80::/10'),
+-	/* ::ffff:0:0/96     — IPv4-mapped IPv6 */
+-	parseCidr6('::ffff:0:0/96'),
+-];
++// Separate families keep the IPv4-mapped IPv6 rule from also blocking IPv4.
++const BLOCKED_IPV4 = new net.BlockList();
++BLOCKED_IPV4.addSubnet('10.0.0.0', 8); // RFC 1918
++BLOCKED_IPV4.addSubnet('172.16.0.0', 12);
++BLOCKED_IPV4.addSubnet('192.168.0.0', 16);
++BLOCKED_IPV4.addSubnet('127.0.0.0', 8); // Loopback
++BLOCKED_IPV4.addSubnet('169.254.0.0', 16); // Link-local / cloud metadata
++BLOCKED_IPV4.addSubnet('0.0.0.0', 8); // "This" network
++BLOCKED_IPV4.addSubnet('100.64.0.0', 10); // Carrier-grade NAT
++BLOCKED_IPV4.addSubnet('192.0.0.0', 24); // IETF protocol assignments
++BLOCKED_IPV4.addSubnet('198.18.0.0', 15); // Benchmarking
++
++const BLOCKED_IPV6 = new net.BlockList();
++BLOCKED_IPV6.addAddress('::', 'ipv6'); // Unspecified
++BLOCKED_IPV6.addAddress('::1', 'ipv6'); // Loopback
++BLOCKED_IPV6.addSubnet('fc00::', 7, 'ipv6'); // Unique local
++BLOCKED_IPV6.addSubnet('fe80::', 10, 'ipv6'); // Link-local
++BLOCKED_IPV6.addSubnet('::ffff:0:0', 96, 'ipv6'); // IPv4-mapped IPv6
+ 
+ /** Blocked hostnames that resolve to metadata endpoints */
+ const BLOCKED_HOSTNAMES = new Set(['metadata.google.internal', 'metadata.google.com', 'instance-data']);
+ 
+-/** Parses an IPv4 CIDR into a network/mask pair as bigints */
+-function parseCidr(cidr: string): {network: bigint; mask: bigint} {
+-	const [ip_str, prefix_str] = cidr.split('/');
+-	const prefix = parseInt(prefix_str, 10);
+-	const parts = ip_str.split('.').map(Number);
+-	const ip = BigInt((parts[0] << 24) | (parts[1] << 16) | (parts[2] << 8) | parts[3]);
+-	const mask = prefix === 0 ? 0n : ((1n << 32n) - 1n) << BigInt(32 - prefix);
+-	return {network: ip & mask, mask};
+-}
+-
+-/** Parses an IPv6 CIDR into a network/mask pair as 128-bit bigints */
+-function parseCidr6(cidr: string): {network: bigint; mask: bigint} {
+-	const [ip_str, prefix_str] = cidr.split('/');
+-	const prefix = parseInt(prefix_str, 10);
+-	const ip = ipv6ToBigInt(ip_str);
+-	const mask = prefix === 0 ? 0n : ((1n << 128n) - 1n) << BigInt(128 - prefix);
+-	return {network: ip & mask, mask};
+-}
+-
+-/** Converts an IPv6 address string to a 128-bit bigint */
+-function ipv6ToBigInt(ip: string): bigint {
+-	const expanded = expandIPv6(ip);
+-	const parts = expanded.split(':');
+-	let result = 0n;
+-	for (const part of parts) {
+-		result = (result << 16n) | BigInt(parseInt(part, 16));
+-	}
+-	return result;
+-}
+-
+-/** Expands a shorthand IPv6 address to its full 8-group form */
+-function expandIPv6(ip: string): string {
+-	/* Handle IPv4-mapped IPv6 (e.g. ::ffff:127.0.0.1) */
+-	const v4_match = ip.match(/::ffff:(\d+\.\d+\.\d+\.\d+)$/i);
+-	if (v4_match) {
+-		const parts = v4_match[1].split('.').map(Number);
+-		const hex1 = ((parts[0] << 8) | parts[1]).toString(16);
+-		const hex2 = ((parts[2] << 8) | parts[3]).toString(16);
+-		ip = ip.replace(/::ffff:(\d+\.\d+\.\d+\.\d+)$/i, `::ffff:${hex1}:${hex2}`);
+-	}
+-
+-	if (ip.includes('::')) {
+-		const sides = ip.split('::');
+-		const left = sides[0] ? sides[0].split(':') : [];
+-		const right = sides[1] ? sides[1].split(':') : [];
+-		const missing = 8 - left.length - right.length;
+-		const middle = Array(missing).fill('0');
+-		return [...left, ...middle, ...right].map((g) => g.padStart(4, '0')).join(':');
+-	}
+-	return ip
+-		.split(':')
+-		.map((g) => g.padStart(4, '0'))
+-		.join(':');
+-}
+-
+-/** Converts an IPv4 string to a bigint */
+-function ipv4ToBigInt(ip: string): bigint {
+-	const parts = ip.split('.').map(Number);
+-	return BigInt((parts[0] << 24) | (parts[1] << 16) | (parts[2] << 8) | parts[3]);
+-}
+-
+-/** Checks whether the given IP (v4 or v6) falls within any blocked CIDR range */
++/** Checks whether the IP falls within a blocked range of the same family. */
+ function isBlockedIp(ip: string): boolean {
+-	const is_v6 = ip.includes(':');
+-	const value = is_v6 ? ipv6ToBigInt(ip) : ipv4ToBigInt(ip);
+-
+-	for (const {network, mask} of BLOCKED_CIDRS) {
+-		if ((value & mask) === network) {
+-			return true;
+-		}
+-	}
+-	return false;
++	const is_v6 = net.isIPv6(ip);
++	return (is_v6 ? BLOCKED_IPV6 : BLOCKED_IPV4).check(ip, is_v6 ? 'ipv6' : 'ipv4');
+ }
+ 
+ /**
+@@ -120,7 +47,8 @@
   *
   * @throws Error if the hostname resolves to a blocked IP range
   */
@@ -26,7 +193,7 @@ Proxy public TCP probes and classify local fetch destinations as IP addresses.
  	/* Block known metadata hostnames */
  	const lower = host.toLowerCase();
  	if (BLOCKED_HOSTNAMES.has(lower)) {
-@@ -140,15 +146,33 @@
+@@ -140,15 +68,33 @@
  		return null;
  	}
  
@@ -66,7 +233,7 @@ Proxy public TCP probes and classify local fetch destinations as IP addresses.
  		}
  	}
  
-@@ -167,7 +191,7 @@
+@@ -167,7 +113,7 @@
   *
   * @throws Error if the URL is invalid or resolves to a blocked range
   */
@@ -75,14 +242,13 @@ Proxy public TCP probes and classify local fetch destinations as IP addresses.
  	let parsed: URL;
  	try {
  		parsed = new URL(url);
-@@ -180,5 +204,5 @@
+@@ -180,5 +126,5 @@
  		throw new Error(`Blocked: scheme '${parsed.protocol}' is not allowed`);
  	}
  
 -	return await assertPublicHost(parsed.hostname);
--}
 +	return await assertPublicHost(parsed.hostname, proxy);
-+}
+ }
 --- a/src/server/modules/api/public/port/port.service.ts
 +++ b/src/server/modules/api/public/port/port.service.ts
 @@ -22,8 +22,8 @@

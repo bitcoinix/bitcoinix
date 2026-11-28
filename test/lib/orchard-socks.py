@@ -40,7 +40,10 @@ class Proxy(socketserver.StreamRequestHandler):
         assert command == 1
         if host in {"orchard-private.invalid", "orchard-fail.invalid"}:
             Path("/tmp/orchard-bad-connect").touch()
-        assert host in {"orchard-proxy.invalid", "orchard-proxy.onion", "orchard-proxy.local"}, host
+        assert host in {
+            "orchard-proxy.invalid", "orchard-proxy.onion", "orchard-proxy.local",
+            "orchard-proxy.lan", "orchard-proxy.internal", "orchard-proxy",
+        }, host
         assert port in {80, 443}
         self.wfile.write(b"\x05\x00\x00\x01\x7f\x00\x00\x01\x00\x50")
         request = self.rfile.readline()

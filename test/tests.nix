@@ -174,7 +174,7 @@ let
         allow = [ "127.0.0.1/32" "::1/128" ]
           ++ optional netns.enable "169.254.${toString netns.addressblock}.0/24";
         extraAllow.unbeholden-wallet = cfg.unbeholden-wallet.allowedClients;
-        extraAllow.orchard = optional (cfg.cdk-mintd.address != "127.0.0.1"
+        extraAllow.orchard = optional (cfg.orchard.enable && cfg.cdk-mintd.address != "127.0.0.1"
           && builtins.match "127\\.[0-9]+\\.[0-9]+\\.[0-9]+" cfg.cdk-mintd.address != null)
           "${cfg.cdk-mintd.address}/32";
       };

@@ -42,9 +42,10 @@ def test_orchard():
         wait_for_open_port(data["socksAddress"], data["socksPort"])
         # These names cannot resolve locally. The fixture accepts only these
         # hosts, so the successful mint queries above also check local bypass.
-        image = query_ok('{ public_image(url: "http://orchard-proxy.invalid/icon") { data type } }', token)["public_image"]
-        assert image["type"] == "application/json", image
-        assert image["data"] == "data:application/json;base64," + base64.b64encode(b'{"via":"socks"}').decode(), image
+        for host in ["orchard-proxy.invalid", "orchard-proxy.local", "orchard-proxy.lan", "orchard-proxy.internal", "orchard-proxy"]:
+            image = query_ok('{ public_image(url: "http://' + host + '/icon") { data type } }', token)["public_image"]
+            assert image["type"] == "application/json", image
+            assert image["data"] == "data:application/json;base64," + base64.b64encode(b'{"via":"socks"}').decode(), image
         urls = query_ok('{ public_urls(urls: ["http://orchard-proxy.invalid/v1/info", "http://orchard-proxy.onion/v1/info", "http://orchard-proxy.local/v1/info"]) { status has_data } }', token)["public_urls"]
         assert urls == [{"status": 200, "has_data": True}] * 3, urls
         ports = query_ok('{ public_ports(targets: [{host: "orchard-proxy.invalid", port: 443}, {host: "orchard-proxy.onion", port: 443}]) { reachable } }', token)["public_ports"]

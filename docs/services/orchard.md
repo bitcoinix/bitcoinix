@@ -96,6 +96,8 @@ Tor, even if the node has a local DNS resolver. A failed Tor lookup or connectio
 does not fall back to clearnet. Checks still reject private destinations, including
 names that Tor resolves to private addresses. Loopback mint addresses such as
 `127.0.0.2` stay direct; Tor SOCKS listeners on `[::1]` are supported too.
+Public icon fetches also stay on the proxy, including URLs with `.local`, `.lan`,
+`.internal` or dotless hostnames.
 
 AI is off by default and the server enforces the switch. When enabled in Orchard's
 settings, the web assistant, active scheduled agents and the Telegram conversation
